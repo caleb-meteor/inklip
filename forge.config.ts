@@ -10,7 +10,11 @@ const config: ForgeConfig = {
     asar: true,
     icon: './resources/icon.icns',
     extraResource: [
-      path.join(__dirname, 'resources', `${process.platform}-${process.env.TARGET_ARCH || process.arch}`)
+      path.join(
+        __dirname,
+        'resources',
+        `${process.platform}-${process.env.TARGET_ARCH || process.arch}`
+      )
     ],
     ignore: [
       /^\/src/,
@@ -28,7 +32,7 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerSquirrel({
-      setupIcon: './resources/icon.png'
+      setupIcon: './resources/icon.ico'
     }),
     new MakerDMG({
       name: '影氪',
