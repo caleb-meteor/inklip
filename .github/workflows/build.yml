@@ -1,0 +1,133 @@
+name: Build/Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32-x64
+            python_platform: win
+          - os: macos-latest # GitHub 目前默认 macos-latest 为 macOS 14 (ARM64)
+            platform: darwin-arm64
+            python_platform: mac
+          - os: macos-13 # macOS 13 为 Intel x64
+            platform: darwin-x64
+            python_platform: mac
+
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+
+      # 1. 拉取 Python 项目 (inklip-base)
+      - name: Checkout Python Backend
+        uses: actions/checkout@v4
+        with:
+          repository: caleb-meteor/inklip-base
+          # 注意：如果这是私有仓库，您需要在 GitHub Secrets 中配置 GH_PAT
+          token: ${{ secrets.GH_PAT || github.token }}
+          path: inklip-base
+
+      # 2. 设置 Python 环境并使用 PyInstaller 打包
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Python dependencies
+        run: |
+          cd inklip-base
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Python Backend with PyInstaller
+        run: |
+          cd inklip-base
+          # 假设入口文件是 main.py，打包为单文件，名称设为 inklip_base
+          # 您可以根据实际情况修改这里的 pyinstaller 命令
+          pyinstaller --onedir --noconsole --name inklip_base main.py
+
+      # 3. 下载平台特定的资源文件
+      - name: Download platform resources
+        run: |
+          mkdir -p resources
+          curl -L https://oss-inklip.caleb.center/resources/${{ matrix.platform }}.zip -o resources/${{ matrix.platform }}.zip
+
+      - name: Extract resources
+        shell: bash
+        run: |
+          cd resources
+          unzip -o ${{ matrix.platform }}.zip
+          # 确保解压后的目录结构符合 forge.config.ts 的要求
+          # 如果 zip 内部没有包含目录名，则可能需要手动创建并移动
+
+      # 4. 将打包好的 Python 文件移至指定资源目录
+      - name: Move Python Backend to Resources
+        shell: bash
+        run: |
+          # 确定二进制文件的后缀
+          EXT=""
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then EXT=".exe"; fi
+          
+          # 创建对应的资源目录（如果解压时没创建）
+          mkdir -p resources/${{ matrix.platform }}
+          
+          # 移动 PyInstaller 产物（通常在 dist 目录下）
+          cp inklip-base/dist/inklip_base$EXT resources/${{ matrix.platform }}/
+
+      # 5. 安装 Node 依赖并构建 Electron 应用
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Electron App
+        run: pnpm make
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ matrix.platform }}
+          path: |
+            out/make/**/*.dmg
+            out/make/**/*.zip
+            out/make/**/*.exe
+            out/make/**/*.setup.exe
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
