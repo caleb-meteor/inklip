@@ -18,7 +18,7 @@ jobs:
           - os: macos-latest # GitHub 目前默认 macos-latest 为 macOS 14 (ARM64)
             platform: darwin-arm64
             python_platform: mac
-          - os: macos-13 # macOS 13 为 Intel x64
+          - os: macos‑latest # macOS 为 Intel x64
             platform: darwin-x64
             python_platform: mac
 
