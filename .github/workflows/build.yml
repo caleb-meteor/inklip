@@ -161,8 +161,12 @@ jobs:
                 extension="${filename##*.}"
                 basename="${filename%.*}"
                 
+                # Replace 'Inklip' with '影氪' in the basename for the final release artifact
+                # This corresponds to the change in forge.config.ts to avoid hdiutil errors
+                final_basename=${basename/Inklip/影氪}
+                
                 # 新文件名包含平台信息，如：影氪-darwin-arm64.dmg
-                new_filename="${basename}-${platform}.${extension}"
+                new_filename="${final_basename}-${platform}.${extension}"
                 echo "Renaming $filename to $new_filename"
                 cp "$file" "release-files/$new_filename"
               done

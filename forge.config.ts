@@ -35,7 +35,7 @@ const config: ForgeConfig = {
       setupIcon: './resources/icon.ico'
     }),
     new MakerDMG({
-      name: '影氪',
+      name: 'Inklip',
       icon: './resources/icon.icns',
       overwrite: true,
       format: 'ULFO',
