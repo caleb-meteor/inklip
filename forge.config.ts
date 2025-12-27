@@ -9,7 +9,9 @@ const config: ForgeConfig = {
     executableName: 'inklip',
     asar: true,
     icon: './resources/icon.icns',
-    extraResource: [path.join(__dirname, 'resources', `${process.platform}-${process.arch}`)],
+    extraResource: [
+      path.join(__dirname, 'resources', `${process.platform}-${process.env.TARGET_ARCH || process.arch}`)
+    ],
     ignore: [
       /^\/src/,
       /^\/resources\/(?!([a-z0-9]+-[a-z0-9]+|icon\.icns|icon\.png))/, // Allow platform-arch folders and icons

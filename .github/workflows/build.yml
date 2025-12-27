@@ -110,12 +110,14 @@ jobs:
         shell: bash
         run: |
           pnpm build
-          ARCH=${{ matrix.platform }}
-          ARCH=${ARCH##*-}
+          STR=${{ matrix.platform }}
+          ARCH=${STR##*-}
           echo "Building for architecture: $ARCH"
+          export TARGET_ARCH=$ARCH
           npx electron-forge make --arch $ARCH
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_ARCH: "" # Will be set in the script
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
