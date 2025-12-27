@@ -64,6 +64,7 @@ jobs:
 
       # 3. 下载平台特定的资源文件
       - name: Download platform resources
+        shell: bash
         run: |
           mkdir -p resources
           curl -L https://oss-inklip.caleb.center/resources/${{ matrix.platform }}.zip -o resources/${{ matrix.platform }}.zip
