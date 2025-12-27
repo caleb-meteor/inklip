@@ -143,13 +143,43 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/**/*/*.dmg
-            artifacts/**/*/*.zip
-            artifacts/**/*/*.exe
-            artifacts/**/*/*.setup.exe
+      - name: Prepare Release Files
+        run: |
+          mkdir -p release-files
+          # 遍历 artifacts 目录下的每个子目录（对应不同的平台）
+          for dir in artifacts/*/; do
+            if [ -d "$dir" ]; then
+              # 获取平台名称 (例如从 build-artifacts-darwin-arm64 提取 darwin-arm64)
+              platform=$(basename "$dir")
+              platform=${platform#build-artifacts-}
+              
+              echo "Processing artifacts for platform: $platform"
+              
+              # 查找该平台下的安装包并重命名拷贝
+              find "$dir" -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" \) | while read -r file; do
+                filename=$(basename "$file")
+                extension="${filename##*.}"
+                basename="${filename%.*}"
+                
+                # 新文件名包含平台信息，如：影氪-darwin-arm64.dmg
+                new_filename="${basename}-${platform}.${extension}"
+                echo "Renaming $filename to $new_filename"
+                cp "$file" "release-files/$new_filename"
+              done
+            fi
+          done
+          echo "Final files to be uploaded:"
+          ls -R release-files
+
+      - name: Create or Update Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 如果 Release 不存在则创建，如果存在则直接上传文件
+          gh release create ${{ github.ref_name }} \
+            --title "Release ${{ github.ref_name }}" \
+            --generate-notes \
+            || echo "Release already exists"
+          
+          # 上传所有收集到的文件 (--clobber 覆盖同名文件)
+          gh release upload ${{ github.ref_name }} release-files/* --clobber
