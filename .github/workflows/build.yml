@@ -18,20 +18,27 @@ jobs:
           - os: macos-latest # GitHub 目前默认 macos-latest 为 macOS 14 (ARM64)
             platform: darwin-arm64
             python_platform: mac
-          - os: macos‑latest # macOS 为 Intel x64
+          - os: macos-latest # macOS 13 为 Intel x64
             platform: darwin-x64
             python_platform: mac
 
     steps:
       - name: Checkout main repo
         uses: actions/checkout@v4
-
-      # 1. 拉取 Python 项目 (inklip-base)
+      # 增加这个步骤来确认 Secret 是否生效
+      - name: Check Secret Presence
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "::error::GH_PAT is NOT found in secrets! Please check your Repository Secrets settings."
+            exit 1
+          else
+            echo "GH_PAT is found."
+          fi
+      # 1. 拉取 Python 项目
       - name: Checkout Python Backend
         uses: actions/checkout@v4
         with:
           repository: caleb-meteor/inklip-base
-          # 注意：如果这是私有仓库，您需要在 GitHub Secrets 中配置 GH_PAT
           token: ${{ secrets.GH_PAT }}
           path: inklip-base
 
@@ -79,8 +86,8 @@ jobs:
           # 创建对应的资源目录（如果解压时没创建）
           mkdir -p resources/${{ matrix.platform }}
           
-          # 移动 PyInstaller 产物（通常在 dist 目录下）
-          cp inklip-base/dist/inklip_base$EXT resources/${{ matrix.platform }}/
+          # 移动 PyInstaller 产物（--onedir 模式下是目录）
+          cp -r inklip-base/dist/inklip_base/. resources/${{ matrix.platform }}/
 
       # 5. 安装 Node 依赖并构建 Electron 应用
       - name: Install pnpm
