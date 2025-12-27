@@ -107,7 +107,13 @@ jobs:
         run: pnpm install
 
       - name: Build Electron App
-        run: pnpm make
+        shell: bash
+        run: |
+          pnpm build
+          ARCH=${{ matrix.platform }}
+          ARCH=${ARCH##*-}
+          echo "Building for architecture: $ARCH"
+          npx electron-forge make --arch $ARCH
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
