@@ -32,7 +32,7 @@ jobs:
         with:
           repository: caleb-meteor/inklip-base
           # 注意：如果这是私有仓库，您需要在 GitHub Secrets 中配置 GH_PAT
-          token: ${{ secrets.GH_PAT || github.token }}
+          token: ${{ secrets.GH_PAT }}
           path: inklip-base
 
       # 2. 设置 Python 环境并使用 PyInstaller 打包
