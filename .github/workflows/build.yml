@@ -18,7 +18,7 @@ jobs:
           - os: macos-latest # GitHub 目前默认 macos-latest 为 macOS 14 (ARM64)
             platform: darwin-arm64
             python_platform: mac
-          - os: macos-latest # macOS 13 为 Intel x64
+          - os: macos-13
             platform: darwin-x64
             python_platform: mac
 
@@ -27,6 +27,7 @@ jobs:
         uses: actions/checkout@v4
       # 增加这个步骤来确认 Secret 是否生效
       - name: Check Secret Presence
+        shell: bash
         run: |
           if [ -z "${{ secrets.GH_PAT }}" ]; then
             echo "::error::GH_PAT is NOT found in secrets! Please check your Repository Secrets settings."
@@ -93,12 +94,12 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 9
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 25
+          node-version: 20
           cache: 'pnpm'
 
       - name: Install dependencies
