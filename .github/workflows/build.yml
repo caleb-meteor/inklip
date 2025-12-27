@@ -18,7 +18,7 @@ jobs:
           - os: macos-latest # GitHub 目前默认 macos-latest 为 macOS 14 (ARM64)
             platform: darwin-arm64
             python_platform: mac
-          - os: macos-13
+          - os: macos-latest # macOS
             platform: darwin-x64
             python_platform: mac
 
@@ -94,12 +94,12 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 25
           cache: 'pnpm'
 
       - name: Install dependencies
