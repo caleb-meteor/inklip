@@ -15,10 +15,36 @@ onMounted(async () => {
     const isResourcesReady = ref(false)
     const resourceStatusText = ref('正在校验资源文件...')
 
+    // Initial fake progress
+    const initInterval = setInterval(() => {
+      if (percentage.value < 30) percentage.value += 5
+    }, 100)
+
+    window.api.onBackendStartFailed((err) => {
+      console.error('Backend Error:', err.message)
+      error.value = `核心服务启动异常 (${err.code})`
+      status.value = '启动失败'
+      percentage.value = 100
+      clearInterval(statusInterval)
+      clearInterval(initInterval)
+    })
+
+    // Check for startup error that might have occurred before this component mounted
+    const startupError = await window.api.getBackendStartupError()
+    if (startupError) {
+      console.error('Backend Error:', startupError.message)
+      error.value = `核心服务启动异常 (${startupError.code})`
+      status.value = '启动失败'
+      percentage.value = 100
+      clearInterval(initInterval)
+      // Stop here, don't proceed to backend checks
+      return
+    }
+
     // Status Manager: Handles what text to display
     // 0 = show backend status, 1 = show resource status
     const displayToggle = ref(0)
-
+    
     const statusInterval = setInterval(() => {
       // Toggle priority
       displayToggle.value = displayToggle.value === 0 ? 1 : 0
@@ -44,11 +70,6 @@ onMounted(async () => {
         status.value = '准备就绪'
       }
     }, 2000) // Switch every 2 seconds
-
-    // Initial fake progress
-    const initInterval = setInterval(() => {
-      if (percentage.value < 30) percentage.value += 5
-    }, 100)
 
     // Parallel Task 1: Wait for Backend
     const waitForBackend = async (): Promise<number> => {
@@ -118,10 +139,6 @@ onMounted(async () => {
     percentage.value = 100
     status.value = '准备就绪'
 
-    // Phase 3: Finalize
-    percentage.value = 100
-    status.value = '准备就绪'
-
     setTimeout(() => {
       const token = localStorage.getItem('token')
       if (token) {
@@ -149,9 +166,13 @@ onMounted(async () => {
 
       <div class="status-area">
         <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: percentage + '%' }"></div>
+          <div
+            class="progress-fill"
+            :class="{ error: !!error }"
+            :style="{ width: percentage + '%' }"
+          ></div>
         </div>
-        <p class="status-text">{{ error || status }}</p>
+        <p class="status-text" :class="{ error: !!error }">{{ error || status }}</p>
       </div>
     </div>
   </div>
@@ -235,5 +256,18 @@ h1 {
   text-align: center;
   letter-spacing: 1px;
   text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+
+.status-text.error {
+  color: #ff4d4f;
+  font-weight: 500;
+  font-size: 13px; /* Slightly larger */
+  text-shadow: 0 0 10px rgba(255, 77, 79, 0.4);
+}
+
+.progress-fill.error {
+  background: #ff4d4f;
+  box-shadow: 0 0 20px rgba(255, 77, 79, 0.6);
 }
 </style>

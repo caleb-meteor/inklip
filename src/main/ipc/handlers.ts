@@ -68,6 +68,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('get-backend-port', () => BackendService.getInstance().getPort())
+  ipcMain.handle('get-backend-startup-error', () => BackendService.getInstance().getStartupError())
 
   ipcMain.handle('check-resources', async () => {
     const userDataPath = app.getPath('userData')

@@ -10,6 +10,7 @@ declare global {
         fileName: string
       ) => Promise<{ success: boolean; canceled?: boolean; error?: string; path?: string }>
       getBackendPort: () => Promise<number | null>
+      getBackendStartupError: () => Promise<{ code: string; message: string } | null>
       showNotification: (title: string, body: string, route: string) => void
       onNavigate: (callback: (route: string) => void) => void
       onBackendPort: (callback: (port: number) => void) => void
@@ -23,6 +24,7 @@ declare global {
           total: number
         }) => void
       ) => void
+      onBackendStartFailed: (callback: (error: { code: string; message: string }) => void) => void
     }
   }
 }

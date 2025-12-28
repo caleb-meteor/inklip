@@ -8,6 +8,8 @@ export class BackendService {
   private static instance: BackendService
   private backendProcess: ChildProcess | null = null
   private backendPort: number | null = null
+  private startupError: { code: string; message: string } | null = null
+  private isExplicitKill = false
 
   private constructor() {
     // Private constructor for singleton
@@ -24,13 +26,23 @@ export class BackendService {
     return this.backendPort
   }
 
+  public getStartupError(): { code: string; message: string } | null {
+    return this.startupError
+  }
+
   public start(mainWindow: BrowserWindow | null): void {
     const isDev = !app.isPackaged
     const platform = process.platform
     const isWin = platform === 'win32'
+    this.isExplicitKill = false
+    this.startupError = null
 
     if (platform !== 'darwin' && platform !== 'win32') {
-      console.error('[Backend Service] Unsupported platform:', platform)
+      const msg = `不支持的平台: ${platform}`
+      const error = { code: 'E100', message: msg }
+      console.error('[Backend Service]', msg)
+      this.startupError = error
+      if (mainWindow) mainWindow.webContents.send('backend-start-failed', error)
       return
     }
 
@@ -49,7 +61,11 @@ export class BackendService {
     console.log('[Backend Service] Starting backend from:', backendPath)
 
     if (!fs.existsSync(backendPath)) {
-      console.error('[Backend Service] Backend executable not found at:', backendPath)
+      const msg = `未找到后端可执行文件: ${backendPath}`
+      const error = { code: 'E101', message: msg }
+      console.error('[Backend Service]', msg)
+      this.startupError = error
+      if (mainWindow) mainWindow.webContents.send('backend-start-failed', error)
       return
     }
 
@@ -91,12 +107,24 @@ export class BackendService {
     this.backendProcess.on('exit', (code) => {
       console.log('[Backend Service] Backend exited with code:', code)
       this.backendProcess = null
+      
+      // If NOT an explicit kill, it's a crash or failed start
+      if (!this.isExplicitKill) {
+        const msg = `后端服务异常退出 (代码: ${code})`
+        const error = { code: 'E102', message: msg }
+        console.error('[Backend Service]', msg)
+        this.startupError = error
+        if (mainWindow && !mainWindow.isDestroyed()) {
+           mainWindow.webContents.send('backend-start-failed', error)
+        }
+      }
     })
   }
 
   public kill(): void {
     if (this.backendProcess) {
       console.log('[Backend Service] Killing backend process...')
+      this.isExplicitKill = true
       this.backendProcess.kill()
       this.backendProcess = null
     }
