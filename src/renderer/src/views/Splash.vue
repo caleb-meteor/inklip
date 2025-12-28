@@ -14,24 +14,24 @@ onMounted(async () => {
     const isBackendReady = ref(false)
     const isResourcesReady = ref(false)
     const resourceStatusText = ref('正在校验资源文件...')
-    
+
     // Status Manager: Handles what text to display
     // 0 = show backend status, 1 = show resource status
     const displayToggle = ref(0)
-    
+
     const statusInterval = setInterval(() => {
       // Toggle priority
       displayToggle.value = displayToggle.value === 0 ? 1 : 0
-      
+
       const backendPending = !isBackendReady.value
       const resourcesPending = !isResourcesReady.value
-      
+
       if (backendPending && resourcesPending) {
         // Both pending: Alternate
         if (displayToggle.value === 0) {
-           status.value = '正在启动后端服务...'
+          status.value = '正在启动后端服务...'
         } else {
-           status.value = resourceStatusText.value
+          status.value = resourceStatusText.value
         }
       } else if (backendPending) {
         // Only backend pending
@@ -73,8 +73,8 @@ onMounted(async () => {
         resourceStatusText.value = '正在下载资源文件...'
         window.api.onDownloadProgress((progress: any) => {
           const formatSize = (bytes: number): string => {
-             if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
-             return `${(bytes / 1024).toFixed(1)}KB`
+            if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+            return `${(bytes / 1024).toFixed(1)}KB`
           }
 
           const currentText = formatSize(progress.current || 0)
@@ -92,7 +92,7 @@ onMounted(async () => {
 
           // Update the holding variable, not status directly
           resourceStatusText.value = `正在下载资源文件... (${currentText} / ${totalText}) ${progress.percentage}%${speedText}`
-          
+
           // Update percentage directly as it's visual only
           const downloadPhase = progress.percentage * 0.6
           percentage.value = 30 + downloadPhase

@@ -44,7 +44,7 @@ export class BackendService {
       backendPath = join(process.resourcesPath, platformArch)
     }
 
-    backendPath = join(backendPath, 'inklip_base',exeName)
+    backendPath = join(backendPath, 'inklip_base', exeName)
 
     console.log('[Backend Service] Starting backend from:', backendPath)
 

@@ -38,7 +38,7 @@ const config: ForgeConfig = {
       name: 'Inklip',
       icon: './resources/icon.icns',
       overwrite: true,
-      format: 'ULFO',
+      format: 'ULFO'
     })
   ]
 }

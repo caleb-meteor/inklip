@@ -86,7 +86,7 @@ jobs:
           # 确定二进制文件的后缀
           EXT=""
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then EXT=".exe"; fi
-          
+
           # 移动 PyInstaller 产物（直接移动整个目录，保持 result/inklip_base/inklip_base 的结构）
           cp -r inklip-base/dist/inklip_base resources/${{ matrix.platform }}/
 
@@ -116,7 +116,7 @@ jobs:
           npx electron-forge make --arch $ARCH
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_ARCH: "" # Will be set in the script
+          TARGET_ARCH: '' # Will be set in the script
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -184,6 +184,6 @@ jobs:
             --title "Release ${{ github.ref_name }}" \
             --generate-notes \
             || echo "Release already exists"
-          
+
           # 上传所有收集到的文件 (--clobber 覆盖同名文件)
           gh release upload ${{ github.ref_name }} release-files/* --clobber
