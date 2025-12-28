@@ -1,6 +1,5 @@
 import type { ForgeConfig } from '@electron-forge/shared-types'
-import { MakerSquirrel } from '@electron-forge/maker-squirrel'
-import { MakerDMG } from '@electron-forge/maker-dmg'
+import { MakerZIP } from '@electron-forge/maker-zip'
 import path from 'path'
 
 const config: ForgeConfig = {
@@ -30,17 +29,7 @@ const config: ForgeConfig = {
     ]
   },
   rebuildConfig: {},
-  makers: [
-    new MakerSquirrel({
-      setupIcon: './resources/icon.ico'
-    }),
-    new MakerDMG({
-      name: 'Inklip',
-      icon: './resources/icon.icns',
-      overwrite: true,
-      format: 'ULFO'
-    })
-  ]
+  makers: [new MakerZIP({}, ['darwin', 'win32'])]
 }
 
 export default config
