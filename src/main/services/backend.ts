@@ -34,7 +34,7 @@ export class BackendService {
       return
     }
 
-    const exeName = isWin ? 'inklipBase.exe' : 'inklipBase'
+    const exeName = isWin ? 'inklip_base.exe' : 'inklip_base'
     const platformArch = `${process.platform}-${process.arch}`
     let backendPath = ''
 
@@ -44,11 +44,7 @@ export class BackendService {
       backendPath = join(process.resourcesPath, platformArch)
     }
 
-    if (isWin) {
-      backendPath = join(backendPath, 'inklipBase', exeName)
-    } else {
-      backendPath = join(backendPath, 'inklipBase.app/Contents/MacOS/inklipBase')
-    }
+    backendPath = join(backendPath, 'inklip_base',exeName)
 
     console.log('[Backend Service] Starting backend from:', backendPath)
 
@@ -58,9 +54,8 @@ export class BackendService {
     }
 
     const userDataPath = app.getPath('userData')
-    const binPath = isWin
-      ? path.dirname(backendPath)
-      : path.join(path.dirname(backendPath), '../../../bin')
+    // For both Windows and Mac (flat binary), the bin path is the directory containing the executable
+    const binPath = path.dirname(backendPath)
 
     console.log('[Backend Service] Backend data path:', userDataPath)
     console.log('[Backend Service] Backend bin path:', binPath)

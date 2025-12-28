@@ -10,53 +10,113 @@ const error = ref('')
 
 onMounted(async () => {
   try {
-    // Phase 1: Verify Backend Connection
-    const interval = setInterval(() => {
+    // State tracking
+    const isBackendReady = ref(false)
+    const isResourcesReady = ref(false)
+    const resourceStatusText = ref('正在校验资源文件...')
+    
+    // Status Manager: Handles what text to display
+    // 0 = show backend status, 1 = show resource status
+    const displayToggle = ref(0)
+    
+    const statusInterval = setInterval(() => {
+      // Toggle priority
+      displayToggle.value = displayToggle.value === 0 ? 1 : 0
+      
+      const backendPending = !isBackendReady.value
+      const resourcesPending = !isResourcesReady.value
+      
+      if (backendPending && resourcesPending) {
+        // Both pending: Alternate
+        if (displayToggle.value === 0) {
+           status.value = '正在启动后端服务...'
+        } else {
+           status.value = resourceStatusText.value
+        }
+      } else if (backendPending) {
+        // Only backend pending
+        status.value = '正在启动后端服务...'
+      } else if (resourcesPending) {
+        // Only resources pending
+        status.value = resourceStatusText.value
+      } else {
+        // All done
+        status.value = '准备就绪'
+      }
+    }, 2000) // Switch every 2 seconds
+
+    // Initial fake progress
+    const initInterval = setInterval(() => {
       if (percentage.value < 30) percentage.value += 5
     }, 100)
 
-    const port = await window.api.getBackendPort()
-
-    if (port) {
-      percentage.value = 40
-      status.value = '后端服务已连接'
-    }
-    clearInterval(interval)
-
-    // Phase 2: Check Resources
-    status.value = '正在校验资源文件...'
-    percentage.value = 50
-
-    const resourcesExist = await window.api.checkResources()
-
-    if (!resourcesExist) {
-      status.value = 'Downloading resources...'
-      window.api.onDownloadProgress((progress: any) => {
-        const formatSize = (bytes: number): string => {
-          if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
-          return `${(bytes / 1024).toFixed(1)}KB`
-        }
-
-        const currentText = formatSize(progress.current || 0)
-        const totalText = formatSize(progress.total || 0)
-
-        let speedText = ''
-        if (progress.speed !== undefined) {
-          const speed = progress.speed
-          if (speed >= 1024 * 1024) {
-            speedText = ` - ${(speed / (1024 * 1024)).toFixed(1)} MB/s`
-          } else {
-            speedText = ` - ${(speed / 1024).toFixed(1)} KB/s`
-          }
-        }
-
-        status.value = `正在下载资源文件... (${currentText} / ${totalText}) ${progress.percentage}%${speedText}`
-        const downloadPhase = progress.percentage * 0.4
-        percentage.value = 50 + downloadPhase
+    // Parallel Task 1: Wait for Backend
+    const waitForBackend = async (): Promise<number> => {
+      const p = await window.api.getBackendPort()
+      if (p) {
+        isBackendReady.value = true
+        return p
+      }
+      return new Promise((resolve) => {
+        window.api.onBackendPort((port) => {
+          isBackendReady.value = true
+          resolve(port)
+        })
       })
-
-      await window.api.downloadResources()
     }
+
+    // Parallel Task 2: Check and Download Resources
+    const checkAndDownloadResources = async (): Promise<void> => {
+      const resourcesExist = await window.api.checkResources()
+
+      if (!resourcesExist) {
+        resourceStatusText.value = '正在下载资源文件...'
+        window.api.onDownloadProgress((progress: any) => {
+          const formatSize = (bytes: number): string => {
+             if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+             return `${(bytes / 1024).toFixed(1)}KB`
+          }
+
+          const currentText = formatSize(progress.current || 0)
+          const totalText = formatSize(progress.total || 0)
+
+          let speedText = ''
+          if (progress.speed !== undefined) {
+            const speed = progress.speed
+            if (speed >= 1024 * 1024) {
+              speedText = ` - ${(speed / (1024 * 1024)).toFixed(1)} MB/s`
+            } else {
+              speedText = ` - ${(speed / 1024).toFixed(1)} KB/s`
+            }
+          }
+
+          // Update the holding variable, not status directly
+          resourceStatusText.value = `正在下载资源文件... (${currentText} / ${totalText}) ${progress.percentage}%${speedText}`
+          
+          // Update percentage directly as it's visual only
+          const downloadPhase = progress.percentage * 0.6
+          percentage.value = 30 + downloadPhase
+        })
+
+        await window.api.downloadResources()
+      } else {
+        // Resources exist
+        percentage.value = 80
+        resourceStatusText.value = '资源校验完成'
+      }
+      isResourcesReady.value = true
+    }
+
+    // Run both tasks in parallel
+    await Promise.all([waitForBackend(), checkAndDownloadResources()])
+
+    // Cleanup
+    clearInterval(initInterval)
+    clearInterval(statusInterval)
+
+    // Phase 3: Finalize
+    percentage.value = 100
+    status.value = '准备就绪'
 
     // Phase 3: Finalize
     percentage.value = 100
