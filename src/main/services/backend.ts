@@ -107,7 +107,7 @@ export class BackendService {
     this.backendProcess.on('exit', (code) => {
       console.log('[Backend Service] Backend exited with code:', code)
       this.backendProcess = null
-      
+
       // If NOT an explicit kill, it's a crash or failed start
       if (!this.isExplicitKill) {
         const msg = `后端服务异常退出 (代码: ${code})`
@@ -115,7 +115,7 @@ export class BackendService {
         console.error('[Backend Service]', msg)
         this.startupError = error
         if (mainWindow && !mainWindow.isDestroyed()) {
-           mainWindow.webContents.send('backend-start-failed', error)
+          mainWindow.webContents.send('backend-start-failed', error)
         }
       }
     })

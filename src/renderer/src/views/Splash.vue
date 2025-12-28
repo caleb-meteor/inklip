@@ -44,7 +44,7 @@ onMounted(async () => {
     // Status Manager: Handles what text to display
     // 0 = show backend status, 1 = show resource status
     const displayToggle = ref(0)
-    
+
     const statusInterval = setInterval(() => {
       // Toggle priority
       displayToggle.value = displayToggle.value === 0 ? 1 : 0
