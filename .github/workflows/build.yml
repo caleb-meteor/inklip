@@ -62,7 +62,7 @@ jobs:
           cd inklip-base
           # 假设入口文件是 main.py，打包为单文件，名称设为 inklip_base
           # 您可以根据实际情况修改这里的 pyinstaller 命令
-          pyinstaller --onedir --noconsole --name inklip_base main.py
+          pyinstaller --onedir --name inklip_base main.py
 
       # 3. 下载平台特定的资源文件
       - name: Download platform resources

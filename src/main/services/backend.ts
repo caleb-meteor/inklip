@@ -55,7 +55,7 @@ export class BackendService {
 
     const userDataPath = app.getPath('userData')
     // For both Windows and Mac (flat binary), the bin path is the directory containing the executable
-    const binPath = path.dirname(backendPath)
+    const binPath = path.dirname(path.dirname(backendPath))
 
     console.log('[Backend Service] Backend data path:', userDataPath)
     console.log('[Backend Service] Backend bin path:', binPath)
