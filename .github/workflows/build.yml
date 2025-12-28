@@ -87,11 +87,8 @@ jobs:
           EXT=""
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then EXT=".exe"; fi
           
-          # 创建对应的资源目录（如果解压时没创建）
-          mkdir -p resources/${{ matrix.platform }}
-          
-          # 移动 PyInstaller 产物（--onedir 模式下是目录）
-          cp -r inklip-base/dist/inklip_base/. resources/${{ matrix.platform }}/
+          # 移动 PyInstaller 产物（直接移动整个目录，保持 result/inklip_base/inklip_base 的结构）
+          cp -r inklip-base/dist/inklip_base resources/${{ matrix.platform }}/
 
       # 5. 安装 Node 依赖并构建 Electron 应用
       - name: Install pnpm
