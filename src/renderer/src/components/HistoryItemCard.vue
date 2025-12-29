@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NEllipsis, NButton } from 'naive-ui'
 import VideoPreviewPlayer from './VideoPreviewPlayer.vue'
+import VideoStatusOverlay from './VideoStatusOverlay.vue'
 
 interface HistoryItem {
   id: number
@@ -55,11 +56,14 @@ const handleTogglePlay = (): void => {
         :path="item.path"
         :cover="item.cover"
         :duration="item.duration"
-        :is-playing="isPlaying"
+        aspect-ratio="9/16"
+        :disabled="item.status !== 'completed'"
+        @dblclick="handleTogglePlay"
+      />
+      <VideoStatusOverlay
         :status="item.status"
         failed-text="生成失败"
-        aspect-ratio="9/16"
-        @toggle="handleTogglePlay"
+        :show-path-missing="!item.path"
       />
     </div>
 
@@ -127,6 +131,7 @@ const handleTogglePlay = (): void => {
   aspect-ratio: 9 / 16;
   background: #1a1a1a;
   overflow: hidden;
+  position: relative;
 }
 
 .card-bottom-content {

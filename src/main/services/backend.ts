@@ -31,6 +31,18 @@ export class BackendService {
   }
 
   public start(mainWindow: BrowserWindow | null): void {
+    // Check if in debug mode
+    const isDebugMode = process.env.DEBUG_MODE === 'true'
+    if (isDebugMode) {
+      const debugPort = parseInt(process.env.DEBUG_PORT || '12698', 10)
+      console.log('[Backend Service] Debug mode enabled, using port:', debugPort)
+      this.backendPort = debugPort
+      if (mainWindow) {
+        mainWindow.webContents.send('backend-port', debugPort)
+      }
+      return
+    }
+
     const isDev = !app.isPackaged
     const platform = process.platform
     const isWin = platform === 'win32'

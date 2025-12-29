@@ -16,6 +16,7 @@ export interface VideoItem {
   status: number
   task_id: number
   sha256: string
+  parse_percentage?: number
   created_at: string
   updated_at: string
 }
@@ -30,6 +31,7 @@ export interface VideoUploadResponse {
   width?: number
   height?: number
   status?: number
+  parse_percentage?: number
   created_at?: string
   updated_at: string
 }

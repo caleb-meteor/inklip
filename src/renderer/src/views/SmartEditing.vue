@@ -70,6 +70,7 @@ import {
 } from '../api/video'
 import HistoryItemCard from '../components/HistoryItemCard.vue'
 import VideoPreviewPlayer from '../components/VideoPreviewPlayer.vue'
+import VideoStatusOverlay from '../components/VideoStatusOverlay.vue'
 import { useWebsocketStore } from '../stores/websocket'
 
 const wsStore = useWebsocketStore()
@@ -467,7 +468,6 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
                     <div class="compact-card-top">
                       <VideoPreviewPlayer
                         :path="video.path"
-                        :name="video.name"
                         :cover="video.cover"
                         :duration="video.duration"
                         :aspect-ratio="getAspectRatio(video)"
@@ -648,15 +648,15 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
                 @click.stop
               />
             </div>
-            <div class="icon-wrapper-modal">
+            <div class="icon-wrapper-modal" style="position: relative">
               <VideoPreviewPlayer
                 :path="file.path"
-                :name="file.name"
                 :cover="file.cover"
                 :duration="file.duration"
-                :status="mapStatus(file.status || 0)"
                 :aspect-ratio="getAspectRatio(file)"
+                :disabled="mapStatus(file.status || 0) !== 'completed'"
               />
+              <VideoStatusOverlay :status="mapStatus(file.status || 0)" />
             </div>
             <n-ellipsis style="max-width: 100%; margin-top: 6px; font-size: 11px">{{
               file.name

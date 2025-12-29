@@ -16,6 +16,7 @@ import {
   useMessage
 } from 'naive-ui'
 import VideoPreviewPlayer from '../components/VideoPreviewPlayer.vue'
+import VideoStatusOverlay from '../components/VideoStatusOverlay.vue'
 import {
   SearchOutline,
   FilmOutline,
@@ -87,13 +88,14 @@ export interface FileItem {
   width?: number
   height?: number
   status?: number
+  parse_percentage?: number
   created_at?: string
   updated_at?: string
   imageError?: boolean
 }
 
 import { uploadVideoApi, getVideosApi, VideoUploadResponse } from '../api/video'
-import { useWebsocketStore } from '../stores/websocket'
+import { useWebsocketStore, type VideoParseProgress } from '../stores/websocket'
 
 const wsStore = useWebsocketStore()
 
@@ -124,6 +126,7 @@ const fetchVideos = async (): Promise<void> => {
       width: item.width,
       height: item.height,
       status: item.status,
+      parse_percentage: item.parse_percentage,
       created_at: item.created_at,
       updated_at: item.updated_at
     }))
@@ -316,18 +319,98 @@ const getAspectRatio = (file: FileItem): string => {
   return '9 / 16'
 }
 
+/**
+ * 映射视频状态
+ * 0: 待执行 (pending) -> processing
+ * 1: 完成 (completed) -> completed
+ * 2: 执行中 (running) -> processing
+ * 3: 执行失败 (failed) -> failed
+ */
 const mapStatus = (status?: number): 'processing' | 'completed' | 'failed' | undefined => {
   if (status === undefined) return undefined
   switch (status) {
     case 0:
-      return 'processing'
+      return 'processing'  // 待执行 (pending)
     case 1:
-      return 'completed'
+      return 'completed'   // 完成 (completed)
     case 2:
-      return 'failed'
+      return 'processing'  // 执行中 (running)
+    case 3:
+      return 'failed'      // 执行失败 (failed)
     default:
       return 'processing'
   }
+}
+
+/**
+ * 获取视频显示状态
+ * 状态定义：
+ * 0: 待执行 (pending)
+ * 1: 完成 (completed)
+ * 2: 执行中 (running)
+ * 3: 执行失败 (failed)
+ */
+const getVideoStatus = (file: FileItem): 'processing' | 'completed' | 'failed' | undefined => {
+  // 如果状态为 1（完成），直接返回 completed
+  if (file.status === 1) {
+    return 'completed'
+  }
+  
+  // 如果状态为 3（执行失败），直接返回 failed
+  if (file.status === 3) {
+    return 'failed'
+  }
+  
+  // 如果状态为 0（待执行）或 2（执行中），检查是否有进度（WebSocket 或数据库）
+  if (file.status === 0 || file.status === 2) {
+    const progress = getVideoProgress(file.id, file)
+    // 如果有进度数据，显示 processing（执行中/待执行）
+    if (progress?.status === 'parsing' || (file.parse_percentage !== undefined && file.parse_percentage < 100)) {
+      return 'processing'
+    }
+    // 即使没有进度，状态 0 和 2 也应该显示为 processing
+    return 'processing'
+  }
+  
+  // 否则使用数据库状态映射
+  return mapStatus(file.status)
+}
+
+// Create a computed map that tracks the reactive store
+// This ensures Vue can track changes to the reactive object
+const videoProgressMap = computed(() => {
+  // Access the reactive object to establish dependency tracking
+  const progressObj = wsStore.videoParseProgress
+  // Iterate over all keys to ensure Vue tracks all properties
+  Object.keys(progressObj).forEach(key => {
+    // Access each property to establish dependency
+    const _ = progressObj[Number(key)]
+  })
+  // Return the reactive object reference directly
+  return progressObj
+})
+
+/**
+ * 获取视频进度
+ * 优先使用 WebSocket 实时进度，如果没有则使用数据库中的 parse_percentage
+ */
+const getVideoProgress = (videoId: number, file?: FileItem): VideoParseProgress | undefined => {
+  // 优先使用 WebSocket 实时进度
+  const wsProgress = videoProgressMap.value[videoId]
+  if (wsProgress) {
+    return wsProgress
+  }
+  
+  // 如果没有 WebSocket 进度，但数据库中有百分比，且状态为 0（待执行）或 2（执行中），则使用数据库中的值
+  if (file?.parse_percentage !== undefined && (file.status === 0 || file.status === 2)) {
+    return {
+      videoId,
+      percentage: file.parse_percentage,
+      status: 'parsing'
+    }
+  }
+  
+  return undefined
 }
 </script>
 
@@ -416,10 +499,14 @@ const mapStatus = (status?: number): 'processing' | 'completed' | 'failed' | und
                     :path="file.path"
                     :cover="file.cover"
                     :duration="file.duration"
-                    :is-playing="playingFileId === file.id"
-                    :status="mapStatus(file.status)"
                     :aspect-ratio="getAspectRatio(file)"
-                    @toggle="handleTogglePlay(file)"
+                    :disabled="getVideoStatus(file) !== 'completed'"
+                    @dblclick="handleFileOpen(file)"
+                  />
+                  <VideoStatusOverlay
+                    :status="getVideoStatus(file)"
+                    :parse-progress="getVideoProgress(file.id, file)"
+                    :show-path-missing="!file.path"
                   />
                 </div>
               </div>

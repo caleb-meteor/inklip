@@ -9,12 +9,10 @@
   "scripts": {
     "start": "electron-forge start",
     "dev": "electron-vite dev --outDir=dist",
+    "debug": "DEBUG_MODE=true DEBUG_PORT=12698 electron-vite dev --outDir=dist",
     "build": "electron-vite build --outDir=dist",
     "package": "pnpm build && electron-forge package",
-    "make": "pnpm build && electron-forge make",
-    "make:x64": "pnpm build && electron-forge make --arch x64",
-    "make:arm64": "pnpm build && electron-forge make --arch arm64",
-    "make:universal": "pnpm build && electron-forge make --arch universal"
+    "make": "pnpm build && electron-forge make"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
