@@ -113,7 +113,11 @@ export const useWebsocketStore = defineStore('websocket', () => {
     wsClient = new WebSocketClient(targetUrl, {
       onOpen: () => {
         connected.value = true
-        sendAuthToken(token)
+        // 重新获取 token，因为可能已经更新
+        const currentToken = localStorage.getItem('token')
+        if (currentToken) {
+          sendAuthToken(currentToken)
+        }
       },
       onClose: () => {
         connected.value = false
@@ -123,6 +127,14 @@ export const useWebsocketStore = defineStore('websocket', () => {
       },
       onMessage: (data) => {
         messageHandler?.handle(data)
+      },
+      // 重连前检查 token 是否存在
+      shouldReconnect: () => {
+        const hasToken = !!localStorage.getItem('token')
+        if (!hasToken) {
+          console.log('WebSocket reconnection skipped: no authentication token')
+        }
+        return hasToken
       }
     })
 
@@ -136,6 +148,24 @@ export const useWebsocketStore = defineStore('websocket', () => {
     if (wsClient?.isOpen()) {
       wsClient.send({ Authorization: token })
       console.log('WebSocket sent authorization token')
+    }
+  }
+
+  /**
+   * 重新认证：使用最新的 token 重新发送认证信息
+   * 当 token 更新时调用此方法
+   */
+  const reauthenticate = (): void => {
+    if (!connected.value || !wsClient) {
+      return
+    }
+
+    const token = localStorage.getItem('token')
+    if (token) {
+      sendAuthToken(token)
+      console.log('WebSocket reauthenticated with updated token')
+    } else {
+      console.warn('WebSocket reauthentication skipped: no token found')
     }
   }
 
@@ -160,6 +190,7 @@ export const useWebsocketStore = defineStore('websocket', () => {
     setBaseUrl,
     connect,
     disconnect,
+    reauthenticate,
     updateVideoProgress,
     clearVideoProgress,
     getVideoProgress
