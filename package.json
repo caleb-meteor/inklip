@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron-forge start",
     "dev": "electron-vite dev --outDir=dist",
-    "debug": "DEBUG_MODE=true DEBUG_PORT=12698 electron-vite dev --outDir=dist",
+    "debug": "cross-env DEBUG_MODE=true DEBUG_PORT=12698 electron-vite dev --outDir=dist",
     "build": "electron-vite build --outDir=dist",
     "package": "pnpm build && electron-forge package",
     "make": "pnpm build && electron-forge make"
@@ -39,6 +39,7 @@
     "@types/node": "^22.19.1",
     "@vitejs/plugin-vue": "^6.0.2",
     "axios-mock-adapter": "^2.1.0",
+    "cross-env": "^10.1.0",
     "electron": "^39.2.7",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.1",
