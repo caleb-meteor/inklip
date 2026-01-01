@@ -146,6 +146,10 @@ jobs:
       - name: Prepare Release Files
         run: |
           mkdir -p release-files
+          # 从 git tag 中提取版本号（去掉 'v' 前缀）
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "Version: $VERSION"
+          
           # 遍历 artifacts 目录下的每个子目录（对应不同的平台）
           for dir in artifacts/*/; do
             if [ -d "$dir" ]; then
@@ -156,16 +160,12 @@ jobs:
               echo "Processing artifacts for platform: $platform"
               
               # 查找该平台下的安装包并重命名拷贝
-              find "$dir" -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" \) | while read -r file; do
+              find "$dir" -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.setup.exe" \) | while read -r file; do
                 filename=$(basename "$file")
                 extension="${filename##*.}"
-                basename="${filename%.*}"
                 
-                # 使用英文名称 Inklip 作为打包名
-                final_basename=${basename}
-                
-                # 新文件名包含平台信息，如：Inklip-darwin-arm64.dmg
-                new_filename="${final_basename}-${platform}.${extension}"
+                # 生成标准文件名格式：Inklip-{version}-{platform}.{ext}
+                new_filename="Inklip-${VERSION}-${platform}.${extension}"
                 echo "Renaming $filename to $new_filename"
                 cp "$file" "release-files/$new_filename"
               done
