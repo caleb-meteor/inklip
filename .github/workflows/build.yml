@@ -59,7 +59,7 @@ jobs:
         run: |
           mkdir -p resources/${{ matrix.platform }}-${{ matrix.arch }}
           curl -L https://oss-inklip.caleb.center/resources/${{ matrix.platform }}-${{ matrix.arch }}.zip -o resources.zip
-          unzip -o resources.zip -d resources/${{ matrix.platform }}-${{ matrix.arch }}
+          unzip -o resources.zip -d resources/
           rm resources.zip
 
       - name: Move Python Backend to Resources

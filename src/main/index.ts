@@ -96,6 +96,9 @@ function createWindow(): void {
 app.commandLine.appendSwitch('lang', 'zh-CN')
 // 禁用其他语言包，只保留中文
 app.commandLine.appendSwitch('disable-features', 'TranslateUI')
+// 设置应用名称为 inklip，确保 app_data 目录使用英文名称（Windows 和 Mac）
+// 注意：这必须在 app.whenReady() 之前调用，且必须在首次调用 app.getPath() 之前
+app.setName('inklip')
 app.whenReady().then(() => {
   // Set app icon for macOS dock
   if (process.platform === 'darwin' && app.dock) {
