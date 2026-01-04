@@ -20,7 +20,7 @@ import {
   NSelect,
   useMessage
 } from 'naive-ui'
-import { ChevronBack, AddOutline, Cut, CloseOutline, SearchOutline } from '@vicons/ionicons5'
+import { ChevronBack, AddOutline, Cut, CloseOutline, SearchOutline, CreateOutline } from '@vicons/ionicons5'
 export interface FileItem {
   id: number
   name: string
@@ -188,12 +188,7 @@ const schemeOptions = computed<SelectOption[]>(() => {
   // Add Custom Option first
   options.push({
     label: '自定义方案',
-    value: 'custom',
-    style: {
-      borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
-      marginBottom: '8px',
-      paddingBottom: '8px'
-    }
+    value: 'custom'
   })
 
   // Add built-in prompts
@@ -214,6 +209,29 @@ const renderSchemeLabel = (option: SelectOption): VNodeChild => {
         margin: '8px 0'
       }
     })
+  }
+  if (option.value === 'custom') {
+    return h('div', {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        color: '#f59e0b'
+      }
+    }, [
+      h(NIcon, {
+        size: 16,
+        color: '#f59e0b'
+      }, {
+        default: () => h(CreateOutline)
+      }),
+      h('span', {
+        style: {
+          color: '#f59e0b',
+          fontWeight: 500
+        }
+      }, option.label as string)
+    ])
   }
   return option.label as string
 }
