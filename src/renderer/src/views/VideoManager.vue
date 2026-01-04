@@ -183,9 +183,6 @@ const handleFileSelect = (file: FileItem): void => {
   selectedFileId.value = file.id
 }
 
-const handleFileOpen = (file: FileItem): void => {
-  console.log('Opened file:', file.name)
-}
 
 // 右键菜单
 const handleContextMenu = (e: MouseEvent, file: FileItem): void => {
@@ -452,7 +449,6 @@ onUnmounted(() => {
               :video-status="getVideoStatus(file)"
               :video-progress="getVideoProgress(file.id, file)"
               @select="handleFileSelect"
-              @open="handleFileOpen"
               @context-menu="handleContextMenu"
             />
           </div>
@@ -537,45 +533,4 @@ onUnmounted(() => {
   }
 }
 
-.context-menu {
-  background: #2d2d2d;
-  border: 1px solid #444;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  min-width: 150px;
-  overflow: hidden;
-}
-
-.context-menu-content {
-  padding: 4px 0;
-}
-
-.context-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  cursor: pointer;
-  color: #e0e0e0;
-  font-size: 14px;
-  transition: background-color 0.2s;
-}
-
-.context-menu-item:hover {
-  background: rgba(99, 226, 183, 0.15);
-  color: #63e2b7;
-}
-
-.context-menu-item-danger {
-  color: #d03050;
-}
-
-.context-menu-item-danger:hover {
-  background: rgba(208, 48, 80, 0.15);
-  color: #d03050;
-}
-
-.context-menu-item .n-icon {
-  font-size: 16px;
-}
 </style>
