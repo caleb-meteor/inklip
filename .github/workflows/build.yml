@@ -15,13 +15,16 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            platform: win32-x64
+            platform: win32
+            arch: x64
             python_platform: win
-          - os: macos-latest # GitHub 目前默认 macos-latest 为 macOS 14 (ARM64)
-            platform: darwin-arm64
+          - os: macos-latest # ARM64
+            platform: darwin
+            arch: arm64
             python_platform: mac
-          - os: macos-15-intel # macOS 15 (Intel) - x86_64
-            platform: darwin-x64
+          - os: macos-13 # Intel x64 (macos-15-intel 可能不存在)
+            platform: darwin
+            arch: x64
             python_platform: mac
 
     steps:
@@ -51,22 +54,18 @@ jobs:
           cd inklip-base
           pyinstaller --onedir --name inklip_base main.py
 
-      - name: Download platform resources
+      - name: Download and extract platform resources
         shell: bash
         run: |
-          mkdir -p resources
-          curl -L https://oss-inklip.caleb.center/resources/${{ matrix.platform }}.zip -o resources/${{ matrix.platform }}.zip
-
-      - name: Extract resources
-        shell: bash
-        run: |
-          cd resources
-          unzip -o ${{ matrix.platform }}.zip
+          mkdir -p resources/${{ matrix.platform }}-${{ matrix.arch }}
+          curl -L https://oss-inklip.caleb.center/resources/${{ matrix.platform }}-${{ matrix.arch }}.zip -o resources.zip
+          unzip -o resources.zip -d resources/${{ matrix.platform }}-${{ matrix.arch }}
+          rm resources.zip
 
       - name: Move Python Backend to Resources
         shell: bash
         run: |
-          cp -r inklip-base/dist/inklip_base resources/${{ matrix.platform }}/
+          cp -r inklip-base/dist/inklip_base resources/${{ matrix.platform }}-${{ matrix.arch }}/
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -85,38 +84,49 @@ jobs:
       - name: Build Electron App
         shell: bash
         run: |
+          export TARGET_ARCH=${{ matrix.arch }}
           pnpm build
-          PLATFORM="${{ matrix.platform }}"
-          ARCH=${PLATFORM##*-}
-          export TARGET_ARCH=$ARCH
-          npx electron-forge make --arch $ARCH
+          npx electron-forge make --arch ${{ matrix.arch }}
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+
+      - name: List build output (debug)
+        shell: bash
+        run: |
+          echo "=== Build output structure ==="
+          find out -type f -name "*.zip" || echo "No artifacts found"
+          echo "=== Complete out/ directory ==="
+          ls -R out/ || echo "out/ directory is empty"
 
       - name: Collect Build Artifacts
         shell: bash
         run: |
           mkdir -p collected-artifacts
-          artifact_files=$(find out -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.setup.exe" \) 2>/dev/null || true)
           
-          if [ -z "$artifact_files" ]; then
-            echo "::error::No build artifacts found in out/ directory!"
-            exit 1
+          # 查找所有构建产物
+          if [ "${{ matrix.platform }}" = "darwin" ]; then
+            # macOS: 查找 ZIP 文件 (Electron Forge MakerZIP 输出)
+            find out/make -type f -name "*.zip" -exec cp {} collected-artifacts/ \;
+          elif [ "${{ matrix.platform }}" = "win32" ]; then
+            # Windows: 查找 ZIP 文件
+            find out/make -type f -name "*.zip" -exec cp {} collected-artifacts/ \;
           fi
           
-          echo "$artifact_files" | while IFS= read -r file; do
-            if [ -f "$file" ]; then
-              cp "$file" "collected-artifacts/$(basename "$file")"
-            fi
-          done
-          
+          # 验证是否收集到文件
           if [ ! "$(ls -A collected-artifacts 2>/dev/null)" ]; then
             echo "::error::No build artifacts collected!"
+            echo "Expected artifacts in out/make directory"
+            ls -R out/
             exit 1
           fi
+          
+          echo "=== Collected artifacts ==="
+          ls -lh collected-artifacts/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.platform }}
+          name: build-${{ matrix.platform }}-${{ matrix.arch }}
           path: collected-artifacts/*
           if-no-files-found: error
           retention-days: 7
@@ -136,43 +146,48 @@ jobs:
         with:
           path: artifacts
 
+      - name: List downloaded artifacts (debug)
+        run: |
+          echo "=== Downloaded artifacts ==="
+          ls -R artifacts/
+
       - name: Prepare Release Files
         run: |
           mkdir -p release-files
           VERSION=${GITHUB_REF#refs/tags/v}
           
-          shopt -s nullglob
-          for dir in artifacts/*/; do
-            if [ -d "$dir" ]; then
-              platform=$(basename "$dir")
-              platform=${platform#build-artifacts-}
+          # 遍历所有下载的 artifact 目录
+          for artifact_dir in artifacts/*/; do
+            if [ -d "$artifact_dir" ]; then
+              # 从目录名提取平台和架构信息
+              # 例如: build-darwin-arm64 -> darwin-arm64
+              platform_arch=$(basename "$artifact_dir" | sed 's/^build-//')
               
-              while IFS= read -r -d '' file; do
-                extension="${file##*.}"
-                new_filename="Inklip-${VERSION}-${platform}.${extension}"
-                cp "$file" "release-files/$new_filename"
-              done < <(find "$dir" -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.setup.exe" \) -print0)
+              # 复制所有 ZIP 文件并重命名
+              for file in "$artifact_dir"*.zip; do
+                if [ -f "$file" ]; then
+                  new_filename="Inklip-${VERSION}-${platform_arch}.zip"
+                  cp "$file" "release-files/$new_filename"
+                  echo "Prepared: $new_filename"
+                fi
+              done
             fi
           done
           
+          # 验证是否有文件准备上传
           if [ -z "$(ls -A release-files 2>/dev/null)" ]; then
-            echo "::error::No release files found!"
+            echo "::error::No release files prepared!"
             exit 1
           fi
+          
+          echo "=== Release files ==="
+          ls -lh release-files/
 
-      - name: Create or Update Release
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-files/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create ${{ github.ref_name }} \
-            --title "Release ${{ github.ref_name }}" \
-            --generate-notes \
-            || echo "Release already exists"
-
-          shopt -s nullglob
-          files=(release-files/*)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "::error::No files to upload"
-            exit 1
-          fi
-          gh release upload ${{ github.ref_name }} "${files[@]}" --clobber
