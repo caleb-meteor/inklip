@@ -150,7 +150,13 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "Version: $VERSION"
           
+          # 调试：显示 artifacts 目录结构
+          echo "Artifacts directory structure:"
+          ls -la artifacts/ || echo "Artifacts directory not found or empty"
+          find artifacts -type f -o -type d | head -20 || echo "No files found in artifacts"
+          
           # 遍历 artifacts 目录下的每个子目录（对应不同的平台）
+          shopt -s nullglob
           for dir in artifacts/*/; do
             if [ -d "$dir" ]; then
               # 获取平台名称 (例如从 build-artifacts-darwin-arm64 提取 darwin-arm64)
@@ -158,21 +164,39 @@ jobs:
               platform=${platform#build-artifacts-}
               
               echo "Processing artifacts for platform: $platform"
+              echo "Directory: $dir"
               
               # 查找该平台下的安装包并重命名拷贝
-              find "$dir" -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.setup.exe" \) | while read -r file; do
+              file_count=0
+              while IFS= read -r -d '' file; do
                 filename=$(basename "$file")
                 extension="${filename##*.}"
                 
                 # 生成标准文件名格式：Inklip-{version}-{platform}.{ext}
                 new_filename="Inklip-${VERSION}-${platform}.${extension}"
-                echo "Renaming $filename to $new_filename"
+                echo "Found: $filename -> $new_filename"
                 cp "$file" "release-files/$new_filename"
-              done
+                ((file_count++))
+              done < <(find "$dir" -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.setup.exe" \) -print0)
+              
+              if [ $file_count -eq 0 ]; then
+                echo "::warning::No build artifacts found for platform: $platform"
+              else
+                echo "Found $file_count file(s) for platform: $platform"
+              fi
             fi
           done
+          
           echo "Final files to be uploaded:"
-          ls -R release-files
+          ls -lh release-files/ || echo "No files found in release-files directory"
+          
+          # 检查是否有文件需要上传
+          if [ -z "$(ls -A release-files 2>/dev/null)" ]; then
+            echo "::error::No release files found! Check build artifacts."
+            echo "Artifacts structure:"
+            find artifacts -type f 2>/dev/null | head -20
+            exit 1
+          fi
 
       - name: Create or Update Release
         env:
@@ -185,4 +209,13 @@ jobs:
             || echo "Release already exists"
 
           # 上传所有收集到的文件 (--clobber 覆盖同名文件)
-          gh release upload ${{ github.ref_name }} release-files/* --clobber
+          # 使用 shopt -s nullglob 来避免通配符没有匹配时出错
+          shopt -s nullglob
+          files=(release-files/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::No files to upload in release-files directory"
+            exit 1
+          fi
+          echo "Uploading ${#files[@]} file(s):"
+          printf '%s\n' "${files[@]}"
+          gh release upload ${{ github.ref_name }} "${files[@]}" --clobber
