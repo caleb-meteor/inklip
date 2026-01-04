@@ -1,7 +1,7 @@
 import type { ForgeConfig } from '@electron-forge/shared-types'
 import { MakerZIP } from '@electron-forge/maker-zip'
 import path from 'path'
-import fs from 'fs'
+import fs from 'fs-extra'
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -27,59 +27,84 @@ const config: ForgeConfig = {
       /^\/\.git/,
       /^\/out/,
       /(.eslintrc.json)|(.gitignore)|(electron.vite.config.ts)|(forge.config.ts)|(tsconfig.*)/
-    ],
-    // 只保留简体中文语言包（zh-CN）
-    afterCopy: [
-      async (buildPath, electronVersion, platform, arch) => {
-        const localesPath = path.join(buildPath, 'locales')
-        const resourcesLocalesPath = path.join(buildPath, 'Resources', 'locales')
-        
-        // 处理 Windows/Linux 的 locales 目录
-        if (fs.existsSync(localesPath)) {
-          try {
-            const files = fs.readdirSync(localesPath)
-            for (const file of files) {
-              // 只保留简体中文语言包 (zh-CN.pak)，删除其他所有语言包包括繁体中文
-              if (!file.startsWith('zh-CN')) {
-                const filePath = path.join(localesPath, file)
-                if (fs.statSync(filePath).isFile()) {
-                  fs.unlinkSync(filePath)
-                  console.log(`[Forge] Removed locale file: ${file}`)
-                }
-              }
-            }
-          } catch (error) {
-            console.warn(`[Forge] Error processing locales directory:`, error)
-          }
-        }
-        
-        // 处理 macOS 的 Resources/locales 目录
-        if (fs.existsSync(resourcesLocalesPath)) {
-          try {
-            const files = fs.readdirSync(resourcesLocalesPath)
-            for (const file of files) {
-              // 只保留简体中文语言包 (zh-CN.lproj)，删除其他所有语言包包括繁体中文
-              if (!file.startsWith('zh-CN')) {
-                const itemPath = path.join(resourcesLocalesPath, file)
-                const stats = fs.statSync(itemPath)
-                if (stats.isDirectory()) {
-                  fs.rmSync(itemPath, { recursive: true, force: true })
-                  console.log(`[Forge] Removed locale directory: ${file}`)
-                } else if (stats.isFile()) {
-                  fs.unlinkSync(itemPath)
-                  console.log(`[Forge] Removed locale file: ${file}`)
-                }
-              }
-            }
-          } catch (error) {
-            console.warn(`[Forge] Error processing Resources/locales directory:`, error)
-          }
-        }
-      }
     ]
   },
   rebuildConfig: {},
-  makers: [new MakerZIP({}, ['darwin', 'win32'])]
+  makers: [new MakerZIP({}, ['darwin', 'win32'])],
+  hooks: {
+    postPackage: async (forgeConfig, options) => {
+      console.log('开始清理语言包文件...')
+      
+      for (const outputPath of options.outputPaths) {
+        let resourcesPath: string
+        
+        // 根据不同平台确定资源文件夹的位置
+        if (options.platform === 'darwin') {
+          // macOS: .lproj 文件夹在 Contents/Resources 下
+          resourcesPath = path.join(
+            outputPath,
+            '影氪.app',
+            'Contents',
+            'Resources'
+          )
+        } else if (options.platform === 'win32') {
+          // Windows: locales 文件夹在应用根目录
+          resourcesPath = outputPath
+        } else {
+          // Linux
+          resourcesPath = outputPath
+        }
+        
+        console.log(`检查路径: ${resourcesPath}`)
+        
+        if (options.platform === 'darwin') {
+          // macOS: 删除 .lproj 文件夹
+          if (await fs.pathExists(resourcesPath)) {
+            const files = await fs.readdir(resourcesPath)
+            let removedCount = 0
+            
+            for (const file of files) {
+              // 只保留简体中文 (zh_CN.lproj)
+              if (file.endsWith('.lproj') && file !== 'zh_CN.lproj') {
+                const filePath = path.join(resourcesPath, file)
+                await fs.remove(filePath)
+                console.log(`  ✓ 已删除: ${file}`)
+                removedCount++
+              }
+            }
+            
+            console.log(`✓ 清理完成! 共删除 ${removedCount} 个语言包文件夹`)
+            console.log(`✓ 保留: zh_CN.lproj`)
+          }
+        } else {
+          // Windows/Linux: 删除 .pak 文件
+          const localesPath = path.join(resourcesPath, 'locales')
+          
+          if (await fs.pathExists(localesPath)) {
+            const files = await fs.readdir(localesPath)
+            let removedCount = 0
+            
+            for (const file of files) {
+              // 只保留简体中文
+              if (file !== 'zh-CN.pak') {
+                const filePath = path.join(localesPath, file)
+                await fs.remove(filePath)
+                console.log(`  ✓ 已删除: ${file}`)
+                removedCount++
+              }
+            }
+            
+            console.log(`✓ 清理完成! 共删除 ${removedCount} 个语言包文件`)
+            console.log(`✓ 保留: zh-CN.pak`)
+          } else {
+            console.log(`⚠ 未找到 locales 文件夹: ${localesPath}`)
+          }
+        }
+      }
+      
+      console.log('语言包清理流程结束\n')
+    }
+  }
 }
 
 export default config
