@@ -27,17 +27,7 @@ jobs:
     steps:
       - name: Checkout main repo
         uses: actions/checkout@v4
-      # 增加这个步骤来确认 Secret 是否生效
-      - name: Check Secret Presence
-        shell: bash
-        run: |
-          if [ -z "${{ secrets.GH_PAT }}" ]; then
-            echo "::error::GH_PAT is NOT found in secrets! Please check your Repository Secrets settings."
-            exit 1
-          else
-            echo "GH_PAT is found."
-          fi
-      # 1. 拉取 Python 项目
+      
       - name: Checkout Python Backend
         uses: actions/checkout@v4
         with:
@@ -45,7 +35,6 @@ jobs:
           token: ${{ secrets.GH_PAT }}
           path: inklip-base
 
-      # 2. 设置 Python 环境并使用 PyInstaller 打包
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -60,11 +49,8 @@ jobs:
       - name: Build Python Backend with PyInstaller
         run: |
           cd inklip-base
-          # 假设入口文件是 main.py，打包为单文件，名称设为 inklip_base
-          # 您可以根据实际情况修改这里的 pyinstaller 命令
           pyinstaller --onedir --name inklip_base main.py
 
-      # 3. 下载平台特定的资源文件
       - name: Download platform resources
         shell: bash
         run: |
@@ -76,21 +62,12 @@ jobs:
         run: |
           cd resources
           unzip -o ${{ matrix.platform }}.zip
-          # 确保解压后的目录结构符合 forge.config.ts 的要求
-          # 如果 zip 内部没有包含目录名，则可能需要手动创建并移动
 
-      # 4. 将打包好的 Python 文件移至指定资源目录
       - name: Move Python Backend to Resources
         shell: bash
         run: |
-          # 确定二进制文件的后缀
-          EXT=""
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then EXT=".exe"; fi
-
-          # 移动 PyInstaller 产物（直接移动整个目录，保持 result/inklip_base/inklip_base 的结构）
           cp -r inklip-base/dist/inklip_base resources/${{ matrix.platform }}/
 
-      # 5. 安装 Node 依赖并构建 Electron 应用
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -109,24 +86,40 @@ jobs:
         shell: bash
         run: |
           pnpm build
-          STR=${{ matrix.platform }}
-          ARCH=${STR##*-}
-          echo "Building for architecture: $ARCH"
+          PLATFORM="${{ matrix.platform }}"
+          ARCH=${PLATFORM##*-}
           export TARGET_ARCH=$ARCH
           npx electron-forge make --arch $ARCH
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_ARCH: '' # Will be set in the script
+
+      - name: Collect Build Artifacts
+        shell: bash
+        run: |
+          mkdir -p collected-artifacts
+          artifact_files=$(find out -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.setup.exe" \) 2>/dev/null || true)
+          
+          if [ -z "$artifact_files" ]; then
+            echo "::error::No build artifacts found in out/ directory!"
+            exit 1
+          fi
+          
+          echo "$artifact_files" | while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              cp "$file" "collected-artifacts/$(basename "$file")"
+            fi
+          done
+          
+          if [ ! "$(ls -A collected-artifacts 2>/dev/null)" ]; then
+            echo "::error::No build artifacts collected!"
+            exit 1
+          fi
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-${{ matrix.platform }}
-          path: |
-            out/make/**/*.dmg
-            out/make/**/*.zip
-            out/make/**/*.exe
-            out/make/**/*.setup.exe
+          path: collected-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
 
   release:
     needs: build
@@ -146,55 +139,24 @@ jobs:
       - name: Prepare Release Files
         run: |
           mkdir -p release-files
-          # 从 git tag 中提取版本号（去掉 'v' 前缀）
           VERSION=${GITHUB_REF#refs/tags/v}
-          echo "Version: $VERSION"
           
-          # 调试：显示 artifacts 目录结构
-          echo "Artifacts directory structure:"
-          ls -la artifacts/ || echo "Artifacts directory not found or empty"
-          find artifacts -type f -o -type d | head -20 || echo "No files found in artifacts"
-          
-          # 遍历 artifacts 目录下的每个子目录（对应不同的平台）
           shopt -s nullglob
           for dir in artifacts/*/; do
             if [ -d "$dir" ]; then
-              # 获取平台名称 (例如从 build-artifacts-darwin-arm64 提取 darwin-arm64)
               platform=$(basename "$dir")
               platform=${platform#build-artifacts-}
               
-              echo "Processing artifacts for platform: $platform"
-              echo "Directory: $dir"
-              
-              # 查找该平台下的安装包并重命名拷贝
-              file_count=0
               while IFS= read -r -d '' file; do
-                filename=$(basename "$file")
-                extension="${filename##*.}"
-                
-                # 生成标准文件名格式：Inklip-{version}-{platform}.{ext}
+                extension="${file##*.}"
                 new_filename="Inklip-${VERSION}-${platform}.${extension}"
-                echo "Found: $filename -> $new_filename"
                 cp "$file" "release-files/$new_filename"
-                ((file_count++))
               done < <(find "$dir" -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.setup.exe" \) -print0)
-              
-              if [ $file_count -eq 0 ]; then
-                echo "::warning::No build artifacts found for platform: $platform"
-              else
-                echo "Found $file_count file(s) for platform: $platform"
-              fi
             fi
           done
           
-          echo "Final files to be uploaded:"
-          ls -lh release-files/ || echo "No files found in release-files directory"
-          
-          # 检查是否有文件需要上传
           if [ -z "$(ls -A release-files 2>/dev/null)" ]; then
-            echo "::error::No release files found! Check build artifacts."
-            echo "Artifacts structure:"
-            find artifacts -type f 2>/dev/null | head -20
+            echo "::error::No release files found!"
             exit 1
           fi
 
@@ -202,20 +164,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 如果 Release 不存在则创建，如果存在则直接上传文件
           gh release create ${{ github.ref_name }} \
             --title "Release ${{ github.ref_name }}" \
             --generate-notes \
             || echo "Release already exists"
 
-          # 上传所有收集到的文件 (--clobber 覆盖同名文件)
-          # 使用 shopt -s nullglob 来避免通配符没有匹配时出错
           shopt -s nullglob
           files=(release-files/*)
           if [ ${#files[@]} -eq 0 ]; then
-            echo "::error::No files to upload in release-files directory"
+            echo "::error::No files to upload"
             exit 1
           fi
-          echo "Uploading ${#files[@]} file(s):"
-          printf '%s\n' "${files[@]}"
           gh release upload ${{ github.ref_name }} "${files[@]}" --clobber
