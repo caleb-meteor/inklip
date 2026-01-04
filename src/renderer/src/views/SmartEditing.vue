@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, h } from 'vue'
+import type { SelectOption } from 'naive-ui'
+import type { VNodeChild } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NInputNumber,
@@ -180,21 +182,47 @@ const selectedPromptMode = computed(() =>
   selectedSchemeValue.value === 'custom' ? 'custom' : 'builtin'
 )
 
-const schemeOptions = computed(() => {
+const schemeOptions = computed<SelectOption[]>(() => {
   console.log(builtInPrompts.value)
-  const options = builtInPrompts.value.map((item) => ({
+  const options: SelectOption[] = []
+  // Add Custom Option first
+  options.push({
+    label: '自定义方案',
+    value: 'custom',
+    style: {
+      borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+      marginBottom: '8px',
+      paddingBottom: '8px'
+    }
+  })
+
+  // Add built-in prompts
+  const builtinOptions = builtInPrompts.value.map((item) => ({
     label: item.name,
     value: String(item.id)
   }))
-  // Add Custom Option
-  options.push({
-    label: '自定义方案',
-    value: 'custom'
-  })
+  options.push(...builtinOptions)
   return options
 })
 
+const renderSchemeLabel = (option: SelectOption): VNodeChild => {
+  if (option.type === 'divider') {
+    return h('div', {
+      style: {
+        height: '1px',
+        background: '#444',
+        margin: '8px 0'
+      }
+    })
+  }
+  return option.label as string
+}
+
 const handleSchemeChange = (val: string): void => {
+  // Ignore divider selection (should not happen as it's disabled, but just in case)
+  if (val === 'divider') {
+    return
+  }
   selectedSchemeValue.value = val
 
   if (val === 'custom') {
@@ -441,7 +469,7 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
               </div>
               <div class="empty-text-group">
                 <div class="empty-title">开始新任务</div>
-                <div class="empty-desc">点击选择视频或将视频拖入此处</div>
+                <div class="empty-desc">点击选择视频</div>
               </div>
               <n-button type="primary" color="#63e2b7" quaternary style="margin-top: 16px">
                 选择视频
@@ -530,6 +558,7 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
                     <n-select
                       v-model:value="selectedSchemeValue"
                       :options="schemeOptions"
+                      :render-label="renderSchemeLabel"
                       placeholder="请选择方案"
                       size="small"
                       class="scheme-select"
@@ -1493,6 +1522,10 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
 
 .scheme-select {
   width: 140px;
+}
+
+.bar-input {
+  width: 70px !important;
 }
 
 .range-separator {

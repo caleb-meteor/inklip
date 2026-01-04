@@ -43,7 +43,7 @@ protocol.registerSchemesAsPrivileged([
 function createWindow(): void {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 900,
+    width: 1024,
     height: 670,
     show: false,
     title: '影氪',

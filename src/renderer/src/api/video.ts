@@ -17,6 +17,7 @@ export interface VideoItem {
   task_id: number
   sha256: string
   parse_percentage?: number
+  group_id?: number
   created_at: string
   updated_at: string
 }
@@ -152,5 +153,54 @@ export function getPromptBuiltinsApi(): Promise<PromptBuiltinsResponse> {
   return request({
     url: '/api/prompt-builtins',
     method: 'get'
+  })
+}
+
+/**
+ * Rename a video
+ * @param id Video ID
+ * @param name New name for the video
+ * @returns Promise with updated video response
+ */
+export function renameVideoApi(id: number, name: string): Promise<VideoItem> {
+  return request({
+    url: '/api/video/rename',
+    method: 'put',
+    data: {
+      id,
+      name
+    }
+  })
+}
+
+/**
+ * Delete a video
+ * @param id Video ID
+ * @returns Promise with delete response
+ */
+export function deleteVideoApi(id: number): Promise<void> {
+  return request({
+    url: '/api/video',
+    method: 'delete',
+    data: {
+      id
+    }
+  })
+}
+
+/**
+ * Set video group
+ * @param id Video ID
+ * @param groupId Group ID (null to remove from group)
+ * @returns Promise with updated video response
+ */
+export function setVideoGroupApi(id: number, groupId: number | null): Promise<VideoItem> {
+  return request({
+    url: '/api/video/group',
+    method: 'put',
+    data: {
+      id,
+      group_id: groupId
+    }
   })
 }

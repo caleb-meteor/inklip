@@ -14,6 +14,13 @@ const themeOverrides: GlobalThemeOverrides = {
     fontFamily:
       '"Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     fontFamilyMono: 'Menlo, Monaco, Consolas, "Courier New", monospace'
+  },
+  Tree: {
+    nodeColorActive: '#007AFF',
+    nodeBorderRadius: '6px',
+    nodeHeight: '28px',
+    nodeWrapperPadding: '4px 12px',
+    fontSize: '15px'
   }
 }
 
