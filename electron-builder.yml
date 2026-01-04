@@ -9,6 +9,12 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # 只保留简体中文语言包（Windows/Linux）
+  - '!**/locales/*.pak'
+  - '**/locales/zh-CN.pak'
+  # 只保留简体中文语言包（macOS）
+  - '!**/Resources/locales/*'
+  - '**/Resources/locales/zh-CN*'
 asarUnpack:
   - 'resources/**/*'
 asar: true

@@ -92,7 +92,10 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
+// 设置应用语言为中文，并限制只使用中文语言包
 app.commandLine.appendSwitch('lang', 'zh-CN')
+// 禁用其他语言包，只保留中文
+app.commandLine.appendSwitch('disable-features', 'TranslateUI')
 app.whenReady().then(() => {
   // Set app icon for macOS dock
   if (process.platform === 'darwin' && app.dock) {
