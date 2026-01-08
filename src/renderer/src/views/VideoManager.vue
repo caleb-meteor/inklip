@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent } from 'naive-ui'
 import { useVideoManager } from '../composables/useVideoManager'
 import { useVideoGroups } from '../composables/useVideoGroups'
+import { useVideoAnchors } from '../composables/useVideoAnchors'
+import { useVideoProducts } from '../composables/useVideoProducts'
 import { useWebsocketStore } from '../stores/websocket'
 import type { FileItem } from '../types/video'
 import VideoCard from '../components/VideoCard.vue'
@@ -14,6 +16,8 @@ import VideoManagerSidebar from '../components/VideoManagerSidebar.vue'
 import VideoManagerToolbar from '../components/VideoManagerToolbar.vue'
 import RenameModal from '../components/RenameModal.vue'
 import GroupModal from '../components/GroupModal.vue'
+import AnchorModal from '../components/AnchorModal.vue'
+import ProductModal from '../components/ProductModal.vue'
 import DeleteModal from '../components/DeleteModal.vue'
 
 const router = useRouter()
@@ -46,8 +50,30 @@ const {
   getFileGroup
 } = useVideoGroups()
 
-// 文件上传相关
-const fileInputRef = ref<HTMLInputElement | null>(null)
+const {
+  anchors,
+  activeAnchorId,
+  currentAnchor,
+  fetchAnchors,
+  createAnchor,
+  renameAnchor,
+  deleteAnchor,
+  updateVideoAnchor,
+  getFileAnchor
+} = useVideoAnchors()
+
+const {
+  products,
+  activeProductId,
+  currentProduct,
+  fetchProducts,
+  createProduct,
+  renameProduct,
+  deleteProduct,
+  updateVideoProduct,
+  getFileProduct
+} = useVideoProducts()
+
 
 // 对话框状态
 const showRenameModal = ref(false)
@@ -57,6 +83,17 @@ const renameVideoName = ref('')
 const showGroupModal = ref(false)
 const groupVideoId = ref<number | null>(null)
 const groupVideoCurrentGroupName = ref('')
+const groupVideoCurrentGroupId = ref<number | null>(null)
+
+const showAnchorModal = ref(false)
+const anchorVideoId = ref<number | null>(null)
+const anchorVideoCurrentAnchorName = ref('')
+const anchorVideoCurrentAnchorId = ref<number | null>(null)
+
+const showProductModal = ref(false)
+const productVideoId = ref<number | null>(null)
+const productVideoCurrentProductName = ref('')
+const productVideoCurrentProductId = ref<number | null>(null)
 
 const showDeleteModal = ref(false)
 const deleteVideoId = ref<number | null>(null)
@@ -77,19 +114,58 @@ const showRenameGroupModal = ref(false)
 const renameGroupId = ref<number | null>(null)
 const renameGroupName = ref('')
 
+// 主播右键菜单相关
+const showAnchorContextMenu = ref(false)
+const anchorContextMenuPosition = ref({ x: 0, y: 0 })
+const anchorContextMenuId = ref<number | null>(null)
+
+// 重命名主播对话框相关
+const showRenameAnchorModal = ref(false)
+const renameAnchorId = ref<number | null>(null)
+const renameAnchorName = ref('')
+
+// 产品右键菜单相关
+const showProductContextMenu = ref(false)
+const productContextMenuPosition = ref({ x: 0, y: 0 })
+const productContextMenuId = ref<number | null>(null)
+
+// 重命名产品对话框相关
+const showRenameProductModal = ref(false)
+const renameProductId = ref<number | null>(null)
+const renameProductName = ref('')
+
 // 菜单相关
 const activeKey = ref<string | null>('all')
 
 // 搜索关键词
 const searchKeyword = ref('')
 
-// 计算属性 - 支持分组过滤和搜索过滤
+// 计算属性 - 支持分组/主播/产品过滤和搜索过滤
 const currentFiles = computed(() => {
   let filtered = allFiles.value
 
   // 先按分组过滤
   if (activeGroupId.value !== null) {
-    filtered = filtered.filter(file => file.group_id === activeGroupId.value)
+    filtered = filtered.filter(file => {
+      const group = getFileGroup(file)
+      return group?.id === activeGroupId.value
+    })
+  }
+
+  // 按主播过滤
+  if (activeAnchorId.value !== null) {
+    filtered = filtered.filter(file => {
+      const anchor = getFileAnchor(file)
+      return anchor?.id === activeAnchorId.value
+    })
+  }
+
+  // 按产品过滤
+  if (activeProductId.value !== null) {
+    filtered = filtered.filter(file => {
+      const product = getFileProduct(file)
+      return product?.id === activeProductId.value
+    })
   }
 
   // 再按搜索关键词过滤
@@ -115,25 +191,32 @@ watch(
 onMounted(() => {
   fetchVideos()
   fetchGroups()
+  fetchAnchors()
+  fetchProducts()
 })
 
 // 文件上传
-const triggerUpload = (): void => {
+const triggerUpload = async (): Promise<void> => {
   if (isUploading.value) return
-  fileInputRef.value?.click()
-}
-
-const handleFileChange = async (e: Event): Promise<void> => {
-  const target = e.target as HTMLInputElement
-  if (target.files && target.files.length > 0) {
-    const file = target.files[0]
-    try {
-      const filePath = window.api.getPathForFile(file)
-      await uploadFile(filePath)
-    } catch (error) {
-      console.error('File selection failed', error)
+  
+  try {
+    const result = await window.api.selectVideoFile()
+    if (result.success && result.filePath) {
+      // 如果当前选中了分组、主播或产品，上传时自动添加到对应的分类
+      const categoryIds: number[] = []
+      if (activeGroupId.value !== null) {
+        categoryIds.push(activeGroupId.value)
+      }
+      if (activeAnchorId.value !== null) {
+        categoryIds.push(activeAnchorId.value)
+      }
+      if (activeProductId.value !== null) {
+        categoryIds.push(activeProductId.value)
+      }
+      await uploadFile(result.filePath, categoryIds.length > 0 ? categoryIds : undefined)
     }
-    target.value = ''
+  } catch (error) {
+    console.error('File selection failed', error)
   }
 }
 
@@ -171,7 +254,18 @@ const handleDrop = async (e: DragEvent): Promise<void> => {
     }
     try {
       const filePath = window.api.getPathForFile(file)
-      await uploadFile(filePath)
+      // 如果当前选中了分组、主播或产品，上传时自动添加到对应的分类
+      const categoryIds: number[] = []
+      if (activeGroupId.value !== null) {
+        categoryIds.push(activeGroupId.value)
+      }
+      if (activeAnchorId.value !== null) {
+        categoryIds.push(activeAnchorId.value)
+      }
+      if (activeProductId.value !== null) {
+        categoryIds.push(activeProductId.value)
+      }
+      await uploadFile(filePath, categoryIds.length > 0 ? categoryIds : undefined)
     } catch (error) {
       console.error('Upload failed', error)
     }
@@ -224,11 +318,13 @@ const handleGroupMenuItem = (): void => {
   const file = contextMenuFile.value
   closeContextMenu()
   groupVideoId.value = file.id
-  if (file.group_id) {
-    const group = groups.value.find(g => g.id === file.group_id)
-    groupVideoCurrentGroupName.value = group ? group.name : ''
+  const currentGroup = getFileGroup(file)
+  if (currentGroup) {
+    groupVideoCurrentGroupName.value = currentGroup.name
+    groupVideoCurrentGroupId.value = currentGroup.id
   } else {
     groupVideoCurrentGroupName.value = ''
+    groupVideoCurrentGroupId.value = null
   }
   showGroupModal.value = true
 }
@@ -237,8 +333,9 @@ const handleRemoveGroupMenuItem = async (): Promise<void> => {
   if (!contextMenuFile.value) return
   const file = contextMenuFile.value
   closeContextMenu()
+  const currentGroup = getFileGroup(file)
   try {
-    await updateVideoGroup(file.id, null)
+    await updateVideoGroup(file.id, null, currentGroup?.id)
     await fetchVideos()
   } catch (error) {
     // Error already handled in composable
@@ -252,7 +349,7 @@ const handleGroup = async (groupName: string): Promise<void> => {
   
   if (!inputValue) {
     try {
-      await updateVideoGroup(groupVideoId.value, null)
+      await updateVideoGroup(groupVideoId.value, null, groupVideoCurrentGroupId.value)
       showGroupModal.value = false
       await fetchVideos()
     } catch (error) {
@@ -276,8 +373,146 @@ const handleGroup = async (groupName: string): Promise<void> => {
   }
 
   try {
-    await updateVideoGroup(groupVideoId.value, targetGroupId)
+    await updateVideoGroup(groupVideoId.value, targetGroupId, groupVideoCurrentGroupId.value)
     showGroupModal.value = false
+    await fetchVideos()
+  } catch (error) {
+    // Error already handled
+  }
+}
+
+// 主播
+const handleAnchorMenuItem = (): void => {
+  if (!contextMenuFile.value) return
+  const file = contextMenuFile.value
+  closeContextMenu()
+  anchorVideoId.value = file.id
+  const currentAnchor = getFileAnchor(file)
+  if (currentAnchor) {
+    anchorVideoCurrentAnchorName.value = currentAnchor.name
+    anchorVideoCurrentAnchorId.value = currentAnchor.id
+  } else {
+    anchorVideoCurrentAnchorName.value = ''
+    anchorVideoCurrentAnchorId.value = null
+  }
+  showAnchorModal.value = true
+}
+
+const handleRemoveAnchorMenuItem = async (): Promise<void> => {
+  if (!contextMenuFile.value) return
+  const file = contextMenuFile.value
+  closeContextMenu()
+  const currentAnchor = getFileAnchor(file)
+  try {
+    await updateVideoAnchor(file.id, null, currentAnchor?.id)
+    await fetchVideos()
+  } catch (error) {
+    // Error already handled in composable
+  }
+}
+
+const handleAnchor = async (anchorName: string): Promise<void> => {
+  if (!anchorVideoId.value) return
+
+  const inputValue = anchorName.trim()
+  
+  if (!inputValue) {
+    try {
+      await updateVideoAnchor(anchorVideoId.value, null, anchorVideoCurrentAnchorId.value)
+      showAnchorModal.value = false
+      await fetchVideos()
+    } catch (error) {
+      // Error already handled
+    }
+    return
+  }
+
+  let targetAnchorId: number | null = null
+  const existingAnchor = anchors.value.find(a => a.name === inputValue)
+  
+  if (existingAnchor) {
+    targetAnchorId = existingAnchor.id
+  } else {
+    try {
+      const newAnchor = await createAnchor(inputValue)
+      targetAnchorId = newAnchor.id
+    } catch (error) {
+      return
+    }
+  }
+
+  try {
+    await updateVideoAnchor(anchorVideoId.value, targetAnchorId, anchorVideoCurrentAnchorId.value)
+    showAnchorModal.value = false
+    await fetchVideos()
+  } catch (error) {
+    // Error already handled
+  }
+}
+
+// 产品
+const handleProductMenuItem = (): void => {
+  if (!contextMenuFile.value) return
+  const file = contextMenuFile.value
+  closeContextMenu()
+  productVideoId.value = file.id
+  const currentProduct = getFileProduct(file)
+  if (currentProduct) {
+    productVideoCurrentProductName.value = currentProduct.name
+    productVideoCurrentProductId.value = currentProduct.id
+  } else {
+    productVideoCurrentProductName.value = ''
+    productVideoCurrentProductId.value = null
+  }
+  showProductModal.value = true
+}
+
+const handleRemoveProductMenuItem = async (): Promise<void> => {
+  if (!contextMenuFile.value) return
+  const file = contextMenuFile.value
+  closeContextMenu()
+  const currentProduct = getFileProduct(file)
+  try {
+    await updateVideoProduct(file.id, null, currentProduct?.id)
+    await fetchVideos()
+  } catch (error) {
+    // Error already handled in composable
+  }
+}
+
+const handleProduct = async (productName: string): Promise<void> => {
+  if (!productVideoId.value) return
+
+  const inputValue = productName.trim()
+  
+  if (!inputValue) {
+    try {
+      await updateVideoProduct(productVideoId.value, null, productVideoCurrentProductId.value)
+      showProductModal.value = false
+      await fetchVideos()
+    } catch (error) {
+      // Error already handled
+    }
+    return
+  }
+
+  let targetProductId: number | null = null
+  const existingProduct = products.value.find(p => p.name === inputValue)
+  
+  if (existingProduct) {
+    targetProductId = existingProduct.id
+  } else {
+    try {
+      const newProduct = await createProduct(inputValue)
+      targetProductId = newProduct.id
+    } catch (error) {
+      return
+    }
+  }
+
+  try {
+    await updateVideoProduct(productVideoId.value, targetProductId, productVideoCurrentProductId.value)
+    showProductModal.value = false
     await fetchVideos()
   } catch (error) {
     // Error already handled
@@ -304,22 +539,64 @@ const handleDelete = async (): Promise<void> => {
   }
 }
 
-// 菜单选择
+// 菜单选择 - 分组、主播、产品筛选相互独立
 const handleMenuSelect = (key: string): void => {
-  // 如果点击的是当前已选中的节点，则取消选择
-  if (key === activeKey.value) {
+  if (key === 'all') {
+    // 点击"全部视频"时，清空所有筛选
     activeKey.value = 'all'
     activeGroupId.value = null
+    activeAnchorId.value = null
+    activeProductId.value = null
     return
   }
   
-  activeKey.value = key
-  
+  // 分组选择
   if (key.startsWith('group-')) {
     const groupId = parseInt(key.replace('group-', ''))
-    activeGroupId.value = groupId
-  } else if (key === 'all') {
-    activeGroupId.value = null
+    // 如果点击的是当前已选中的分组，则取消选择
+    if (activeGroupId.value === groupId) {
+      activeGroupId.value = null
+      // 如果所有筛选都为空，设置为 all
+      if (activeAnchorId.value === null && activeProductId.value === null) {
+        activeKey.value = 'all'
+      }
+    } else {
+      activeGroupId.value = groupId
+      // 更新 activeKey，但不清空其他筛选
+      activeKey.value = key
+    }
+  } 
+  // 主播选择
+  else if (key.startsWith('anchor-')) {
+    const anchorId = parseInt(key.replace('anchor-', ''))
+    // 如果点击的是当前已选中的主播，则取消选择
+    if (activeAnchorId.value === anchorId) {
+      activeAnchorId.value = null
+      // 如果所有筛选都为空，设置为 all
+      if (activeGroupId.value === null && activeProductId.value === null) {
+        activeKey.value = 'all'
+      }
+    } else {
+      activeAnchorId.value = anchorId
+      // 更新 activeKey，但不清空其他筛选
+      activeKey.value = key
+    }
+  } 
+  // 产品选择
+  else if (key.startsWith('product-')) {
+    const productId = parseInt(key.replace('product-', ''))
+    // 如果点击的是当前已选中的产品，则取消选择
+    if (activeProductId.value === productId) {
+      activeProductId.value = null
+      // 如果所有筛选都为空，设置为 all
+      if (activeGroupId.value === null && activeAnchorId.value === null) {
+        activeKey.value = 'all'
+      }
+    } else {
+      activeProductId.value = productId
+      // 更新 activeKey，但不清空其他筛选
+      activeKey.value = key
+    }
   }
 }
 
@@ -368,6 +645,96 @@ const handleDeleteGroup = async (): Promise<void> => {
   }
 }
 
+// 主播右键菜单
+const handleAnchorContextMenu = (e: MouseEvent, anchorId: number): void => {
+  e.preventDefault()
+  e.stopPropagation()
+  anchorContextMenuId.value = anchorId
+  anchorContextMenuPosition.value = { x: e.clientX, y: e.clientY }
+  showAnchorContextMenu.value = true
+}
+
+const closeAnchorContextMenu = (): void => {
+  showAnchorContextMenu.value = false
+  anchorContextMenuId.value = null
+}
+
+const handleRenameAnchorMenuItem = (): void => {
+  if (!anchorContextMenuId.value) return
+  const anchor = anchors.value.find(a => a.id === anchorContextMenuId.value)
+  if (anchor) {
+    renameAnchorId.value = anchor.id
+    renameAnchorName.value = anchor.name
+    closeAnchorContextMenu()
+    showRenameAnchorModal.value = true
+  }
+}
+
+const handleRenameAnchor = async (newName: string): Promise<void> => {
+  if (!renameAnchorId.value) return
+  try {
+    await renameAnchor(renameAnchorId.value, newName)
+    showRenameAnchorModal.value = false
+  } catch (error) {
+    // Error already handled
+  }
+}
+
+const handleDeleteAnchor = async (): Promise<void> => {
+  if (!anchorContextMenuId.value) return
+  try {
+    await deleteAnchor(anchorContextMenuId.value)
+    closeAnchorContextMenu()
+  } catch (error) {
+    // Error already handled
+  }
+}
+
+// 产品右键菜单
+const handleProductContextMenu = (e: MouseEvent, productId: number): void => {
+  e.preventDefault()
+  e.stopPropagation()
+  productContextMenuId.value = productId
+  productContextMenuPosition.value = { x: e.clientX, y: e.clientY }
+  showProductContextMenu.value = true
+}
+
+const closeProductContextMenu = (): void => {
+  showProductContextMenu.value = false
+  productContextMenuId.value = null
+}
+
+const handleRenameProductMenuItem = (): void => {
+  if (!productContextMenuId.value) return
+  const product = products.value.find(p => p.id === productContextMenuId.value)
+  if (product) {
+    renameProductId.value = product.id
+    renameProductName.value = product.name
+    closeProductContextMenu()
+    showRenameProductModal.value = true
+  }
+}
+
+const handleRenameProduct = async (newName: string): Promise<void> => {
+  if (!renameProductId.value) return
+  try {
+    await renameProduct(renameProductId.value, newName)
+    showRenameProductModal.value = false
+  } catch (error) {
+    // Error already handled
+  }
+}
+
+const handleDeleteProduct = async (): Promise<void> => {
+  if (!productContextMenuId.value) return
+  try {
+    await deleteProduct(productContextMenuId.value)
+    closeProductContextMenu()
+  } catch (error) {
+    // Error already handled
+  }
+}
+
 // 点击外部关闭菜单
 const handleClickOutside = (e: MouseEvent): void => {
   const target = e.target as HTMLElement
@@ -378,6 +745,14 @@ const handleClickOutside = (e: MouseEvent): void => {
   
   if (showGroupContextMenu.value && !target.closest('.group-context-menu')) {
     closeGroupContextMenu()
+  }
+  
+  if (showAnchorContextMenu.value && !target.closest('.anchor-context-menu')) {
+    closeAnchorContextMenu()
+  }
+  
+  if (showProductContextMenu.value && !target.closest('.product-context-menu')) {
+    closeProductContextMenu()
   }
 }
 
@@ -420,22 +795,21 @@ onUnmounted(() => {
         >
           <VideoManagerSidebar
             :groups="groups"
+            :anchors="anchors"
+            :products="products"
             :active-key="activeKey"
+            :active-group-id="activeGroupId"
+            :active-anchor-id="activeAnchorId"
+            :active-product-id="activeProductId"
             @menu-select="handleMenuSelect"
             @group-context-menu="handleGroupContextMenu"
+            @anchor-context-menu="handleAnchorContextMenu"
+            @product-context-menu="handleProductContextMenu"
           />
         </n-layout-sider>
 
         <!-- 内容区域 -->
         <n-layout content-style="padding: 24px; overflow-y: auto;">
-          <input
-            ref="fileInputRef"
-            type="file"
-            accept="video/*"
-            style="display: none"
-            @change="handleFileChange"
-          />
-
           <div class="file-grid">
             <UploadCard :uploading="isUploading" @click="triggerUpload" />
 
@@ -445,6 +819,8 @@ onUnmounted(() => {
               :file="file"
               :selected="selectedFileId === file.id"
               :group="getFileGroup(file)"
+              :anchor="getFileAnchor(file)"
+              :product="getFileProduct(file)"
               :aspect-ratio="getAspectRatio(file)"
               :video-status="getVideoStatus(file)"
               :video-progress="getVideoProgress(file.id, file)"
@@ -464,6 +840,10 @@ onUnmounted(() => {
       @rename="handleRenameMenuItem"
       @group="handleGroupMenuItem"
       @remove-group="handleRemoveGroupMenuItem"
+      @anchor="handleAnchorMenuItem"
+      @remove-anchor="handleRemoveAnchorMenuItem"
+      @product="handleProductMenuItem"
+      @remove-product="handleRemoveProductMenuItem"
       @delete="handleDeleteMenuItem"
     />
 
@@ -500,6 +880,52 @@ onUnmounted(() => {
       v-model:show="showRenameGroupModal"
       :video-name="renameGroupName"
       @confirm="handleRenameGroup"
+    />
+
+    <!-- 主播对话框 -->
+    <AnchorModal
+      v-model:show="showAnchorModal"
+      :anchors="anchors"
+      :current-anchor-name="anchorVideoCurrentAnchorName"
+      @confirm="handleAnchor"
+    />
+
+    <!-- 产品对话框 -->
+    <ProductModal
+      v-model:show="showProductModal"
+      :products="products"
+      :current-product-name="productVideoCurrentProductName"
+      @confirm="handleProduct"
+    />
+
+    <!-- 主播右键菜单 -->
+    <GroupContextMenu
+      v-if="showAnchorContextMenu"
+      :position="anchorContextMenuPosition"
+      @rename="handleRenameAnchorMenuItem"
+      @delete="handleDeleteAnchor"
+    />
+
+    <!-- 产品右键菜单 -->
+    <GroupContextMenu
+      v-if="showProductContextMenu"
+      :position="productContextMenuPosition"
+      @rename="handleRenameProductMenuItem"
+      @delete="handleDeleteProduct"
+    />
+
+    <!-- 重命名主播对话框 -->
+    <RenameModal
+      v-model:show="showRenameAnchorModal"
+      :video-name="renameAnchorName"
+      @confirm="handleRenameAnchor"
+    />
+
+    <!-- 重命名产品对话框 -->
+    <RenameModal
+      v-model:show="showRenameProductModal"
+      :video-name="renameProductName"
+      @confirm="handleRenameProduct"
     />
   </div>
 </template>

@@ -18,10 +18,13 @@ import {
   NButton,
   NSpace,
   NSelect,
-  useMessage
+  NForm,
+  NFormItem,
+  useMessage,
+  useDialog
 } from 'naive-ui'
 import { ChevronBack, AddOutline, Cut, CloseOutline, SearchOutline, CreateOutline } from '@vicons/ionicons5'
-export interface FileItem {
+interface FileItem {
   id: number
   name: string
   type: 'video' | 'image' | 'document' | 'audio'
@@ -34,21 +37,16 @@ export interface FileItem {
   width?: number
   height?: number
   status?: number
+  categories?: Array<{ id: number; name: string; type: string }>
   imageError?: boolean
 }
 
-export interface HistoryItem {
+interface HistoryItem {
   id: number
-  userId?: number
-  video_id?: string
   prompt?: string
   min_duration?: number
   max_duration?: number
   status: 'processing' | 'completed' | 'failed'
-  output_path?: string
-  output_cover?: string
-  created_at?: string
-  updated_at?: string
   name: string
   subtitle?: string
   path?: string
@@ -67,8 +65,12 @@ import {
   smartCutApi,
   getSmartCutsApi,
   getPromptBuiltinsApi,
+  deleteSmartCutApi,
   type PromptBuiltin
 } from '../api/video'
+import { useVideoGroups } from '../composables/useVideoGroups'
+import { useVideoAnchors } from '../composables/useVideoAnchors'
+import { useVideoProducts } from '../composables/useVideoProducts'
 import HistoryItemCard from '../components/HistoryItemCard.vue'
 import VideoPreviewPlayer from '../components/VideoPreviewPlayer.vue'
 import VideoStatusOverlay from '../components/VideoStatusOverlay.vue'
@@ -78,6 +80,28 @@ const wsStore = useWebsocketStore()
 
 const router = useRouter()
 const allFiles = ref<FileItem[]>([])
+
+// 使用 composables
+const {
+  groups,
+  activeGroupId,
+  fetchGroups,
+  getFileGroup
+} = useVideoGroups()
+
+const {
+  anchors,
+  activeAnchorId,
+  fetchAnchors,
+  getFileAnchor
+} = useVideoAnchors()
+
+const {
+  products,
+  activeProductId,
+  fetchProducts,
+  getFileProduct
+} = useVideoProducts()
 
 const fetchVideos = async (): Promise<void> => {
   try {
@@ -94,7 +118,8 @@ const fetchVideos = async (): Promise<void> => {
       duration: item.duration,
       width: item.width,
       height: item.height,
-      status: item.status
+      status: item.status,
+      categories: item.categories || []
     }))
   } catch (error) {
     console.error('Failed to fetch videos', error)
@@ -122,10 +147,56 @@ const selectedVideos = computed(() => {
   return allFiles.value.filter((file) => selectedVideoIds.value.includes(file.id))
 })
 
+const selectedProductName = ref<string>('')
+
+const formData = computed(() => ({
+  minDuration: minDuration.value,
+  maxDuration: maxDuration.value,
+  scheme: selectedSchemeValue.value,
+  product: selectedProductName.value
+}))
+
+// 监听选择的视频，如果所有视频都有相同的产品，自动填充
+watch(selectedVideos, (videos) => {
+  if (videos.length === 0) {
+    selectedProductName.value = ''
+    return
+  }
+  
+  // 获取所有视频的产品
+  const productNames = videos
+    .map(video => {
+      const product = getFileProduct(video)
+      return product?.name || null
+    })
+    .filter(name => name !== null)
+  
+  // 如果所有视频都有产品，且产品相同，则自动填充
+  if (productNames.length === videos.length) {
+    const uniqueProductNames = [...new Set(productNames)]
+    if (uniqueProductNames.length === 1) {
+      selectedProductName.value = uniqueProductNames[0] as string
+    } else {
+      // 如果产品不一致，清空选择
+      selectedProductName.value = ''
+    }
+  } else {
+    // 如果有视频没有产品，清空选择
+    selectedProductName.value = ''
+  }
+}, { immediate: true })
+
 const openSelector = async (): Promise<void> => {
   searchKeyword.value = '' // Clear search keyword when opening
   tempSelectedIds.value = [...selectedVideoIds.value]
+  // 重置筛选条件
+  activeGroupId.value = null
+  activeAnchorId.value = null
+  activeProductId.value = null
   await fetchVideos() // Refresh video list
+  await fetchGroups() // Refresh groups
+  await fetchAnchors() // Refresh anchors
+  await fetchProducts() // Refresh products
   showSelector.value = true
 }
 
@@ -157,15 +228,46 @@ const removeVideo = (id: number): void => {
 }
 
 const filteredVideoFiles = computed(() => {
-  if (!searchKeyword.value) return videoFiles.value
-  const keyword = searchKeyword.value.toLowerCase()
-  return videoFiles.value.filter((file) => file.name.toLowerCase().includes(keyword))
+  let filtered = videoFiles.value
+
+  // 按分组筛选
+  if (activeGroupId.value !== null) {
+    filtered = filtered.filter(file => {
+      const group = getFileGroup(file)
+      return group?.id === activeGroupId.value
+    })
+  }
+
+  // 按主播筛选
+  if (activeAnchorId.value !== null) {
+    filtered = filtered.filter(file => {
+      const anchor = getFileAnchor(file)
+      return anchor?.id === activeAnchorId.value
+    })
+  }
+
+  // 按产品筛选
+  if (activeProductId.value !== null) {
+    filtered = filtered.filter(file => {
+      const product = getFileProduct(file)
+      return product?.id === activeProductId.value
+    })
+  }
+
+  // 按搜索关键词筛选
+  if (searchKeyword.value.trim()) {
+    const keyword = searchKeyword.value.toLowerCase()
+    filtered = filtered.filter((file) => file.name.toLowerCase().includes(keyword))
+  }
+
+  return filtered
 })
 const goBack = (): void => {
   router.push('/home')
 }
 
 const message = useMessage()
+const dialog = useDialog()
 const isProcessing = ref(false)
 const promptText = ref('')
 const builtInPrompts = ref<PromptBuiltin[]>([])
@@ -179,7 +281,6 @@ const fetchBuiltInPrompts = async (): Promise<void> => {
 const selectedSchemeValue = ref<string | null>(null) // Stores either ID or 'custom'
 
 const schemeOptions = computed<SelectOption[]>(() => {
-  console.log(builtInPrompts.value)
   const options: SelectOption[] = []
   // Add Custom Option first
   options.push({
@@ -300,19 +401,38 @@ const handleStartSmartCut = async (prompt?: string, min?: number, max?: number):
     return
   }
 
+  // 根据选择的方案类型设置 prompt_built_id 和 prompt_text
+  // 规则：prompt_built_id 有值时，prompt_text 必须为空
+  let promptBuiltId: number | undefined
+  let finalPromptText: string | undefined
+
+  if (selectedSchemeValue.value === 'custom') {
+    // 自定义方案：prompt_built_id 为 0，prompt_text 为自定义内容
+    promptBuiltId = 0
+    finalPromptText = prompt || promptText.value || undefined
+  } else if (selectedSchemeValue.value) {
+    // 内置方案：prompt_built_id 为内置方案 ID，prompt_text 为空
+    promptBuiltId = parseInt(selectedSchemeValue.value, 10)
+    finalPromptText = undefined
+  } else {
+    // 未选择方案时，使用 prompt 参数或 promptText，不设置 prompt_built_id
+    finalPromptText = prompt || promptText.value || undefined
+  }
+
   try {
     isProcessing.value = true
     message.info('任务提交成功，等待处理...')
 
     const res = await smartCutApi(
       selectedVideoIds.value,
-      prompt || promptText.value,
+      finalPromptText,
       outMin,
-      outMax
+      outMax,
+      selectedProductName.value || undefined,
+      promptBuiltId
     )
 
     message.success(`剪辑完成！`)
-    console.log('Smart cut response:', res)
 
     // Refresh history
     fetchHistory()
@@ -336,11 +456,17 @@ const isHistoryLoading = ref(false)
 const mapStatus = (status: number): 'processing' | 'completed' | 'failed' => {
   switch (status) {
     case 0:
-      return 'processing'
+      return 'processing' // 待处理
     case 1:
-      return 'completed'
+      return 'completed' // 视频处理成功（最终完成）
     case 2:
-      return 'failed'
+      return 'processing' // ai 剪辑成功（但还没完成视频处理）
+    case 3:
+      return 'failed' // ai 剪辑异常
+    case 4:
+      return 'failed' // 视频处理异常
+    case 5:
+      return 'processing' // ai 剪辑中
     default:
       return 'processing'
   }
@@ -426,6 +552,7 @@ onMounted(() => {
   fetchVideos()
   fetchHistory()
   fetchBuiltInPrompts()
+  fetchProducts() // 获取产品列表
 })
 
 const handleExport = async (item: HistoryItem): Promise<void> => {
@@ -452,6 +579,30 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
     console.error('[Renderer] Save error:', error)
     message.error('保存过程中发生错误')
   }
+}
+
+const handleDelete = async (item: HistoryItem): Promise<void> => {
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除剪辑历史 "${item.name}" 吗？此操作将同时删除相关文件，且无法恢复。`,
+    positiveText: '确定删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteSmartCutApi(item.id)
+        message.success('删除成功')
+        // 如果正在播放的是被删除的视频，停止播放
+        if (playingVideoId.value === item.id) {
+          playingVideoId.value = null
+        }
+        // 刷新历史列表
+        fetchHistory(false)
+      } catch (error) {
+        console.error('Delete smart cut failed:', error)
+        message.error('删除失败，请重试')
+      }
+    }
+  })
 }
 </script>
 
@@ -537,85 +688,97 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
               </div>
 
               <!-- Parameters Configuration Section -->
-              <!-- New Horizontal Control Bar -->
-              <div class="control-bar-wrapper">
-                <div class="smart-control-bar">
-                  <!-- Duration Group -->
-                  <div class="control-group">
-                    <span class="control-label">时长</span>
-                    <n-input-number
-                      v-model:value="minDuration"
-                      :min="1"
-                      placeholder="Min"
-                      class="bar-input"
-                      size="small"
-                      :show-button="false"
-                    />
-                    <span class="range-separator">-</span>
-                    <n-input-number
-                      v-model:value="maxDuration"
-                      :min="1"
-                      :max="Math.floor(totalSelectedDuration) || 300"
-                      placeholder="Max"
-                      class="bar-input"
-                      size="small"
-                      :show-button="false"
-                    />
-                    <span class="unit">s</span>
-                  </div>
+              <!-- Form Layout -->
+              <div class="form-wrapper">
+                <n-form :model="formData" label-placement="left" label-width="60" size="medium">
+                  <!-- Duration Field -->
+                  <n-form-item label="时长">
+                    <n-space :size="8" align="center">
+                      <n-input-number
+                        v-model:value="minDuration"
+                        :min="1"
+                        placeholder="最小时长"
+                        size="medium"
+                        :show-button="false"
+                        style="width: 120px"
+                      />
+                      <span class="range-separator">-</span>
+                      <n-input-number
+                        v-model:value="maxDuration"
+                        :min="1"
+                        :max="Math.floor(totalSelectedDuration) || 300"
+                        placeholder="最大时长"
+                        size="medium"
+                        :show-button="false"
+                        style="width: 120px"
+                      />
+                      <span class="unit">s</span>
+                    </n-space>
+                    <Transition name="fade">
+                      <div v-if="durationError" class="form-error-hint">
+                        {{ durationError }}
+                      </div>
+                    </Transition>
+                  </n-form-item>
 
-                  <div class="bar-divider"></div>
-
-                  <!-- Scheme Group -->
-                  <div class="control-group scheme-group">
-                    <span class="control-label">方案</span>
-                    <n-select
-                      v-model:value="selectedSchemeValue"
-                      :options="schemeOptions"
-                      :render-label="renderSchemeLabel"
-                      placeholder="请选择方案"
-                      size="small"
-                      class="scheme-select"
-                      @update:value="handleSchemeChange"
+                  <!-- Product Field -->
+                  <n-form-item label="产品">
+                    <n-input
+                      v-model:value="selectedProductName"
+                      placeholder="请输入产品名称"
+                      clearable
+                      size="medium"
+                      style="width: 100%"
                     />
-                  </div>
+                  </n-form-item>
 
-                  <div class="bar-divider"></div>
+                  <!-- Scheme Field -->
+                  <n-form-item label="方案">
+                    <div style="width: 100%; display: flex; flex-direction: column;">
+                      <n-select
+                        v-model:value="selectedSchemeValue"
+                        :options="schemeOptions"
+                        :render-label="renderSchemeLabel"
+                        placeholder="请选择方案"
+                        size="medium"
+                        style="width: 100%"
+                        @update:value="handleSchemeChange"
+                      />
+                      <!-- Custom Prompt Edit Area (Conditional) -->
+                      <Transition name="slide-down">
+                        <div v-if="selectedSchemeValue === 'custom'" class="custom-edit-area">
+                          <n-input
+                            v-model:value="promptText"
+                            type="textarea"
+                            placeholder="请输入您的自定义剪辑方案..."
+                            :rows="3"
+                            class="custom-textarea"
+                            :autosize="{ minRows: 3, maxRows: 8 }"
+                            show-count
+                            :maxlength="2000"
+                          />
+                        </div>
+                      </Transition>
+                    </div>
+                  </n-form-item>
 
                   <!-- Start Action -->
-                  <n-button
-                    type="primary"
-                    color="#63e2b7"
-                    class="bar-start-btn"
-                    :loading="isProcessing"
-                    @click="handleStartSmartCut()"
-                  >
-                    <template #icon
-                      ><n-icon><Cut /></n-icon
-                    ></template>
-                    开始剪辑
-                  </n-button>
-                </div>
-
-                <!-- Duration Error Hint -->
-                <Transition name="fade">
-                  <div v-if="durationError" class="bar-error-hint">
-                    {{ durationError }}
-                  </div>
-                </Transition>
-
-                <!-- Custom Prompt Edit Area (Conditional) -->
-                <Transition name="slide-down">
-                  <div v-if="selectedSchemeValue === 'custom'" class="custom-edit-area">
-                    <n-input
-                      v-model:value="promptText"
-                      type="textarea"
-                      placeholder="请输入您的自定义剪辑方案..."
-                      :rows="3"
-                      class="custom-textarea"
-                    />
-                  </div>
-                </Transition>
+                  <n-form-item>
+                    <n-button
+                      type="primary"
+                      color="#63e2b7"
+                      size="medium"
+                      :loading="isProcessing"
+                      @click="handleStartSmartCut()"
+                      style="width: 100%"
+                    >
+                      <template #icon
+                        ><n-icon><Cut /></n-icon
+                      ></template>
+                      开始剪辑
+                    </n-button>
+                  </n-form-item>
+                </n-form>
               </div>
             </div>
           </div>
@@ -636,6 +799,7 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
                 :item="item"
                 @play="handlePlay"
                 @export="handleExport"
+                @delete="handleDelete"
               />
 
               <!-- Loading / No More indicators -->
@@ -663,16 +827,45 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
         暂无视频文件，请先去文件管理上传
       </div>
       <template v-else>
-        <n-input
-          v-model:value="searchKeyword"
-          placeholder="搜索视频名称..."
-          clearable
-          style="margin-bottom: 16px"
-        >
-          <template #prefix>
-            <n-icon><SearchOutline /></n-icon>
-          </template>
-        </n-input>
+        <n-space vertical :size="12" style="margin-bottom: 16px">
+          <n-input
+            v-model:value="searchKeyword"
+            placeholder="搜索视频名称..."
+            clearable
+          >
+            <template #prefix>
+              <n-icon><SearchOutline /></n-icon>
+            </template>
+          </n-input>
+          
+          <!-- 筛选器 -->
+          <n-space :size="8">
+            <n-select
+              v-model:value="activeGroupId"
+              :options="groups.map(g => ({ label: g.name, value: g.id }))"
+              placeholder="分组"
+              clearable
+              size="small"
+              style="width: 120px"
+            />
+            <n-select
+              v-model:value="activeAnchorId"
+              :options="anchors.map(a => ({ label: a.name, value: a.id }))"
+              placeholder="主播"
+              clearable
+              size="small"
+              style="width: 120px"
+            />
+            <n-select
+              v-model:value="activeProductId"
+              :options="products.map(p => ({ label: p.name, value: p.id }))"
+              placeholder="产品"
+              clearable
+              size="small"
+              style="width: 120px"
+            />
+          </n-space>
+        </n-space>
         <div v-if="filteredVideoFiles.length > 0" class="file-grid-modal">
           <div
             v-for="file in filteredVideoFiles"
@@ -827,7 +1020,7 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
 .video-workspace {
   width: 100%;
   background: rgba(255, 255, 255, 0.01);
-  padding: 24px;
+  padding: 16px;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -914,16 +1107,16 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
 .video-list-compact {
   display: flex;
   justify-content: center;
-  gap: 20px;
+  gap: 12px;
   overflow-x: auto;
   padding: 8px 4px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .compact-video-card {
   flex: 1;
-  min-width: 100px;
-  max-width: 180px;
+  min-width: 80px;
+  max-width: 120px;
   background: #2a2a2a;
   border-radius: 12px;
   overflow: hidden;
@@ -977,68 +1170,53 @@ const handleExport = async (item: HistoryItem): Promise<void> => {
 }
 
 
-.smart-control-bar {
-  display: flex;
-  align-items: center;
+.form-wrapper {
+  width: 100%;
   background: #2a2a2a;
   border-radius: 12px;
-  padding: 8px 16px;
+  padding: 20px;
   border: 1px solid #3a3a3a;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  flex-wrap: nowrap; /* Force single line */
-  overflow-x: auto; /* Allow scroll if screen is too small, though max-width should prevent */
-}
-
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap; /* Prevent wrapping */
-  flex-shrink: 0;
-}
-
-.control-label {
-  font-size: 13px;
-  color: #888;
-  font-weight: 500;
-  margin-right: 4px;
-  white-space: nowrap;
-}
-
-.scheme-select {
-  width: 140px;
-}
-
-.bar-input {
-  width: 70px !important;
 }
 
 .range-separator {
   color: #666;
+  font-size: 14px;
 }
 
 .unit {
-  font-size: 12px;
+  font-size: 13px;
   color: #666;
-  margin-left: 2px;
 }
 
-.bar-divider {
-  width: 1px;
-  height: 20px;
-  background: #444;
-  margin: 0 16px; /* Reduce margin */
-  flex-shrink: 0;
+.form-error-hint {
+  font-size: 12px;
+  color: #ff6b6b;
+  margin-top: 4px;
 }
 
-.bar-start-btn {
-  margin-left: auto; /* Push to right */
-  padding: 0 20px;
-  font-weight: bold;
-  height: 32px; /* Slightly smaller */
-  border-radius: 16px;
-  white-space: nowrap;
-  flex-shrink: 0;
+.custom-edit-area {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.custom-textarea {
+  width: 100%;
+}
+
+.custom-textarea :deep(textarea) {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  resize: vertical;
+}
+
+/* Ensure all inputs can receive paste */
+:deep(input),
+:deep(textarea) {
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 /* Modal Grid Styles */

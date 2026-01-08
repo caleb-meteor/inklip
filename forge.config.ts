@@ -16,6 +16,13 @@ const config: ForgeConfig = {
         `${process.platform}-${process.env.TARGET_ARCH || process.arch}`
       )
     ],
+    ...(process.platform === 'darwin' ? {
+      // macOS 本地化设置，确保系统对话框显示中文
+      extendInfo: {
+        CFBundleLocalizations: ['zh_CN', 'zh-Hans'],
+        CFBundleDevelopmentRegion: 'zh_CN'
+      }
+    } : {}),
     ignore: [
       /^\/src/,
       /^\/resources\/(?!([a-z0-9]+-[a-z0-9]+|icon\.icns|icon\.png))/, // Allow platform-arch folders and icons

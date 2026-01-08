@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { NButton, NSpace, NH1, NText, NCard, NGrid, NGi, NIcon } from 'naive-ui'
 import { useRouter } from 'vue-router'
-import { Videocam, Cut } from '@vicons/ionicons5'
+import { Videocam, Cut, Settings } from '@vicons/ionicons5'
 import { logout } from '../router'
 
 const router = useRouter()
@@ -20,7 +20,15 @@ const navigateTo = (path: string) => {
   <div class="home-container">
     <div class="header">
       <n-h1> <n-text type="primary">影氪</n-text> 工作台 </n-h1>
-      <n-button secondary type="error" size="small" @click="handleLogout"> 退出登录 </n-button>
+      <n-space>
+        <n-button secondary size="small" @click="navigateTo('/settings')">
+          <template #icon>
+            <n-icon><Settings /></n-icon>
+          </template>
+          设置
+        </n-button>
+        <n-button secondary type="error" size="small" @click="handleLogout"> 退出登录 </n-button>
+      </n-space>
     </div>
 
     <div class="content">

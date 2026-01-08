@@ -1,8 +1,7 @@
 import { app, type BrowserWindow } from 'electron'
 import { spawn, type ChildProcess } from 'child_process'
 import fs from 'fs'
-import path from 'path'
-import { join } from 'path'
+import path, { join } from 'path'
 
 export class BackendService {
   private static instance: BackendService
@@ -81,21 +80,31 @@ export class BackendService {
       return
     }
 
-    const userDataPath = app.getPath('userData')
+    // APP_DATA_PATH 使用默认的 userData（用于 models、db 等）
+    const appDataPath = app.getPath('userData')
+    // VIDEO_DATA_PATH 默认等于 APP_DATA_PATH，Python 后端会从配置文件读取实际值
+    const videoDataPath = appDataPath
+    
     // For both Windows and Mac (flat binary), the bin path is the directory containing the executable
     const binPath = path.dirname(path.dirname(backendPath))
 
-    console.log('[Backend Service] Backend data path:', userDataPath)
+    console.log('[Backend Service] Backend app data path:', appDataPath)
+    console.log('[Backend Service] Backend video data path:', videoDataPath)
     console.log('[Backend Service] Backend bin path:', binPath)
 
-    const args = ['--app_data_path', userDataPath, '--bin_path', binPath]
+    const args = ['--app_data_path', appDataPath, '--bin_path', binPath]
+    
+    // 始终设置 VIDEO_DATA_PATH 环境变量（可能与 APP_DATA_PATH 相等）
+    const env = { ...process.env }
+    env.VIDEO_DATA_PATH = videoDataPath
     const commandStr = `cd "${binPath}" && "${backendPath}" ${args.map((a) => `"${a}"`).join(' ')}`
     console.log('[Backend Service] Backend command to run manually:')
     console.log(commandStr)
 
     this.backendProcess = spawn(backendPath, args, {
       cwd: binPath,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: env
     })
 
     this.backendProcess.stdout?.on('data', (data) => {
@@ -139,6 +148,17 @@ export class BackendService {
       this.isExplicitKill = true
       this.backendProcess.kill()
       this.backendProcess = null
+      this.backendPort = null
+      this.startupError = null
     }
+  }
+
+  public restart(mainWindow: BrowserWindow | null): void {
+    console.log('[Backend Service] Restarting backend...')
+    this.kill()
+    // Wait a bit for the process to fully terminate
+    setTimeout(() => {
+      this.start(mainWindow)
+    }, 500)
   }
 }

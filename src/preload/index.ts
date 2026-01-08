@@ -19,7 +19,13 @@ const api = {
   onDownloadProgress: (callback) =>
     electronAPI.ipcRenderer.on('download-progress', (_event, progress) => callback(progress)),
   onBackendStartFailed: (callback: (error: { code: string; message: string }) => void) =>
-    electronAPI.ipcRenderer.on('backend-start-failed', (_event, error) => callback(error))
+    electronAPI.ipcRenderer.on('backend-start-failed', (_event, error) => callback(error)),
+  getVideoDataDirectory: () => electronAPI.ipcRenderer.invoke('get-video-data-directory'),
+  selectVideoDataDirectory: () => electronAPI.ipcRenderer.invoke('select-video-data-directory'),
+  getAppConfig: () => electronAPI.ipcRenderer.invoke('get-app-config'),
+  restartBackend: () => electronAPI.ipcRenderer.invoke('restart-backend'),
+  checkBackendHealth: () => electronAPI.ipcRenderer.invoke('check-backend-health'),
+  selectVideoFile: () => electronAPI.ipcRenderer.invoke('select-video-file')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

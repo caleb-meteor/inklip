@@ -14,6 +14,10 @@ const emit = defineEmits<{
   rename: []
   group: []
   removeGroup: []
+  anchor: []
+  removeAnchor: []
+  product: []
+  removeProduct: []
   delete: []
 }>()
 </script>
@@ -36,7 +40,7 @@ const emit = defineEmits<{
         <span>重命名</span>
       </div>
       <div 
-        v-if="props.file.group_id" 
+        v-if="props.file.categories?.find(c => c.type === 'video_group')" 
         class="context-menu-item" 
         @click="emit('removeGroup')"
       >
@@ -49,7 +53,39 @@ const emit = defineEmits<{
         @click="emit('group')"
       >
         <n-icon><FolderOutline /></n-icon>
-        <span>分组</span>
+        <span>设置分组</span>
+      </div>
+      <div 
+        v-if="props.file.categories?.find(c => c.type === 'video_anchor')" 
+        class="context-menu-item" 
+        @click="emit('removeAnchor')"
+      >
+        <n-icon><FolderOutline /></n-icon>
+        <span>移除主播</span>
+      </div>
+      <div 
+        v-else 
+        class="context-menu-item" 
+        @click="emit('anchor')"
+      >
+        <n-icon><FolderOutline /></n-icon>
+        <span>设置主播</span>
+      </div>
+      <div 
+        v-if="props.file.categories?.find(c => c.type === 'video_product')" 
+        class="context-menu-item" 
+        @click="emit('removeProduct')"
+      >
+        <n-icon><FolderOutline /></n-icon>
+        <span>移除产品</span>
+      </div>
+      <div 
+        v-else 
+        class="context-menu-item" 
+        @click="emit('product')"
+      >
+        <n-icon><FolderOutline /></n-icon>
+        <span>设置产品</span>
       </div>
       <div class="context-menu-divider"></div>
       <div class="context-menu-item context-menu-item-danger" @click="emit('delete')">

@@ -1,7 +1,6 @@
-import { app, shell, BrowserWindow, protocol, nativeImage } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, protocol, nativeImage, Menu } from 'electron'
 import fs from 'fs'
-import path from 'path'
+import path, { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { BackendService } from './services/backend'
@@ -39,6 +38,81 @@ protocol.registerSchemesAsPrivileged([
     }
   }
 ])
+
+function createMenu(): void {
+  const isMac = process.platform === 'darwin'
+  
+  const template: Electron.MenuItemConstructorOptions[] = [
+    // macOS 应用菜单
+    ...(isMac
+      ? [
+          {
+            label: '影氪',
+            submenu: [
+              { role: 'about' as const, label: '影氪' },
+              { type: 'separator' as const },
+              { role: 'quit' as const, label: '退出影氪' }
+            ]
+          }
+        ]
+      : []),
+    // 编辑菜单 - 包含复制、粘贴等功能
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' as const, label: '撤销' },
+        { role: 'redo' as const, label: '重做' },
+        { type: 'separator' as const },
+        { role: 'cut' as const, label: '剪切' },
+        { role: 'copy' as const, label: '复制' },
+        { role: 'paste' as const, label: '粘贴' },
+        { role: 'pasteAndMatchStyle' as const, label: '粘贴并匹配样式' },
+        { role: 'delete' as const, label: '删除' },
+        { role: 'selectAll' as const, label: '全选' }
+      ]
+    },
+    // 文件菜单 (Windows/Linux)
+    ...(!isMac
+      ? [
+          {
+            label: '文件',
+            submenu: [
+              { role: 'quit' as const, label: '退出' }
+            ]
+          }
+        ]
+      : []),
+    // 视图菜单 - 仅在 debug 模式下显示
+    ...(is.dev
+      ? [
+          {
+            label: '视图',
+            submenu: [
+              { role: 'toggleDevTools' as const, label: '切换开发者工具' },
+            ]
+          }
+        ]
+      : []),
+    
+    // 帮助菜单
+    {
+      role: 'help' as const,
+      label: '帮助',
+      submenu: [
+        {
+          label: '关于影氪',
+          click: async () => {
+            const { shell } = await import('electron')
+            await shell.openExternal('https://inklip.caleb.center')
+          }
+        }
+      ]
+    }
+  ]
+
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -93,17 +167,15 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 // 设置应用语言为中文，并限制只使用中文语言包
-app.commandLine.appendSwitch('lang', 'zh-CN')
-// 禁用其他语言包，只保留中文
-app.commandLine.appendSwitch('disable-features', 'TranslateUI')
-// 设置应用名称为 inklip，确保 app_data 目录使用英文名称（Windows 和 Mac）
-// 注意：这必须在 app.whenReady() 之前调用，且必须在首次调用 app.getPath() 之前
 app.setName('inklip')
 app.whenReady().then(() => {
   // Set app icon for macOS dock
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(icon))
   }
+
+  // 创建中文菜单
+  createMenu()
 
   createWindow()
 
@@ -203,7 +275,7 @@ function normalizeFilePath(pathPart: string): string {
 /**
  * Try alternative path formats if file not found (Windows only)
  */
-function tryAlternativePaths(filePath: string, pathPart: string): string | null {
+function tryAlternativePaths(filePath: string): string | null {
   if (process.platform !== 'win32') return null
   
   // Try uppercase drive letter
@@ -300,7 +372,7 @@ async function handleMediaProtocol(request: Request): Promise<Response> {
   // Check if file exists, try alternatives if not
   if (!fs.existsSync(filePath)) {
     console.error('[Main] File not found:', filePath)
-    const altPath = tryAlternativePaths(filePath, pathPart)
+    const altPath = tryAlternativePaths(filePath)
     if (altPath) {
       filePath = altPath
     } else {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NIcon, NEllipsis } from 'naive-ui'
-import { FolderOutline } from '@vicons/ionicons5'
+import { FolderOutline, PersonOutline, CubeOutline } from '@vicons/ionicons5'
 import VideoPreviewPlayer from './VideoPreviewPlayer.vue'
 import VideoStatusOverlay from './VideoStatusOverlay.vue'
 import type { FileItem } from '../types/video'
@@ -12,6 +12,8 @@ interface Props {
   file: FileItem
   selected?: boolean
   group?: DictItem | null
+  anchor?: DictItem | null
+  product?: DictItem | null
   aspectRatio: string
   videoStatus: 'processing' | 'completed' | 'failed' | undefined
   videoProgress?: VideoParseProgress
@@ -44,6 +46,7 @@ const emit = defineEmits<{
           :duration="props.file.duration"
           :aspect-ratio="props.aspectRatio"
           :disabled="props.videoStatus !== 'completed'"
+          :video-id="props.file.id"
           @dblclick="emit('open', props.file)"
         />
         <VideoStatusOverlay
@@ -51,9 +54,19 @@ const emit = defineEmits<{
           :parse-progress="props.videoProgress"
           :show-path-missing="!props.file.path"
         />
-        <div v-if="props.group" class="video-group-badge">
-          <n-icon size="12"><FolderOutline /></n-icon>
-          <span>{{ props.group.name }}</span>
+        <div class="video-badges">
+          <div v-if="props.group" class="video-badge video-badge-group">
+            <n-icon size="12"><FolderOutline /></n-icon>
+            <span>{{ props.group.name }}</span>
+          </div>
+          <div v-if="props.anchor" class="video-badge video-badge-anchor">
+            <n-icon size="12"><PersonOutline /></n-icon>
+            <span>{{ props.anchor.name }}</span>
+          </div>
+          <div v-if="props.product" class="video-badge video-badge-product">
+            <n-icon size="12"><CubeOutline /></n-icon>
+            <span>{{ props.product.name }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -101,10 +114,19 @@ const emit = defineEmits<{
   background: #000;
 }
 
-.video-group-badge {
+.video-badges {
   position: absolute;
   top: 6px;
   right: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.video-badge {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -112,14 +134,34 @@ const emit = defineEmits<{
   background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
   border-radius: 4px;
-  color: #63e2b7;
   font-size: 11px;
-  z-index: 10;
-  pointer-events: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.video-group-badge .n-icon {
+.video-badge-group {
+  color: #63e2b7;
+}
+
+.video-badge-anchor {
+  color: #5dade2;
+}
+
+.video-badge-product {
+  color: #f39c12;
+}
+
+.video-badge .n-icon {
   font-size: 12px;
+  flex-shrink: 0;
+}
+
+.video-badge span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-meta {

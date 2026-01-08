@@ -3,6 +3,7 @@ import Splash from '../views/Splash.vue'
 import Login from '../views/Login.vue'
 import Home from '../views/Home.vue'
 import VideoManager from '../views/VideoManager.vue'
+import Settings from '../views/Settings.vue'
 import { useWebsocketStore } from '../stores/websocket'
 
 const routes = [
@@ -32,6 +33,12 @@ const routes = [
     path: '/smart-editor',
     name: 'SmartEditing',
     component: () => import('../views/SmartEditing.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: Settings,
     meta: { requiresAuth: true }
   }
 ]

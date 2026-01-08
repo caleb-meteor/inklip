@@ -12,6 +12,8 @@ const props = defineProps<{
   duration?: number
   aspectRatio?: string
   disabled?: boolean
+  videoId?: number // Optional video ID for subtitle matching
+  subtitleData?: any // Optional subtitle data (array) passed directly
 }>()
 
 const emit = defineEmits<{
@@ -159,6 +161,8 @@ onBeforeUnmount(() => {
       :visible="showFullscreen"
       :path="path || ''"
       :name="'视频播放'"
+      :video-id="videoId"
+      :subtitle-data="subtitleData"
       @close="showFullscreen = false"
     />
   </div>

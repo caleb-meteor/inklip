@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NConfigProvider, NMessageProvider, darkTheme, type GlobalThemeOverrides } from 'naive-ui'
+import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, type GlobalThemeOverrides } from 'naive-ui'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { onMounted } from 'vue'
 import { useWebsocketStore } from './stores/websocket'
@@ -63,10 +63,12 @@ onMounted(async () => {
 <template>
   <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides">
     <n-message-provider>
-      <div class="app-wrapper">
-        <RouterView />
-        <Footer v-if="route.name !== 'Splash' && route.name !== 'Login'" />
-      </div>
+      <n-dialog-provider>
+        <div class="app-wrapper">
+          <RouterView />
+          <Footer v-if="route.name !== 'Splash' && route.name !== 'Login'" />
+        </div>
+      </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
 </template>

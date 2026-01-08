@@ -25,6 +25,24 @@ declare global {
         }) => void
       ) => void
       onBackendStartFailed: (callback: (error: { code: string; message: string }) => void) => void
+      getVideoDataDirectory: () => Promise<string>
+      setVideoDataDirectory: (directory: string) => Promise<{ success: boolean; error?: string }>
+      selectVideoDataDirectory: () => Promise<{
+        success: boolean
+        canceled?: boolean
+        error?: string
+        directory?: string
+        oldDirectory?: string
+      }>
+      getAppConfig: () => Promise<{ videoDataDirectory?: string }>
+      restartBackend: () => Promise<{ success: boolean }>
+      checkBackendHealth: () => Promise<{ available: boolean; reason?: string }>
+      selectVideoFile: () => Promise<{
+        success: boolean
+        canceled?: boolean
+        error?: string
+        filePath?: string
+      }>
     }
   }
 }

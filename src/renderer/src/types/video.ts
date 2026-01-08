@@ -13,6 +13,7 @@ export interface FileItem {
   status?: number
   parse_percentage?: number
   group_id?: number
+  categories?: Array<{ id: number; name: string; type: string }>
   created_at?: string
   updated_at?: string
   imageError?: boolean

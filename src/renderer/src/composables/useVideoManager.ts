@@ -39,6 +39,7 @@ export function useVideoManager() {
         status: item.status,
         parse_percentage: item.parse_percentage,
         group_id: item.group_id,
+        categories: item.categories || [],
         created_at: item.created_at,
         updated_at: item.updated_at
       }))
@@ -49,13 +50,13 @@ export function useVideoManager() {
     }
   }
 
-  const uploadFile = async (path: string): Promise<void> => {
+  const uploadFile = async (path: string, categoryIds?: number[]): Promise<void> => {
     if (isUploading.value) return
 
     const messageReactive = message.loading('视频上传分析中...', { duration: 0 })
     try {
       isUploading.value = true
-      const res = (await uploadVideoApi(path)) as VideoUploadResponse
+      const res = (await uploadVideoApi(path, categoryIds)) as VideoUploadResponse
 
       allFiles.value.push({
         id: res.id,

@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { getDictsByTypeApi, createDictApi, deleteDictApi, updateDictApi, type DictItem } from '../api/dict'
-import { setVideoGroupApi } from '../api/video'
+import { addVideoCategoryApi, removeVideoCategoryApi } from '../api/video'
 
 export function useVideoGroups() {
   const message = useMessage()
@@ -53,9 +53,17 @@ export function useVideoGroups() {
     }
   }
 
-  const updateVideoGroup = async (videoId: number, groupId: number | null): Promise<void> => {
+  const updateVideoGroup = async (videoId: number, groupId: number | null, currentGroupId?: number | null): Promise<void> => {
     try {
-      await setVideoGroupApi(videoId, groupId)
+      // 如果已有分组，先删除
+      if (currentGroupId !== null && currentGroupId !== undefined) {
+        await removeVideoCategoryApi(videoId, currentGroupId)
+      }
+      
+      // 如果设置了新分组，添加
+      if (groupId !== null) {
+        await addVideoCategoryApi(videoId, groupId)
+      }
     } catch (error) {
       console.error('设置分组失败', error)
       message.error('设置分组失败，请重试')
@@ -63,11 +71,15 @@ export function useVideoGroups() {
     }
   }
 
-  const getFileGroup = (file: { group_id?: number }): DictItem | null => {
-    if (!file.group_id) {
+  const getFileGroup = (file: { categories?: Array<{ id: number; name: string; type: string }> }): DictItem | null => {
+    if (!file.categories) {
       return null
     }
-    return groups.value.find(group => group.id === file.group_id) || null
+    const groupCategory = file.categories.find(cat => cat.type === 'video_group')
+    if (!groupCategory) {
+      return null
+    }
+    return groups.value.find(group => group.id === groupCategory.id) || null
   }
 
   const currentGroup = computed(() => {

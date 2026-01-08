@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { NEllipsis, NButton } from 'naive-ui'
+import { NEllipsis, NButton, NIcon } from 'naive-ui'
+import { TrashOutline } from '@vicons/ionicons5'
 import VideoPreviewPlayer from './VideoPreviewPlayer.vue'
 import VideoStatusOverlay from './VideoStatusOverlay.vue'
 
@@ -7,7 +8,7 @@ interface HistoryItem {
   id: number
   name: string
   status: 'processing' | 'completed' | 'failed'
-  subtitle?: string
+  subtitle?: string | any // Can be array or string
   path?: string
   cover?: string
   duration?: number
@@ -26,6 +27,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'play', item: HistoryItem): void
   (e: 'export', item: HistoryItem): void
+  (e: 'delete', item: HistoryItem): void
 }>()
 
 const getStatusText = (status: string): string => {
@@ -58,6 +60,7 @@ const handleTogglePlay = (): void => {
         :duration="item.duration"
         aspect-ratio="9/16"
         :disabled="item.status !== 'completed'"
+        :subtitle-data="item.subtitle"
         @dblclick="handleTogglePlay"
       />
       <VideoStatusOverlay
@@ -87,18 +90,47 @@ const handleTogglePlay = (): void => {
         </div>
       </div>
       <div class="v-item-actions">
-        <n-button
-          v-if="item.status === 'completed'"
-          block
-          secondary
-          size="medium"
-          @click.stop="emit('export', item)"
-        >
-          另存为
-        </n-button>
-        <n-button v-if="item.status === 'processing'" block disabled size="medium">
-          待处理...
-        </n-button>
+        <div v-if="item.status === 'processing'" class="action-row">
+          <n-button
+            secondary
+            disabled
+            size="medium"
+            style="width: 100%"
+          >
+            待处理...
+          </n-button>
+        </div>
+        <div v-else class="action-row">
+          <n-button
+            v-if="item.status === 'completed'"
+            secondary
+            size="medium"
+            style="flex: 1"
+            @click.stop="emit('export', item)"
+          >
+            另存为
+          </n-button>
+          <n-button
+            v-if="item.status === 'failed'"
+            secondary
+            disabled
+            size="medium"
+            style="flex: 1"
+          >
+            生成失败
+          </n-button>
+          <n-button
+            type="error"
+            size="medium"
+            quaternary
+            @click.stop="emit('delete', item)"
+            style="min-width: 40px"
+          >
+            <template #icon>
+              <n-icon><TrashOutline /></n-icon>
+            </template>
+          </n-button>
+        </div>
       </div>
     </div>
   </div>
@@ -200,5 +232,12 @@ const handleTogglePlay = (): void => {
   flex-direction: column;
   gap: 6px;
   margin-top: 2px;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
 }
 </style>

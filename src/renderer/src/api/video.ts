@@ -10,7 +10,7 @@ export interface VideoItem {
   duration: number
   width?: number
   height?: number
-  subtitle: string
+  subtitle: string | any // Backend may return parsed JSON object or string
   audio: string
   silent: string
   status: number
@@ -18,6 +18,7 @@ export interface VideoItem {
   sha256: string
   parse_percentage?: number
   group_id?: number
+  categories?: Array<{ id: number; name: string; type: string }>
   created_at: string
   updated_at: string
 }
@@ -51,14 +52,16 @@ export function getVideosApi(): Promise<VideoItem[]> {
 /**
  * Upload a video file by its local path
  * @param path The absolute path of the video file
+ * @param categoryIds Optional list of category IDs to assign to the video
  * @returns Promise with upload response
  */
-export function uploadVideoApi(path: string): Promise<VideoUploadResponse> {
+export function uploadVideoApi(path: string, categoryIds?: number[]): Promise<VideoUploadResponse> {
   return request({
     url: '/api/video/upload',
     method: 'post',
     data: {
-      video_path: path
+      video_path: path,
+      category_ids: categoryIds
     }
   })
 }
@@ -75,22 +78,28 @@ export interface SmartCutResponse {
  * @param prompt Optional editing ideas or instructions
  * @param minDuration Optional minimum duration of the output video in seconds
  * @param maxDuration Optional maximum duration of the output video in seconds
+ * @param productName Optional product name
+ * @param promptBuiltId Optional built-in prompt ID (0 for custom prompt)
  * @returns Promise with smart cut task response
  */
 export function smartCutApi(
   videoIds: number[],
   prompt?: string,
   minDuration?: number,
-  maxDuration?: number
+  maxDuration?: number,
+  productName?: string,
+  promptBuiltId?: number
 ): Promise<SmartCutResponse> {
   return request({
     url: '/api/smart-cut',
     method: 'post',
     data: {
       video_ids: videoIds,
-      prompt_text: prompt || '',
+      prompt_text: prompt,
+      prompt_built_id: promptBuiltId,
       min_duration: minDuration,
-      max_duration: maxDuration
+      max_duration: maxDuration,
+      product_name: productName
     },
     timeout: 20 * 60 * 1000 // 20 minutes in milliseconds
   })
@@ -99,7 +108,7 @@ export interface SmartCutItem {
   id: number
   user_id: number
   name: string
-  subtitle: string
+  subtitle: string | any // Can be array or string
   path: string
   size?: number
   cover?: string
@@ -131,6 +140,21 @@ export function getSmartCutsApi(page: number, pageSize: number): Promise<SmartCu
     params: {
       page,
       page_size: pageSize
+    }
+  })
+}
+
+/**
+ * Delete a smart cut history item
+ * @param id Smart cut history item ID
+ * @returns Promise with delete response
+ */
+export function deleteSmartCutApi(id: number): Promise<void> {
+  return request({
+    url: '/api/smart-cut',
+    method: 'delete',
+    data: {
+      id
     }
   })
 }
@@ -189,18 +213,35 @@ export function deleteVideoApi(id: number): Promise<void> {
 }
 
 /**
- * Set video group
+ * Add video category
  * @param id Video ID
- * @param groupId Group ID (null to remove from group)
+ * @param categoryId Category ID
  * @returns Promise with updated video response
  */
-export function setVideoGroupApi(id: number, groupId: number | null): Promise<VideoItem> {
+export function addVideoCategoryApi(id: number, categoryId: number): Promise<VideoItem> {
   return request({
-    url: '/api/video/group',
-    method: 'put',
+    url: '/api/video/category',
+    method: 'post',
     data: {
       id,
-      group_id: groupId
+      category_id: categoryId
+    }
+  })
+}
+
+/**
+ * Remove video category
+ * @param id Video ID
+ * @param categoryId Category ID
+ * @returns Promise with updated video response
+ */
+export function removeVideoCategoryApi(id: number, categoryId: number): Promise<VideoItem> {
+  return request({
+    url: '/api/video/category',
+    method: 'delete',
+    data: {
+      id,
+      category_id: categoryId
     }
   })
 }

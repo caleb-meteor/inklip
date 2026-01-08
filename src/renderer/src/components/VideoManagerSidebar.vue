@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { computed, h, ref, watch } from 'vue'
 import { NTree, NIcon, NDivider } from 'naive-ui'
-import { FilmOutline } from '@vicons/ionicons5'
+import { FilmOutline, ChevronDownOutline, ChevronForwardOutline } from '@vicons/ionicons5'
 import type { DictItem } from '../api/dict'
 import type { TreeOption } from 'naive-ui'
 
 interface Props {
   groups: DictItem[]
+  anchors: DictItem[]
+  products: DictItem[]
   activeKey: string | null
+  activeGroupId?: number | null
+  activeAnchorId?: number | null
+  activeProductId?: number | null
 }
 
 const props = defineProps<Props>()
@@ -15,9 +20,16 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   menuSelect: [key: string]
   groupContextMenu: [event: MouseEvent, groupId: number]
+  anchorContextMenu: [event: MouseEvent, anchorId: number]
+  productContextMenu: [event: MouseEvent, productId: number]
 }>()
 
 const expandedKeys = ref<string[]>([])
+
+// 折叠状态
+const isGroupsExpanded = ref(true)
+const isAnchorsExpanded = ref(true)
+const isProductsExpanded = ref(true)
 
 // 分组树形数据
 const groupsTreeData = computed<TreeOption[]>(() => {
@@ -29,10 +41,46 @@ const groupsTreeData = computed<TreeOption[]>(() => {
   }))
 })
 
+// 主播树形数据
+const anchorsTreeData = computed<TreeOption[]>(() => {
+  return props.anchors.map(anchor => ({
+    label: anchor.name,
+    key: `anchor-${anchor.id}`,
+    anchorId: anchor.id,
+    isLeaf: true
+  }))
+})
+
+// 产品树形数据
+const productsTreeData = computed<TreeOption[]>(() => {
+  return props.products.map(product => ({
+    label: product.name,
+    key: `product-${product.id}`,
+    productId: product.id,
+    isLeaf: true
+  }))
+})
+
 // 分组选中keys
 const groupsSelectedKeys = computed(() => {
-  if (props.activeKey && props.activeKey.startsWith('group-')) {
-    return [props.activeKey]
+  if (props.activeGroupId !== null && props.activeGroupId !== undefined) {
+    return [`group-${props.activeGroupId}`]
+  }
+  return []
+})
+
+// 主播选中keys
+const anchorsSelectedKeys = computed(() => {
+  if (props.activeAnchorId !== null && props.activeAnchorId !== undefined) {
+    return [`anchor-${props.activeAnchorId}`]
+  }
+  return []
+})
+
+// 产品选中keys
+const productsSelectedKeys = computed(() => {
+  if (props.activeProductId !== null && props.activeProductId !== undefined) {
+    return [`product-${props.activeProductId}`]
   }
   return []
 })
@@ -48,11 +96,24 @@ const handleGroupsSelect = (keys: Array<string | number>) => {
   }
 }
 
+const handleAnchorsSelect = (keys: Array<string | number>) => {
+  if (keys.length > 0) {
+    const key = String(keys[0])
+    emit('menuSelect', key)
+  }
+}
+
+const handleProductsSelect = (keys: Array<string | number>) => {
+  if (keys.length > 0) {
+    const key = String(keys[0])
+    emit('menuSelect', key)
+  }
+}
+
 // 使用 node-props 处理右键菜单
-function nodeProps({ option }: { option: TreeOption }) {
+function groupNodeProps({ option }: { option: TreeOption }) {
   return {
     onContextmenu(e: MouseEvent): void {
-      // 检查是否是分组节点（key 以 group- 开头）
       const key = String(option.key || '')
       if (key.startsWith('group-')) {
         e.preventDefault()
@@ -64,6 +125,40 @@ function nodeProps({ option }: { option: TreeOption }) {
       }
     },
     class: 'group-node'
+  }
+}
+
+function anchorNodeProps({ option }: { option: TreeOption }) {
+  return {
+    onContextmenu(e: MouseEvent): void {
+      const key = String(option.key || '')
+      if (key.startsWith('anchor-')) {
+        e.preventDefault()
+        e.stopPropagation()
+        const anchorId = parseInt(key.replace('anchor-', ''))
+        if (!isNaN(anchorId)) {
+          emit('anchorContextMenu', e, anchorId)
+        }
+      }
+    },
+    class: 'anchor-node'
+  }
+}
+
+function productNodeProps({ option }: { option: TreeOption }) {
+  return {
+    onContextmenu(e: MouseEvent): void {
+      const key = String(option.key || '')
+      if (key.startsWith('product-')) {
+        e.preventDefault()
+        e.stopPropagation()
+        const productId = parseInt(key.replace('product-', ''))
+        if (!isNaN(productId)) {
+          emit('productContextMenu', e, productId)
+        }
+      }
+    },
+    class: 'product-node'
   }
 }
 </script>
@@ -80,22 +175,86 @@ function nodeProps({ option }: { option: TreeOption }) {
           <span class="item-label">全部视频</span>
         </div>
         
-        <!-- 分割线 -->
-        <n-divider dashed style="margin: 10px 0;font-size: 12px;"> 分组 </n-divider>
+        <!-- 分组标题（可折叠） -->
+        <div class="section-header" @click="isGroupsExpanded = !isGroupsExpanded">
+          <n-icon class="collapse-icon" :class="{ 'is-expanded': isGroupsExpanded }">
+            <ChevronDownOutline v-if="isGroupsExpanded" />
+            <ChevronForwardOutline v-else />
+          </n-icon>
+          <n-divider dashed style="margin: 10px 0;font-size: 12px; flex: 1;">
+            <span class="section-title section-title-group">分组</span>
+          </n-divider>
+        </div>
         <!-- 分组列表 -->
-        <n-tree
-          v-if="groups.length > 0"
-          :data="groupsTreeData"
-          :selected-keys="groupsSelectedKeys"
-          :expanded-keys="expandedKeys"
-          :default-expand-all="true"
-          selectable
-          block-line
-          :node-props="nodeProps"
-          @update:selected-keys="handleGroupsSelect"
-          @update:expanded-keys="(keys) => expandedKeys = keys as string[]"
-        >
-        </n-tree>
+        <div v-show="isGroupsExpanded">
+          <n-tree
+            v-if="groups.length > 0"
+            :data="groupsTreeData"
+            :selected-keys="groupsSelectedKeys"
+            :expanded-keys="expandedKeys"
+            :default-expand-all="true"
+            selectable
+            block-line
+            :node-props="groupNodeProps"
+            @update:selected-keys="handleGroupsSelect"
+            @update:expanded-keys="(keys) => expandedKeys = keys as string[]"
+          >
+          </n-tree>
+        </div>
+
+        <!-- 主播标题（可折叠） -->
+        <div class="section-header" @click="isAnchorsExpanded = !isAnchorsExpanded">
+          <n-icon class="collapse-icon" :class="{ 'is-expanded': isAnchorsExpanded }">
+            <ChevronDownOutline v-if="isAnchorsExpanded" />
+            <ChevronForwardOutline v-else />
+          </n-icon>
+          <n-divider dashed style="margin: 10px 0;font-size: 12px; flex: 1;">
+            <span class="section-title section-title-anchor">主播</span>
+          </n-divider>
+        </div>
+        <!-- 主播列表 -->
+        <div v-show="isAnchorsExpanded">
+          <n-tree
+            v-if="anchors.length > 0"
+            :data="anchorsTreeData"
+            :selected-keys="anchorsSelectedKeys"
+            :expanded-keys="expandedKeys"
+            :default-expand-all="true"
+            selectable
+            block-line
+            :node-props="anchorNodeProps"
+            @update:selected-keys="handleAnchorsSelect"
+            @update:expanded-keys="(keys) => expandedKeys = keys as string[]"
+          >
+          </n-tree>
+        </div>
+
+        <!-- 产品标题（可折叠） -->
+        <div class="section-header" @click="isProductsExpanded = !isProductsExpanded">
+          <n-icon class="collapse-icon" :class="{ 'is-expanded': isProductsExpanded }">
+            <ChevronDownOutline v-if="isProductsExpanded" />
+            <ChevronForwardOutline v-else />
+          </n-icon>
+          <n-divider dashed style="margin: 10px 0;font-size: 12px; flex: 1;">
+            <span class="section-title section-title-product">产品</span>
+          </n-divider>
+        </div>
+        <!-- 产品列表 -->
+        <div v-show="isProductsExpanded">
+          <n-tree
+            v-if="products.length > 0"
+            :data="productsTreeData"
+            :selected-keys="productsSelectedKeys"
+            :expanded-keys="expandedKeys"
+            :default-expand-all="true"
+            selectable
+            block-line
+            :node-props="productNodeProps"
+            @update:selected-keys="handleProductsSelect"
+            @update:expanded-keys="(keys) => expandedKeys = keys as string[]"
+          >
+          </n-tree>
+        </div>
   </div>
 </template>
 
@@ -173,6 +332,57 @@ function nodeProps({ option }: { option: TreeOption }) {
 
 :deep(.n-tree.n-tree--block-line .n-tree-node:not(.n-tree-node--disabled).n-tree-node--selected .n-tree-node-content .n-icon) {
   color: #ffffff !important;
+}
+
+/* 可折叠标题样式 */
+.section-header {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 8px;
+  margin: 8px 0 0 0;
+  transition: background-color 0.15s ease;
+}
+
+.section-header:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.collapse-icon {
+  font-size: 14px;
+  width: 16px;
+  height: 16px;
+  color: #888;
+  transition: transform 0.2s ease, color 0.15s ease;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.collapse-icon.is-expanded {
+  color: #e0e0e0;
+}
+
+.section-header:hover .collapse-icon {
+  color: #e0e0e0;
+}
+
+/* 标题颜色，与封面标签颜色保持一致 */
+.section-title {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.section-title-group {
+  color: #63e2b7;
+}
+
+.section-title-anchor {
+  color: #5dade2;
+}
+
+.section-title-product {
+  color: #f39c12;
 }
 
 </style>
