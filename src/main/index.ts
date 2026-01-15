@@ -167,6 +167,8 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 // 设置应用语言为中文，并限制只使用中文语言包
+// 必须在 app.whenReady() 之前设置，以确保文件选择对话框等系统对话框显示中文
+app.commandLine.appendSwitch('lang', 'zh-CN')
 app.setName('inklip')
 app.whenReady().then(() => {
   // Set app icon for macOS dock

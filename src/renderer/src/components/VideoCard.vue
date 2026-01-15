@@ -15,7 +15,7 @@ interface Props {
   anchor?: DictItem | null
   product?: DictItem | null
   aspectRatio: string
-  videoStatus: 'processing' | 'completed' | 'failed' | undefined
+  videoStatus: 'processing' | 'completed' | 'failed' | 'pending' | undefined
   videoProgress?: VideoParseProgress
 }
 
@@ -53,6 +53,7 @@ const emit = defineEmits<{
           :status="props.videoStatus"
           :parse-progress="props.videoProgress"
           :show-path-missing="!props.file.path"
+          :video-status="props.file.status"
         />
         <div class="video-badges">
           <div v-if="props.group" class="video-badge video-badge-group">

@@ -207,7 +207,7 @@ const confirmSelection = (): void => {
 
 const toggleSelection = (id: number): void => {
   const video = allFiles.value.find((v) => v.id === id)
-  if (video && video.status !== 1) {
+  if (video && video.status !== 4) {
     message.warning('只能选择已处理完成的视频')
     return
   }
@@ -453,7 +453,34 @@ const hasMoreHistory = ref(true)
 const playingVideoId = ref<number | null>(null)
 const isHistoryLoading = ref(false)
 
-const mapStatus = (status: number): 'processing' | 'completed' | 'failed' => {
+// Video 状态映射（用于视频选择）
+const mapVideoStatus = (status: number): 'processing' | 'completed' | 'failed' => {
+  switch (status) {
+    case 0:
+      return 'processing' // PENDING - 待处理
+    case 1:
+      return 'processing' // EXTRACTING_COVER - 提取封面中
+    case 2:
+      return 'processing' // EXTRACTING_AUDIO - 提取音频中
+    case 3:
+      return 'processing' // TRANSCRIBING - 转录音频中
+    case 4:
+      return 'completed' // COMPLETED - 处理完成
+    case 5:
+      return 'failed' // FAILED - 处理失败
+    default:
+      return 'processing'
+  }
+}
+
+// AiGenVideo 状态映射（用于剪辑历史）
+// status = 0: 待处理
+// status = 1: 视频处理成功（最终完成）
+// status = 2: ai 剪辑成功
+// status = 3: ai 剪辑异常（失败）
+// status = 4: 视频处理异常（失败）
+// status = 5: ai 剪辑中
+const mapAiGenVideoStatus = (status: number): 'processing' | 'completed' | 'failed' => {
   switch (status) {
     case 0:
       return 'processing' // 待处理
@@ -462,15 +489,18 @@ const mapStatus = (status: number): 'processing' | 'completed' | 'failed' => {
     case 2:
       return 'processing' // ai 剪辑成功（但还没完成视频处理）
     case 3:
-      return 'failed' // ai 剪辑异常
+      return 'failed' // ai 剪辑异常（失败）
     case 4:
-      return 'failed' // 视频处理异常
+      return 'failed' // 视频处理异常（失败）
     case 5:
       return 'processing' // ai 剪辑中
     default:
       return 'processing'
   }
 }
+
+// 兼容旧代码，默认使用 Video 状态映射
+const mapStatus = mapVideoStatus
 
 const fetchHistory = async (isLoadMore = false): Promise<void> => {
   if (isHistoryLoading.value || (!hasMoreHistory.value && isLoadMore)) return
@@ -491,7 +521,7 @@ const fetchHistory = async (isLoadMore = false): Promise<void> => {
     const newItems: HistoryItem[] = res.list.map((item) => ({
       id: item.id,
       name: item.name || '未命名任务',
-      status: mapStatus(item.status),
+      status: mapAiGenVideoStatus(item.status), // 使用 AiGenVideo 状态映射
       subtitle: item.subtitle,
       path: item.path,
       cover: item.cover,
@@ -873,9 +903,9 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
             class="file-item-modal"
             :class="{
               selected: tempSelectedIds.includes(file.id),
-              disabled: file.status !== 1
+              disabled: file.status !== 4
             }"
-            @click="file.status === 1 && toggleSelection(file.id)"
+            @click="file.status === 4 && toggleSelection(file.id)"
           >
             <div class="checkbox-overlay" :class="{ is_active: tempSelectedIds.includes(file.id) }">
               <n-checkbox
@@ -890,9 +920,9 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
                 :cover="file.cover"
                 :duration="file.duration"
                 :aspect-ratio="getAspectRatio(file)"
-                :disabled="mapStatus(file.status || 0) !== 'completed'"
+                :disabled="mapVideoStatus(file.status || 0) !== 'completed'"
               />
-              <VideoStatusOverlay :status="mapStatus(file.status || 0)" />
+              <VideoStatusOverlay :status="mapVideoStatus(file.status || 0)" />
             </div>
             <n-ellipsis style="max-width: 100%; margin-top: 6px; font-size: 11px">{{
               file.name

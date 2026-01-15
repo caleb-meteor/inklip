@@ -1,22 +1,54 @@
 <script setup lang="ts">
 interface Props {
-  status?: 'processing' | 'completed' | 'failed'
+  status?: 'processing' | 'completed' | 'failed' | 'pending'
   parseProgress?: {
     percentage: number
-    status?: 'parsing' | 'completed' | 'failed'
+    status?: 'parsing' | 'transcribing' | 'completed' | 'failed'
     error?: string
   }
   failedText?: string
   showPathMissing?: boolean
+  videoStatus?: number // 视频状态码：0=PENDING, 1=EXTRACTING_COVER, 2=EXTRACTING_AUDIO, 3=TRANSCRIBING, 4=COMPLETED, 5=FAILED
 }
 
 const props = withDefaults(defineProps<Props>(), {
   failedText: '视频未解析',
   showPathMissing: false
 })
+
+// 根据视频状态码获取状态文本
+const getProcessingText = (): string => {
+  if (props.videoStatus !== undefined) {
+    switch (props.videoStatus) {
+      case 1: // EXTRACTING_COVER
+        return '正在解析封面...'
+      case 2: // EXTRACTING_AUDIO
+        return '提取音频中...'
+      case 3: // TRANSCRIBING
+        // 状态3时，统一显示"解析视频中"
+        return '解析视频中...'
+      default:
+        return '处理中...'
+    }
+  }
+  // 兼容旧逻辑
+  return props.parseProgress?.status === 'parsing' ? '分析视频中...' : '处理中...'
+}
 </script>
 
 <template>
+  <!-- Pending State Overlay -->
+  <div
+    v-if="status === 'pending'"
+    class="status-overlay pending"
+    @click.stop
+    @dblclick.stop
+  >
+    <div class="status-content">
+      <div class="status-label">等待处理...</div>
+    </div>
+  </div>
+
   <!-- Processing State Overlay -->
   <div
     v-if="status === 'processing'"
@@ -26,13 +58,13 @@ const props = withDefaults(defineProps<Props>(), {
   >
     <div class="status-content">
       <div class="status-label">
-        {{ parseProgress?.status === 'parsing' ? '解析中...' : '待处理...' }}
+        {{ getProcessingText() }}
       </div>
-      <div v-if="parseProgress && parseProgress.percentage > 0" class="progress-bar-container">
+      <div v-if="parseProgress && parseProgress.percentage !== undefined && parseProgress.percentage >= 0 && (videoStatus === 3 || (parseProgress.status && ['transcribing', 'parsing'].includes(parseProgress.status)))" class="progress-bar-container">
         <div class="progress-bar">
           <div
             class="progress-fill"
-            :style="{ width: `${parseProgress.percentage}%` }"
+            :style="{ width: `${Math.min(100, Math.max(0, parseProgress.percentage))}%` }"
           ></div>
         </div>
         <div class="progress-text">{{ parseProgress.percentage }}%</div>
@@ -65,6 +97,10 @@ const props = withDefaults(defineProps<Props>(), {
   backdrop-filter: blur(2px);
 }
 
+.status-overlay.pending {
+  background: rgba(0, 0, 0, 0.5);
+}
+
 .status-overlay.processing {
   background: rgba(0, 0, 0, 0.6);
 }
@@ -82,6 +118,12 @@ const props = withDefaults(defineProps<Props>(), {
   letter-spacing: 1px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   border: 1px solid transparent;
+}
+
+.pending .status-label {
+  color: #a0a0a0;
+  background: rgba(160, 160, 160, 0.1);
+  border-color: rgba(160, 160, 160, 0.4);
 }
 
 .processing .status-label {

@@ -57,7 +57,7 @@ export class BackendService {
       return
     }
 
-    const exeName = isWin ? 'inklip_base.exe' : 'inklip_base'
+    const exeName = isWin ? 'inklip-base.exe' : 'inklip-base'
     const platformArch = `${process.platform}-${process.arch}`
     let backendPath = ''
 
@@ -67,7 +67,7 @@ export class BackendService {
       backendPath = join(process.resourcesPath, platformArch)
     }
 
-    backendPath = join(backendPath, 'inklip_base', exeName)
+    backendPath = join(backendPath, 'inklip-base', exeName)
 
     console.log('[Backend Service] Starting backend from:', backendPath)
 
@@ -122,7 +122,7 @@ export class BackendService {
     })
 
     this.backendProcess.stderr?.on('data', (data) => {
-      console.error('[Backend Error]', data.toString())
+      console.error('[Backend Log]', data.toString())
     })
 
     this.backendProcess.on('exit', (code) => {

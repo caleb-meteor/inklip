@@ -17,42 +17,16 @@ jobs:
           - os: windows-latest
             platform: win32
             arch: x64
-            python_platform: win
           - os: macos-latest # ARM64
             platform: darwin
             arch: arm64
-            python_platform: mac
           - os: macos-15-intel # Intel x64 (macos-15-intel 可能不存在)
             platform: darwin
             arch: x64
-            python_platform: mac
 
     steps:
       - name: Checkout main repo
         uses: actions/checkout@v4
-      
-      - name: Checkout Python Backend
-        uses: actions/checkout@v4
-        with:
-          repository: caleb-meteor/inklip-base
-          token: ${{ secrets.GH_PAT }}
-          path: inklip-base
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install Python dependencies
-        run: |
-          cd inklip-base
-          pip install -r requirements.txt
-          pip install pyinstaller
-
-      - name: Build Python Backend with PyInstaller
-        run: |
-          cd inklip-base
-          pyinstaller --onedir --name inklip_base main.py
 
       - name: Download and extract platform resources
         shell: bash
@@ -61,11 +35,6 @@ jobs:
           curl -L https://oss-inklip.caleb.center/resources/${{ matrix.platform }}-${{ matrix.arch }}.zip -o resources.zip
           unzip -o resources.zip -d resources/
           rm resources.zip
-
-      - name: Move Python Backend to Resources
-        shell: bash
-        run: |
-          cp -r inklip-base/dist/inklip_base resources/${{ matrix.platform }}-${{ matrix.arch }}/
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4

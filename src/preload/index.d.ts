@@ -41,7 +41,7 @@ declare global {
         success: boolean
         canceled?: boolean
         error?: string
-        filePath?: string
+        filePaths: string[]
       }>
     }
   }

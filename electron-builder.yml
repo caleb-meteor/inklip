@@ -36,6 +36,7 @@ mac:
       arch:
         - x64
         - arm64
+    icon: resources/icon.icns
   # entitlementsInherit: resources/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -43,6 +44,7 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
     - CFBundleLocalizations: ['zh_CN', 'zh-Hans']
+    - CFBundleDevelopmentRegion: zh_CN
   notarize: false
   extraResources:
     - from: resources/darwin-arm64

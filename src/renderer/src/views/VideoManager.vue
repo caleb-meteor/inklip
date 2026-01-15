@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, watch, onActivated } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent } from 'naive-ui'
 import { useVideoManager } from '../composables/useVideoManager'
 import { useVideoGroups } from '../composables/useVideoGroups'
@@ -21,6 +21,7 @@ import ProductModal from '../components/ProductModal.vue'
 import DeleteModal from '../components/DeleteModal.vue'
 
 const router = useRouter()
+const route = useRoute()
 const wsStore = useWebsocketStore()
 
 // 使用 composables
@@ -30,12 +31,14 @@ const {
   isUploading,
   selectedFileId,
   fetchVideos,
-  uploadFile,
+  uploadFilesBatch,
   renameVideo,
   deleteVideo,
   getAspectRatio,
   getVideoStatus,
-  getVideoProgress
+  getVideoProgress,
+  getStatusText,
+  updateVideoStatus
 } = useVideoManager()
 
 const {
@@ -187,21 +190,124 @@ watch(
   }
 )
 
-// 初始化
-onMounted(() => {
+// 监听 WebSocket 视频状态更新
+watch(
+  () => wsStore.videoParseProgress,
+  (newProgress) => {
+    // 当视频进度更新时，更新本地状态
+    Object.keys(newProgress).forEach((videoIdStr) => {
+      const videoId = Number(videoIdStr)
+      const progress = newProgress[videoId]
+      if (progress) {
+        // 更新视频状态
+        if (progress.status === 'completed') {
+          updateVideoStatus(videoId, 4, 100) // 4 = COMPLETED
+        } else if (progress.status === 'failed') {
+          updateVideoStatus(videoId, 5) // 5 = FAILED
+        } else if (progress.status === 'parsing' || progress.status === 'transcribing') {
+          // 处理中状态，根据当前状态决定更新
+          const file = allFiles.value.find(f => f.id === videoId)
+          if (file) {
+            // 如果当前状态不是处理中状态（1, 2, 3），则更新状态
+            if (file.status !== 1 && file.status !== 2 && file.status !== 3) {
+              // 根据进度状态判断应该设置的状态
+              if (progress.status === 'transcribing') {
+                updateVideoStatus(videoId, 3, progress.percentage) // 3 = TRANSCRIBING
+              } else {
+                // 默认设置为提取封面中（1）
+                updateVideoStatus(videoId, 1, progress.percentage)
+              }
+            } else {
+              // 状态已经是处理中，更新进度百分比和状态（如果需要）
+              if (progress.percentage !== undefined) {
+                file.parse_percentage = progress.percentage
+              }
+              // 如果进度状态是 transcribing 但当前状态不是3，更新状态
+              if (progress.status === 'transcribing' && file.status !== 3) {
+                updateVideoStatus(videoId, 3, progress.percentage)
+              }
+            }
+          }
+        }
+      }
+    })
+  },
+  { deep: true }
+)
+
+// 刷新数据的统一方法
+const refreshAllData = (): void => {
   fetchVideos()
   fetchGroups()
   fetchAnchors()
   fetchProducts()
+  
+  // 检查并重新连接 WebSocket
+  if (!wsStore.connected && localStorage.getItem('token')) {
+    console.log('[VideoManager] WebSocket 未连接，尝试重新连接')
+    wsStore.connect()
+  }
+}
+
+// 处理窗口焦点和可见性变化，恢复时刷新数据
+const handleVisibilityChange = (): void => {
+  if (!document.hidden) {
+    // 窗口变为可见时，刷新数据
+    console.log('[VideoManager] 窗口变为可见，刷新数据')
+    refreshAllData()
+  }
+}
+
+const handleWindowFocus = (): void => {
+  // 窗口获得焦点时，刷新数据
+  console.log('[VideoManager] 窗口获得焦点，刷新数据')
+  refreshAllData()
+}
+
+// 监听路由变化，当切换回此页面时刷新数据
+watch(
+  () => route.name,
+  (newName, oldName) => {
+    // 当路由切换到此页面时刷新数据
+    if (newName === 'VideoManager' && oldName !== newName) {
+      console.log('[VideoManager] 路由切换到此页面，刷新数据')
+      refreshAllData()
+    }
+  }
+)
+
+// 初始化
+onMounted(() => {
+  refreshAllData()
+  
+  // 监听窗口可见性变化
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  // 监听窗口焦点变化
+  window.addEventListener('focus', handleWindowFocus)
+  // 监听点击外部事件
+  document.addEventListener('click', handleClickOutside)
 })
 
-// 文件上传
+// 当组件被激活时（keep-alive 场景）也刷新数据
+onActivated(() => {
+  console.log('[VideoManager] 组件被激活，刷新数据')
+  refreshAllData()
+})
+
+onUnmounted(() => {
+  // 清理事件监听器
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('focus', handleWindowFocus)
+  document.removeEventListener('click', handleClickOutside)
+})
+
+// 文件上传（统一使用批量上传）
 const triggerUpload = async (): Promise<void> => {
   if (isUploading.value) return
   
   try {
     const result = await window.api.selectVideoFile()
-    if (result.success && result.filePath) {
+    if (result.success) {
       // 如果当前选中了分组、主播或产品，上传时自动添加到对应的分类
       const categoryIds: number[] = []
       if (activeGroupId.value !== null) {
@@ -213,7 +319,14 @@ const triggerUpload = async (): Promise<void> => {
       if (activeProductId.value !== null) {
         categoryIds.push(activeProductId.value)
       }
-      await uploadFile(result.filePath, categoryIds.length > 0 ? categoryIds : undefined)
+      
+      // 统一使用批量上传
+      if (result.filePaths && result.filePaths.length > 0) {
+        await uploadFilesBatch(
+          result.filePaths, 
+          categoryIds.length > 0 ? categoryIds : undefined
+        )
+      }
     }
   } catch (error) {
     console.error('File selection failed', error)
@@ -247,13 +360,17 @@ const handleDragOver = (e: DragEvent): void => {
 const handleDrop = async (e: DragEvent): Promise<void> => {
   e.preventDefault()
   if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-    const file = e.dataTransfer.files[0]
-    if (!file.type.startsWith('video/')) {
-      console.warn('Only video files are allowed')
+    // 过滤出视频文件
+    const videoFiles = Array.from(e.dataTransfer.files).filter(file => 
+      file.type.startsWith('video/')
+    )
+    
+    if (videoFiles.length === 0) {
+      console.warn('No video files found')
       return
     }
+    
     try {
-      const filePath = window.api.getPathForFile(file)
       // 如果当前选中了分组、主播或产品，上传时自动添加到对应的分类
       const categoryIds: number[] = []
       if (activeGroupId.value !== null) {
@@ -265,7 +382,12 @@ const handleDrop = async (e: DragEvent): Promise<void> => {
       if (activeProductId.value !== null) {
         categoryIds.push(activeProductId.value)
       }
-      await uploadFile(filePath, categoryIds.length > 0 ? categoryIds : undefined)
+      
+      // 获取所有视频文件的路径
+      const filePaths = videoFiles.map(file => window.api.getPathForFile(file))
+      
+      // 统一使用批量上传
+      await uploadFilesBatch(filePaths, categoryIds.length > 0 ? categoryIds : undefined)
     } catch (error) {
       console.error('Upload failed', error)
     }
@@ -756,13 +878,6 @@ const handleClickOutside = (e: MouseEvent): void => {
   }
 }
 
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
 </script>
 
 <template>

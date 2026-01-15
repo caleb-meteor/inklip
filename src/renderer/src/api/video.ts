@@ -15,6 +15,7 @@ export interface VideoItem {
   silent: string
   status: number
   task_id: number
+  task_status?: number // 任务状态：0=待执行, 1=完成, 2=执行中, 3=失败
   sha256: string
   parse_percentage?: number
   group_id?: number
@@ -61,6 +62,23 @@ export function uploadVideoApi(path: string, categoryIds?: number[]): Promise<Vi
     method: 'post',
     data: {
       video_path: path,
+      category_ids: categoryIds
+    }
+  })
+}
+
+/**
+ * Upload multiple video files by their local paths
+ * @param paths Array of absolute paths of video files
+ * @param categoryIds Optional list of category IDs to assign to all videos
+ * @returns Promise with array of upload responses
+ */
+export function uploadVideosBatchApi(paths: string[], categoryIds?: number[]): Promise<VideoUploadResponse[]> {
+  return request({
+    url: '/api/video/upload/batch',
+    method: 'post',
+    data: {
+      video_paths: paths,
       category_ids: categoryIds
     }
   })

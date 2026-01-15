@@ -1,8 +1,9 @@
 import { ipcMain, BrowserWindow, app, dialog, Notification, net } from 'electron'
 import fs from 'fs'
 import path, { join } from 'path'
-import { downloadFile } from '../utils/download'
+import { downloadFile, downloadFileSimple } from '../utils/download'
 import { BackendService } from '../services/backend'
+import { is } from '@electron-toolkit/utils'
 
 export function registerIpcHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -163,15 +164,15 @@ export function registerIpcHandlers(
     }
   })
 
-  // 选择视频文件（使用中文对话框）
+  // 选择视频文件（使用中文对话框，支持多选）
   ipcMain.handle('select-video-file', async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (!win) return { success: false, error: '没有活动窗口' }
 
     const result = await dialog.showOpenDialog(win, {
-      title: '选择视频文件',
+      title: '选择视频文件（可多选）',
       defaultPath: app.getPath('videos'),
-      properties: ['openFile'],
+      properties: ['openFile', 'multiSelections'],
       buttonLabel: '选择',
       filters: [
         { name: '视频文件', extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'm4v'] }
@@ -182,9 +183,10 @@ export function registerIpcHandlers(
       return { success: false, canceled: true }
     }
 
+    // 统一返回 filePaths，单个或多个文件都使用批量上传
     return { 
       success: true, 
-      filePath: result.filePaths[0]
+      filePaths: result.filePaths
     }
   })
 
@@ -206,7 +208,7 @@ export function registerIpcHandlers(
       return false
     }
 
-    const models = ['ggml-medium-q5_0.bin', 'ggml-silero-v6.2.0.bin']
+    const models = ['ggml-large-v3-turbo-q5_0.bin', 'ggml-silero-v6.2.0.bin']
 
     for (const model of models) {
       const filePath = join(modelsDir, model)
@@ -232,22 +234,52 @@ export function registerIpcHandlers(
       fs.mkdirSync(modelsDir, { recursive: true })
     }
 
+    // 使用 HF Mirror 镜像站点下载模型，提升国内下载速度
+    // 参考: https://hf-mirror.com/
+    // 
+    // Shell 脚本中的 URL 构建逻辑解析：
+    // 1. 定义源仓库: src="https://huggingface.co/ggerganov/whisper.cpp"
+    // 2. 定义路径前缀: pfx="resolve/main/ggml"
+    // 3. 构建下载 URL: $src/$pfx-"$model".bin
+    //    结果: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{model}.bin
+    //
+    // HuggingFace URL 转换规则：
+    // - 浏览页面 URL: https://hf-mirror.com/ggml-org/whisper-vad/tree/main/ggml-silero-v6.2.0.bin
+    // - 真实下载 URL: https://hf-mirror.com/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
+    // - 关键转换：将 /tree/ 替换为 /resolve/ 即可获取真实下载链接
+    //
+    // URL 格式说明：
+    // {repo_url}/resolve/{branch}/{filename}
+    // 例如: https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
     const resources = [
       {
-        url: 'https://oss-inklip.caleb.center/models/ggml-medium-q5_0.bin',
-        name: 'ggml-medium-q5_0.bin',
-        sha256:'19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f'
+        // Whisper 模型：从 ggerganov/whisper.cpp 仓库下载
+        // 仓库 URL: https://hf-mirror.com/ggerganov/whisper.cpp
+        // 分支: main
+        // 文件名: ggml-large-v3-turbo-q5_0.bin
+        // 构建方式: {repo}/resolve/{branch}/{filename}
+        url: 'https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin',
+        name: 'ggml-large-v3-turbo-q5_0.bin',
+        sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2' // TODO: 更新为新模型的 SHA256 校验和
       },
       {
-        url: 'https://oss-inklip.caleb.center/models/ggml-silero-v6.2.0.bin',
+        // VAD 模型：从 ggml-org/whisper-vad 仓库下载
+        // 仓库 URL: https://hf-mirror.com/ggml-org/whisper-vad
+        // 分支: main
+        // 文件名: ggml-silero-v6.2.0.bin
+        // 构建方式: {repo}/resolve/{branch}/{filename}
+        // 如果看到浏览 URL: https://hf-mirror.com/ggml-org/whisper-vad/tree/main/ggml-silero-v6.2.0.bin
+        // 只需将 /tree/ 替换为 /resolve/ 即可
+        url: 'https://hf-mirror.com/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin',
         name: 'ggml-silero-v6.2.0.bin',
-        sha256:'2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987'
+        sha256: '2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987'
       }
     ]
 
     for (const resource of resources) {
       const filePath = join(modelsDir, resource.name)
-      await downloadFile(
+      // 使用简化的单线程下载（适合镜像站点）
+      await downloadFileSimple(
         resource.url,
         filePath,
         (progress) => {

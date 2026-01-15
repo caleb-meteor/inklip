@@ -6,7 +6,7 @@ import { WebSocketMessageHandler } from '../utils/websocket-message-handler'
 export interface VideoParseProgress {
   videoId: number
   percentage: number
-  status?: 'parsing' | 'completed' | 'failed'
+  status?: 'parsing' | 'transcribing' | 'completed' | 'failed'
   error?: string
 }
 
@@ -19,6 +19,8 @@ export const useWebsocketStore = defineStore('websocket', () => {
 
   let wsClient: WebSocketClient | null = null
   let messageHandler: WebSocketMessageHandler | null = null
+  let baseUrlWithoutToken: string = '' // 保存不带 token 的基础 URL
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
 
   /**
    * 设置 WebSocket 基础 URL
@@ -33,16 +35,36 @@ export const useWebsocketStore = defineStore('websocket', () => {
   const updateVideoProgress = (data: {
     video_id: number | string
     percentage?: number
-    status?: 'completed' | 'failed'
+    status?: 'completed' | 'failed' | 'parsing' | 'transcribing' | number | string
     error?: string
   }): void => {
     const videoId = Number(data.video_id)
     const existing = videoParseProgress[videoId]
 
+    // 处理状态：可能是字符串（'completed', 'failed', 'transcribing', 'parsing'）或数字（3 = TRANSCRIBING）
+    let status: 'parsing' | 'transcribing' | 'completed' | 'failed' = 'parsing'
+    if (data.status === 'completed' || data.status === 4) {
+      status = 'completed'
+    } else if (data.status === 'failed' || data.status === 5) {
+      status = 'failed'
+    } else if (data.status === 'transcribing' || data.status === 3 || data.status === 'running') {
+      // 'running' 是后端发送的中间状态，应该映射为 'transcribing'
+      status = 'transcribing'
+    } else if (data.status === 'parsing') {
+      status = 'parsing'
+    } else {
+      // 默认情况下，如果有百分比且小于100，认为是转录中
+      if (data.percentage !== undefined && data.percentage < 100) {
+        status = 'transcribing'
+      } else {
+        status = 'parsing'
+      }
+    }
+
     const progress: VideoParseProgress = {
       videoId,
       percentage: data.percentage ?? existing?.percentage ?? 0,
-      status: data.status === 'completed' ? 'completed' : data.status === 'failed' ? 'failed' : 'parsing',
+      status,
       error: data.error
     }
 
@@ -65,6 +87,25 @@ export const useWebsocketStore = defineStore('websocket', () => {
   }
 
   /**
+   * 构建带 token 的 WebSocket URL
+   */
+  const buildUrlWithToken = (url: string): string | null => {
+    const token = localStorage.getItem('token')
+    if (!token) {
+      return null
+    }
+
+    try {
+      const urlObj = new URL(url)
+      urlObj.searchParams.set('token', token)
+      return urlObj.toString()
+    } catch (error) {
+      console.error('Failed to build WebSocket URL with token:', error)
+      return null
+    }
+  }
+
+  /**
    * 连接到 WebSocket 服务器
    */
   const connect = (url?: string): void => {
@@ -83,6 +124,16 @@ export const useWebsocketStore = defineStore('websocket', () => {
     // 断开现有连接
     disconnect()
 
+    // 保存基础 URL（不带 token）
+    baseUrlWithoutToken = targetUrl
+
+    // 在 URL 中添加 token 查询参数
+    const urlWithToken = buildUrlWithToken(targetUrl)
+    if (!urlWithToken) {
+      console.error('Failed to build WebSocket URL with token')
+      return
+    }
+
     // 创建消息处理器
     messageHandler = new WebSocketMessageHandler({
       onVideoProgress: (data) => {
@@ -95,6 +146,71 @@ export const useWebsocketStore = defineStore('websocket', () => {
       onVideoFailed: (videoId, error) => {
         window.api.showNotification('视频解析失败', error, '/video-manager')
       },
+      onVideoStatus: (data) => {
+        // 更新视频状态
+        const videoId = Number(data.video_id)
+        const status = Number(data.status)
+        
+        // 根据视频状态更新进度
+        if (status === 4) {
+          // 处理完成
+          updateVideoProgress({
+            video_id: videoId,
+            status: 'completed',
+            percentage: 100
+          })
+        } else if (status === 5) {
+          // 处理失败
+          updateVideoProgress({
+            video_id: videoId,
+            status: 'failed',
+            error: data.error || '处理失败'
+          })
+        } else if (status === 3) {
+          // 转录音频中（分析视频中）
+          updateVideoProgress({
+            video_id: videoId,
+            status: 'transcribing'
+          })
+        } else if (status === 1) {
+          // 提取封面中
+          updateVideoProgress({
+            video_id: videoId,
+            status: 'parsing'
+          })
+        } else if (status === 2) {
+          // 提取音频中
+          updateVideoProgress({
+            video_id: videoId,
+            status: 'parsing'
+          })
+        } else if (status === 0) {
+          // 待处理
+          updateVideoProgress({
+            video_id: videoId,
+            status: 'parsing',
+            percentage: 0
+          })
+        }
+        
+        console.log('[WebSocket] Video status updated:', data)
+      },
+      onVideoUploadBatch: (data) => {
+        if (data.error_count > 0) {
+          window.api.showNotification(
+            '批量上传完成',
+            `成功: ${data.success_count}, 失败: ${data.error_count}`,
+            '/video-manager'
+          )
+        } else {
+          window.api.showNotification(
+            '批量上传完成',
+            `成功上传 ${data.success_count} 个视频`,
+            '/video-manager'
+          )
+        }
+        videoUploaded.value = Date.now()
+      },
       onSmartCutUpdated: () => {
         smartCutUpdated.value = Date.now()
         window.api.showNotification(
@@ -105,22 +221,27 @@ export const useWebsocketStore = defineStore('websocket', () => {
       },
       onVideoUploaded: () => {
         videoUploaded.value = Date.now()
-        window.api.showNotification('上传视频已分析', '点击查看视频管理', '/video-manager')
+        // 不显示通知，因为视频刚上传，还在处理中
       }
     })
 
     // 创建 WebSocket 客户端
-    wsClient = new WebSocketClient(targetUrl, {
+    wsClient = new WebSocketClient(urlWithToken, {
       onOpen: () => {
         connected.value = true
-        // 重新获取 token，因为可能已经更新
-        const currentToken = localStorage.getItem('token')
-        if (currentToken) {
-          sendAuthToken(currentToken)
+        console.log('WebSocket connected with token in URL')
+        // 清除重连定时器
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout)
+          reconnectTimeout = null
         }
       },
-      onClose: () => {
+      onClose: (event) => {
         connected.value = false
+        // 如果不是正常关闭，并且应该重连，则在 store 层处理重连（使用最新的 token）
+        if (event.code !== 1000 && baseUrlWithoutToken) {
+          handleReconnect()
+        }
       },
       onError: () => {
         connected.value = false
@@ -128,44 +249,56 @@ export const useWebsocketStore = defineStore('websocket', () => {
       onMessage: (data) => {
         messageHandler?.handle(data)
       },
-      // 重连前检查 token 是否存在
-      shouldReconnect: () => {
-        const hasToken = !!localStorage.getItem('token')
-        if (!hasToken) {
-          console.log('WebSocket reconnection skipped: no authentication token')
-        }
-        return hasToken
-      }
+      // 禁用 WebSocketClient 的自动重连，由 store 层处理
+      shouldReconnect: () => false
     })
 
     wsClient.connect()
   }
 
   /**
-   * 发送认证 token
+   * 处理重连逻辑（使用最新的 token）
    */
-  const sendAuthToken = (token: string): void => {
-    if (wsClient?.isOpen()) {
-      wsClient.send({ Authorization: token })
-      console.log('WebSocket sent authorization token')
+  const handleReconnect = (): void => {
+    // 清除现有的重连定时器
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
     }
+
+    // 检查 token 是否存在
+    const hasToken = !!localStorage.getItem('token')
+    if (!hasToken) {
+      console.log('WebSocket reconnection skipped: no authentication token')
+      return
+    }
+
+    // 延迟重连，使用最新的 token
+    reconnectTimeout = setTimeout(() => {
+      if (baseUrlWithoutToken) {
+        console.log('Attempting to reconnect WebSocket with latest token...')
+        connect(baseUrlWithoutToken)
+      }
+    }, 2000) // 2秒后重连
   }
 
   /**
-   * 重新认证：使用最新的 token 重新发送认证信息
+   * 重新认证：使用最新的 token 重新连接
    * 当 token 更新时调用此方法
    */
   const reauthenticate = (): void => {
-    if (!connected.value || !wsClient) {
+    if (!connected.value) {
       return
     }
 
     const token = localStorage.getItem('token')
     if (token) {
-      sendAuthToken(token)
-      console.log('WebSocket reauthenticated with updated token')
+      // token 更新时重新连接，使用新的 token
+      console.log('WebSocket reauthenticating with updated token')
+      connect()
     } else {
       console.warn('WebSocket reauthentication skipped: no token found')
+      disconnect()
     }
   }
 
@@ -173,6 +306,12 @@ export const useWebsocketStore = defineStore('websocket', () => {
    * 断开连接
    */
   const disconnect = (): void => {
+    // 清除重连定时器
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout)
+      reconnectTimeout = null
+    }
+
     if (wsClient) {
       wsClient.disconnect()
       wsClient = null
