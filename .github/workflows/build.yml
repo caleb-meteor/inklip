@@ -28,6 +28,42 @@ jobs:
       - name: Checkout main repo
         uses: actions/checkout@v4
 
+      - name: Checkout inklip-base-go
+        uses: actions/checkout@v4
+        with:
+          repository: caleb-meteor/inklip-base-go
+          token: ${{ secrets.GH_PAT }}
+          path: inklip-base-go
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Download Go dependencies
+        shell: bash
+        run: |
+          cd inklip-base-go
+          go mod download
+
+      - name: Build inklip-base-go
+        shell: bash
+        run: |
+          cd inklip-base-go
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            echo "🔨 构建 Windows 版本..."
+            mkdir -p dist/win32-x64
+            GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o dist/win32-x64/inklip-base.exe .
+          elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "x64" ]; then
+            echo "🔨 构建 Mac Intel 版本..."
+            mkdir -p dist/darwin-x64
+            GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o dist/darwin-x64/inklip-base .
+          elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            echo "🔨 构建 Mac ARM 版本..."
+            mkdir -p dist/darwin-arm64
+            GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o dist/darwin-arm64/inklip-base .
+          fi
+
       - name: Download and extract platform resources
         shell: bash
         run: |
@@ -35,6 +71,35 @@ jobs:
           curl -L https://oss-inklip.caleb.center/resources/${{ matrix.platform }}-${{ matrix.arch }}.zip -o resources.zip
           unzip -o resources.zip -d resources/
           rm resources.zip
+
+      - name: Copy inklip-base to resources
+        shell: bash
+        run: |
+          mkdir -p resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            if [ ! -f "inklip-base-go/dist/win32-x64/inklip-base.exe" ]; then
+              echo "::error::inklip-base.exe not found!"
+              exit 1
+            fi
+            cp inklip-base-go/dist/win32-x64/inklip-base.exe resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/
+            echo "✅ inklip-base.exe 已复制到 resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/"
+          elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "x64" ]; then
+            if [ ! -f "inklip-base-go/dist/darwin-x64/inklip-base" ]; then
+              echo "::error::inklip-base (darwin-x64) not found!"
+              exit 1
+            fi
+            cp inklip-base-go/dist/darwin-x64/inklip-base resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/
+            chmod +x resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/inklip-base
+            echo "✅ inklip-base (darwin-x64) 已复制到 resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/"
+          elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            if [ ! -f "inklip-base-go/dist/darwin-arm64/inklip-base" ]; then
+              echo "::error::inklip-base (darwin-arm64) not found!"
+              exit 1
+            fi
+            cp inklip-base-go/dist/darwin-arm64/inklip-base resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/
+            chmod +x resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/inklip-base
+            echo "✅ inklip-base (darwin-arm64) 已复制到 resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/"
+          fi
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
