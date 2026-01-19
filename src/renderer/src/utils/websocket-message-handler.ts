@@ -11,7 +11,7 @@ export interface MessageHandlers {
   }) => void
   onVideoCompleted?: (videoId: number) => void
   onVideoFailed?: (videoId: number, error: string) => void
-  onSmartCutUpdated?: () => void
+  onSmartCutUpdated?: (data: { status?: number; ai_gen_video_id?: number }) => void
   onVideoUploaded?: () => void
   onVideoStatus?: (data: {
     video_id: number | string
@@ -52,7 +52,7 @@ export class WebSocketMessageHandler {
         this.handleVideoUploadBatch(data)
         break
       case 'smart_cut':
-        this.handleSmartCut()
+        this.handleSmartCut(data)
         break
       case 'video_upload':
         this.handleVideoUpload()
@@ -79,9 +79,12 @@ export class WebSocketMessageHandler {
     // 其他情况（如 status === 'running' 或 'transcribing'）只更新进度，不显示通知
   }
 
-  private handleSmartCut(): void {
-    console.log('Smart cut status updated')
-    this.handlers.onSmartCutUpdated?.()
+  private handleSmartCut(data: any): void {
+    console.log('Smart cut status updated:', data)
+    this.handlers.onSmartCutUpdated?.({
+      status: data.status,
+      ai_gen_video_id: data.ai_gen_video_id
+    })
   }
 
   private handleVideoUpload(): void {

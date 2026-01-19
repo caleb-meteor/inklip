@@ -211,13 +211,26 @@ export const useWebsocketStore = defineStore('websocket', () => {
         }
         videoUploaded.value = Date.now()
       },
-      onSmartCutUpdated: () => {
+      onSmartCutUpdated: (data) => {
         smartCutUpdated.value = Date.now()
-        window.api.showNotification(
-          '智能剪辑状态已更新',
-          '点击查看最新剪辑结果',
-          '/smart-editor'
-        )
+        // 只在任务完成时显示系统提醒
+        // status: 0=待执行, 1=执行中, 2=已完成, 3=失败, 4=已取消
+        if (data.status === 2) {
+          // 任务完成
+          window.api.showNotification(
+            '智能剪辑完成',
+            '点击查看最新剪辑结果',
+            '/smart-editor'
+          )
+        } else if (data.status === 3) {
+          // 任务失败
+          window.api.showNotification(
+            '智能剪辑失败',
+            '请检查任务详情',
+            '/smart-editor'
+          )
+        }
+        // 其他状态（待执行、执行中）不显示通知
       },
       onVideoUploaded: () => {
         videoUploaded.value = Date.now()

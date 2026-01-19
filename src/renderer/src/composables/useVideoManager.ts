@@ -63,9 +63,14 @@ export function useVideoManager() {
       const res = await uploadVideosBatchApi(paths, categoryIds)
 
       messageReactive.destroy()
-      const successText = res.length === 1 
+      // 兼容两种返回格式：
+      // 1. Python 后端：直接返回数组
+      // 2. Go 后端：返回对象 {videos: [...], task_ids: [...], status: "queued"}
+      const videos = Array.isArray(res) ? res : (res?.videos || [])
+      const successCount = videos.length
+      const successText = successCount === 1 
         ? '视频已上传，正在处理中...' 
-        : `成功上传 ${res.length} 个视频，正在处理中...`
+        : `成功上传 ${successCount} 个视频，正在处理中...`
       message.success(successText)
       
       // 刷新列表以获取最新状态（避免重复添加，因为fetchVideos会获取所有视频）

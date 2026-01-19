@@ -71,9 +71,12 @@ export function uploadVideoApi(path: string, categoryIds?: number[]): Promise<Vi
  * Upload multiple video files by their local paths
  * @param paths Array of absolute paths of video files
  * @param categoryIds Optional list of category IDs to assign to all videos
- * @returns Promise with array of upload responses
+ * @returns Promise with array of upload responses (Python backend) or object with videos array (Go backend)
  */
-export function uploadVideosBatchApi(paths: string[], categoryIds?: number[]): Promise<VideoUploadResponse[]> {
+export function uploadVideosBatchApi(
+  paths: string[], 
+  categoryIds?: number[]
+): Promise<VideoUploadResponse[] | { videos: VideoUploadResponse[]; task_ids?: string[]; status?: string }> {
   return request({
     url: '/api/video/upload/batch',
     method: 'post',
