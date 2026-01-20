@@ -171,7 +171,6 @@ export function registerIpcHandlers(
 
     const result = await dialog.showOpenDialog(win, {
       title: '选择视频文件（可多选）',
-      defaultPath: app.getPath('videos'),
       properties: ['openFile', 'multiSelections'],
       buttonLabel: '选择',
       filters: [
