@@ -43,6 +43,14 @@ declare global {
         error?: string
         filePaths: string[]
       }>
+      selectVideoFolder: () => Promise<{
+        success: boolean
+        canceled?: boolean
+        error?: string
+        folderPath?: string
+        videoFiles?: string[]
+        subtitleFiles?: Record<string, string>
+      }>
     }
   }
 }

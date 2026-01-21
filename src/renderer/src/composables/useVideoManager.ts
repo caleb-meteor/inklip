@@ -51,18 +51,26 @@ export function useVideoManager() {
     }
   }
 
-  const uploadFilesBatch = async (paths: string[], categoryIds?: number[]): Promise<void> => {
+  const uploadFilesBatch = async (paths: string[], categoryIds?: number[], subtitleFiles?: Record<string, string>): Promise<void> => {
     if (isUploading.value) return
     if (paths.length === 0) return
 
     // 统一使用批量上传，单个文件也作为数组处理
     const countText = paths.length === 1 ? '1 个视频' : `${paths.length} 个视频`
-    const messageReactive = message.loading(`正在上传 ${countText}...`, { duration: 0 })
+    let messageReactive: ReturnType<typeof message.loading> | null = null
+    
     try {
       isUploading.value = true
-      const res = await uploadVideosBatchApi(paths, categoryIds)
+      messageReactive = message.loading(`正在上传 ${countText}...`, { duration: 0 })
+      
+      const res = await uploadVideosBatchApi(paths, categoryIds, subtitleFiles)
 
-      messageReactive.destroy()
+      // 成功时销毁 loading 消息
+      if (messageReactive) {
+        messageReactive.destroy()
+        messageReactive = null
+      }
+      
       // 兼容两种返回格式：
       // 1. Python 后端：直接返回数组
       // 2. Go 后端：返回对象 {videos: [...], task_ids: [...], status: "queued"}
@@ -76,11 +84,42 @@ export function useVideoManager() {
       // 刷新列表以获取最新状态（避免重复添加，因为fetchVideos会获取所有视频）
       await fetchVideos()
     } catch (err: any) {
+      // 确保在异常时也销毁 loading 消息
+      if (messageReactive) {
+        messageReactive.destroy()
+        messageReactive = null
+      }
       console.error('Batch upload error', err)
       const errorMsg = err?.response?.data?.message || err?.message || '批量上传失败'
       message.error(errorMsg)
     } finally {
+      // 双重保险：确保 loading 消息被销毁
+      if (messageReactive) {
+        messageReactive.destroy()
+      }
       isUploading.value = false
+    }
+  }
+
+  // 上传文件夹（自动检测视频和字幕文件）
+  const uploadFolder = async (categoryIds?: number[]): Promise<void> => {
+    if (isUploading.value) return
+
+    try {
+      const result = await window.api.selectVideoFolder()
+      if (!result.success || !result.videoFiles || result.videoFiles.length === 0) {
+        if (!result.canceled && result.error) {
+          message.error(result.error)
+        }
+        return
+      }
+
+      // 使用检测到的字幕文件映射
+      await uploadFilesBatch(result.videoFiles, categoryIds, result.subtitleFiles)
+    } catch (error) {
+      console.error('Folder upload failed', error)
+      const errorMsg = error instanceof Error ? error.message : '文件夹上传失败'
+      message.error(errorMsg)
     }
   }
 
@@ -242,6 +281,7 @@ export function useVideoManager() {
     selectedFileId,
     fetchVideos,
     uploadFilesBatch,
+    uploadFolder,
     renameVideo,
     deleteVideo,
     getAspectRatio,

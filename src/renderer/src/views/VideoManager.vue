@@ -32,6 +32,7 @@ const {
   selectedFileId,
   fetchVideos,
   uploadFilesBatch,
+  uploadFolder,
   renameVideo,
   deleteVideo,
   getAspectRatio,
@@ -331,6 +332,25 @@ const triggerUpload = async (): Promise<void> => {
   } catch (error) {
     console.error('File selection failed', error)
   }
+}
+
+// 文件夹上传（自动检测视频和字幕文件）
+const triggerFolderUpload = async (): Promise<void> => {
+  if (isUploading.value) return
+  
+  // 如果当前选中了分组、主播或产品，上传时自动添加到对应的分类
+  const categoryIds: number[] = []
+  if (activeGroupId.value !== null) {
+    categoryIds.push(activeGroupId.value)
+  }
+  if (activeAnchorId.value !== null) {
+    categoryIds.push(activeAnchorId.value)
+  }
+  if (activeProductId.value !== null) {
+    categoryIds.push(activeProductId.value)
+  }
+  
+  await uploadFolder(categoryIds.length > 0 ? categoryIds : undefined)
 }
 
 // 拖拽上传
@@ -926,7 +946,7 @@ const handleClickOutside = (e: MouseEvent): void => {
         <!-- 内容区域 -->
         <n-layout content-style="padding: 24px; overflow-y: auto;">
           <div class="file-grid">
-            <UploadCard :uploading="isUploading" @click="triggerUpload" />
+            <UploadCard :uploading="isUploading" @select-file="triggerUpload" @select-folder="triggerFolderUpload" />
 
             <VideoCard
               v-for="file in currentFiles"

@@ -189,6 +189,74 @@ export function registerIpcHandlers(
     }
   })
 
+  // 选择文件夹（支持文件夹上传，自动检测视频和字幕文件）
+  ipcMain.handle('select-video-folder', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (!win) return { success: false, error: '没有活动窗口' }
+
+    const result = await dialog.showOpenDialog(win, {
+      title: '选择包含视频的文件夹',
+      properties: ['openDirectory'],
+      buttonLabel: '选择'
+    })
+
+    if (result.canceled || !result.filePaths.length) {
+      return { success: false, canceled: true }
+    }
+
+    const folderPath = result.filePaths[0]
+    
+    // 扫描文件夹，查找视频文件和字幕文件
+    const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v']
+    const subtitleExtensions = ['.srt', '.json']
+    
+    const videoFiles: string[] = []
+    const subtitleFiles: Record<string, string> = {} // 视频文件名 -> 字幕文件路径
+    
+    try {
+      const entries = await fs.promises.readdir(folderPath, { withFileTypes: true })
+      
+      for (const entry of entries) {
+        if (!entry.isFile()) continue
+        
+        const fileName = entry.name
+        const filePath = path.join(folderPath, fileName)
+        const ext = path.extname(fileName).toLowerCase()
+        const baseName = path.basename(fileName, ext)
+        
+        // 检查是否是视频文件
+        if (videoExtensions.includes(ext)) {
+          videoFiles.push(filePath)
+          
+          // 查找匹配的字幕文件（通过文件名匹配）
+          for (const subExt of subtitleExtensions) {
+            const subtitlePath = path.join(folderPath, baseName + subExt)
+            try {
+              await fs.promises.access(subtitlePath)
+              subtitleFiles[filePath] = subtitlePath
+              break // 找到匹配的字幕文件就停止
+            } catch {
+              // 文件不存在，继续查找
+            }
+          }
+        }
+      }
+      
+      return {
+        success: true,
+        folderPath,
+        videoFiles,
+        subtitleFiles
+      }
+    } catch (error) {
+      console.error('扫描文件夹失败:', error)
+      return { 
+        success: false, 
+        error: `扫描文件夹失败: ${(error as Error).message}` 
+      }
+    }
+  })
+
   ipcMain.handle('get-app-config', () => {
     // 注意：实际配置由 Python 后端管理，这里只返回默认值作为后备
     return { videoDataDirectory: app.getPath('userData') }

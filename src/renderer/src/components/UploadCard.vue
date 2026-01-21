@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { NIcon } from 'naive-ui'
 import { CloudUploadOutline } from '@vicons/ionicons5'
+import UploadSelectModal from './UploadSelectModal.vue'
 
 interface Props {
   uploading?: boolean
@@ -11,28 +13,53 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  click: []
+  'select-file': []
+  'select-folder': []
 }>()
+
+const showSelectModal = ref(false)
+
+const handleClick = (): void => {
+  if (!props.uploading) {
+    showSelectModal.value = true
+  }
+}
+
+const handleSelectFile = (): void => {
+  emit('select-file')
+}
+
+const handleSelectFolder = (): void => {
+  emit('select-folder')
+}
 </script>
 
 <template>
-  <div
-    class="file-item upload-card"
-    :class="{ disabled: props.uploading }"
-    @click="emit('click')"
-  >
-    <div class="icon-wrapper upload-icon-wrapper">
-      <n-icon size="32" color="#63e2b7">
-        <span v-if="props.uploading" style="font-size: 14px; position: absolute">...</span>
-        <CloudUploadOutline v-else />
-      </n-icon>
+  <div>
+    <div
+      class="file-item upload-card"
+      :class="{ disabled: props.uploading }"
+      @click="handleClick"
+    >
+      <div class="icon-wrapper upload-icon-wrapper">
+        <n-icon size="32" color="#63e2b7">
+          <span v-if="props.uploading" style="font-size: 14px; position: absolute">...</span>
+          <CloudUploadOutline v-else />
+        </n-icon>
+      </div>
+      <div class="upload-hint-text">
+        {{ props.uploading ? '上传中...' : '导入视频' }}
+      </div>
+      <div class="upload-hint-sub">
+        {{ props.uploading ? '请稍候' : '拖入或点击上传' }}
+      </div>
     </div>
-    <div class="upload-hint-text">
-      {{ props.uploading ? '上传中...' : '导入视频' }}
-    </div>
-    <div class="upload-hint-sub">
-      {{ props.uploading ? '请稍候' : '拖入或点击上传' }}
-    </div>
+    <UploadSelectModal
+      v-model:show="showSelectModal"
+      :uploading="props.uploading"
+      @select-file="handleSelectFile"
+      @select-folder="handleSelectFolder"
+    />
   </div>
 </template>
 
