@@ -19,6 +19,7 @@ import GroupModal from '../components/GroupModal.vue'
 import AnchorModal from '../components/AnchorModal.vue'
 import ProductModal from '../components/ProductModal.vue'
 import DeleteModal from '../components/DeleteModal.vue'
+import CreateItemModal from '../components/CreateItemModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -137,6 +138,11 @@ const productContextMenuId = ref<number | null>(null)
 const showRenameProductModal = ref(false)
 const renameProductId = ref<number | null>(null)
 const renameProductName = ref('')
+
+// 新增对话框相关
+const showCreateGroupModal = ref(false)
+const showCreateAnchorModal = ref(false)
+const showCreateProductModal = ref(false)
 
 // 菜单相关
 const activeKey = ref<string | null>('all')
@@ -424,6 +430,7 @@ const handleFileSelect = (file: FileItem): void => {
 const handleContextMenu = (e: MouseEvent, file: FileItem): void => {
   e.preventDefault()
   e.stopPropagation()
+  closeAllContextMenus() // 先关闭所有其他右键菜单
   contextMenuFile.value = file
   contextMenuPosition.value = { x: e.clientX, y: e.clientY }
   showContextMenu.value = true
@@ -432,6 +439,14 @@ const handleContextMenu = (e: MouseEvent, file: FileItem): void => {
 const closeContextMenu = (): void => {
   showContextMenu.value = false
   contextMenuFile.value = null
+}
+
+// 关闭所有右键菜单
+const closeAllContextMenus = (): void => {
+  closeContextMenu()
+  closeGroupContextMenu()
+  closeAnchorContextMenu()
+  closeProductContextMenu()
 }
 
 // 重命名
@@ -746,6 +761,7 @@ const handleMenuSelect = (key: string): void => {
 const handleGroupContextMenu = (e: MouseEvent, groupId: number): void => {
   e.preventDefault()
   e.stopPropagation()
+  closeAllContextMenus() // 先关闭所有其他右键菜单
   groupContextMenuId.value = groupId
   groupContextMenuPosition.value = { x: e.clientX, y: e.clientY }
   showGroupContextMenu.value = true
@@ -787,10 +803,25 @@ const handleDeleteGroup = async (): Promise<void> => {
   }
 }
 
+const handleAddGroupMenuItem = (): void => {
+  closeGroupContextMenu()
+  showCreateGroupModal.value = true
+}
+
+const handleCreateGroup = async (groupName: string): Promise<void> => {
+  try {
+    await createGroup(groupName)
+    showCreateGroupModal.value = false
+  } catch (error) {
+    // Error already handled
+  }
+}
+
 // 主播右键菜单
 const handleAnchorContextMenu = (e: MouseEvent, anchorId: number): void => {
   e.preventDefault()
   e.stopPropagation()
+  closeAllContextMenus() // 先关闭所有其他右键菜单
   anchorContextMenuId.value = anchorId
   anchorContextMenuPosition.value = { x: e.clientX, y: e.clientY }
   showAnchorContextMenu.value = true
@@ -832,10 +863,25 @@ const handleDeleteAnchor = async (): Promise<void> => {
   }
 }
 
+const handleAddAnchorMenuItem = (): void => {
+  closeAnchorContextMenu()
+  showCreateAnchorModal.value = true
+}
+
+const handleCreateAnchor = async (anchorName: string): Promise<void> => {
+  try {
+    await createAnchor(anchorName)
+    showCreateAnchorModal.value = false
+  } catch (error) {
+    // Error already handled
+  }
+}
+
 // 产品右键菜单
 const handleProductContextMenu = (e: MouseEvent, productId: number): void => {
   e.preventDefault()
   e.stopPropagation()
+  closeAllContextMenus() // 先关闭所有其他右键菜单
   productContextMenuId.value = productId
   productContextMenuPosition.value = { x: e.clientX, y: e.clientY }
   showProductContextMenu.value = true
@@ -872,6 +918,20 @@ const handleDeleteProduct = async (): Promise<void> => {
   try {
     await deleteProduct(productContextMenuId.value)
     closeProductContextMenu()
+  } catch (error) {
+    // Error already handled
+  }
+}
+
+const handleAddProductMenuItem = (): void => {
+  closeProductContextMenu()
+  showCreateProductModal.value = true
+}
+
+const handleCreateProduct = async (productName: string): Promise<void> => {
+  try {
+    await createProduct(productName)
+    showCreateProductModal.value = false
   } catch (error) {
     // Error already handled
   }
@@ -986,6 +1046,8 @@ const handleClickOutside = (e: MouseEvent): void => {
     <GroupContextMenu
       v-if="showGroupContextMenu"
       :position="groupContextMenuPosition"
+      type="group"
+      @add="handleAddGroupMenuItem"
       @rename="handleRenameGroupMenuItem"
       @delete="handleDeleteGroup"
     />
@@ -1037,6 +1099,8 @@ const handleClickOutside = (e: MouseEvent): void => {
     <GroupContextMenu
       v-if="showAnchorContextMenu"
       :position="anchorContextMenuPosition"
+      type="anchor"
+      @add="handleAddAnchorMenuItem"
       @rename="handleRenameAnchorMenuItem"
       @delete="handleDeleteAnchor"
     />
@@ -1045,6 +1109,8 @@ const handleClickOutside = (e: MouseEvent): void => {
     <GroupContextMenu
       v-if="showProductContextMenu"
       :position="productContextMenuPosition"
+      type="product"
+      @add="handleAddProductMenuItem"
       @rename="handleRenameProductMenuItem"
       @delete="handleDeleteProduct"
     />
@@ -1061,6 +1127,33 @@ const handleClickOutside = (e: MouseEvent): void => {
       v-model:show="showRenameProductModal"
       :video-name="renameProductName"
       @confirm="handleRenameProduct"
+    />
+
+    <!-- 新增分组对话框 -->
+    <CreateItemModal
+      v-model:show="showCreateGroupModal"
+      title="新增分组"
+      label="分组名称"
+      placeholder="请输入分组名称"
+      @confirm="handleCreateGroup"
+    />
+
+    <!-- 新增主播对话框 -->
+    <CreateItemModal
+      v-model:show="showCreateAnchorModal"
+      title="新增主播"
+      label="主播名称"
+      placeholder="请输入主播名称"
+      @confirm="handleCreateAnchor"
+    />
+
+    <!-- 新增产品对话框 -->
+    <CreateItemModal
+      v-model:show="showCreateProductModal"
+      title="新增产品"
+      label="产品名称"
+      placeholder="请输入产品名称"
+      @confirm="handleCreateProduct"
     />
   </div>
 </template>

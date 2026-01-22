@@ -1,17 +1,32 @@
 <script setup lang="ts">
 import { NIcon } from 'naive-ui'
-import { CreateOutline, TrashOutline } from '@vicons/ionicons5'
+import { CreateOutline, TrashOutline, AddOutline } from '@vicons/ionicons5'
 
 interface Props {
   position: { x: number; y: number }
+  type?: 'group' | 'anchor' | 'product'
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  type: 'group'
+})
 
 const emit = defineEmits<{
+  add: []
   rename: []
   delete: []
 }>()
+
+const getTypeLabel = (): string => {
+  switch (props.type) {
+    case 'anchor':
+      return '主播'
+    case 'product':
+      return '产品'
+    default:
+      return '分组'
+  }
+}
 </script>
 
 <template>
@@ -26,6 +41,11 @@ const emit = defineEmits<{
     @click.stop
   >
     <div class="context-menu-content">
+      <div class="context-menu-item" @click="emit('add')">
+        <n-icon><AddOutline /></n-icon>
+        <span>新增{{ getTypeLabel() }}</span>
+      </div>
+      <div class="context-menu-divider"></div>
       <div class="context-menu-item" @click="emit('rename')">
         <n-icon><CreateOutline /></n-icon>
         <span>重命名</span>
@@ -33,7 +53,7 @@ const emit = defineEmits<{
       <div class="context-menu-divider"></div>
       <div class="context-menu-item context-menu-item-danger" @click="emit('delete')">
         <n-icon><TrashOutline /></n-icon>
-        <span>删除分组</span>
+        <span>删除{{ getTypeLabel() }}</span>
       </div>
     </div>
   </div>
