@@ -20,6 +20,7 @@ import AnchorModal from '../components/AnchorModal.vue'
 import ProductModal from '../components/ProductModal.vue'
 import DeleteModal from '../components/DeleteModal.vue'
 import CreateItemModal from '../components/CreateItemModal.vue'
+import VideoCategoryModal from '../components/VideoCategoryModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -99,6 +100,16 @@ const showProductModal = ref(false)
 const productVideoId = ref<number | null>(null)
 const productVideoCurrentProductName = ref('')
 const productVideoCurrentProductId = ref<number | null>(null)
+
+// 统一的分类设置弹窗
+const showCategoryModal = ref(false)
+const categoryVideoId = ref<number | null>(null)
+const categoryVideoCurrentGroupName = ref('')
+const categoryVideoCurrentAnchorName = ref('')
+const categoryVideoCurrentProductName = ref('')
+const categoryVideoCurrentGroupId = ref<number | null>(null)
+const categoryVideoCurrentAnchorId = ref<number | null>(null)
+const categoryVideoCurrentProductId = ref<number | null>(null)
 
 const showDeleteModal = ref(false)
 const deleteVideoId = ref<number | null>(null)
@@ -469,7 +480,106 @@ const handleRename = async (newName: string): Promise<void> => {
   }
 }
 
-// 分组
+// 统一的分类设置
+const handleCategoryMenuItem = (): void => {
+  if (!contextMenuFile.value) return
+  const file = contextMenuFile.value
+  closeContextMenu()
+  categoryVideoId.value = file.id
+  
+  const currentGroup = getFileGroup(file)
+  const currentAnchor = getFileAnchor(file)
+  const currentProduct = getFileProduct(file)
+  
+  categoryVideoCurrentGroupName.value = currentGroup?.name || ''
+  categoryVideoCurrentAnchorName.value = currentAnchor?.name || ''
+  categoryVideoCurrentProductName.value = currentProduct?.name || ''
+  
+  categoryVideoCurrentGroupId.value = currentGroup?.id || null
+  categoryVideoCurrentAnchorId.value = currentAnchor?.id || null
+  categoryVideoCurrentProductId.value = currentProduct?.id || null
+  
+  showCategoryModal.value = true
+}
+
+// 处理统一的分类设置确认
+const handleCategoryConfirm = async (
+  groupName: string, 
+  anchorName: string, 
+  productName: string
+): Promise<void> => {
+  if (!categoryVideoId.value) return
+  
+  const videoId = categoryVideoId.value
+  
+  // 处理分组
+  const groupValue = groupName.trim()
+  let targetGroupId: number | null = null
+  if (groupValue) {
+    const existingGroup = groups.value.find(g => g.name === groupValue)
+    if (existingGroup) {
+      targetGroupId = existingGroup.id
+    } else {
+      try {
+        const newGroup = await createGroup(groupValue)
+        targetGroupId = newGroup.id
+      } catch (error) {
+        // Error already handled
+      }
+    }
+  }
+  
+  // 处理主播
+  const anchorValue = anchorName.trim()
+  let targetAnchorId: number | null = null
+  if (anchorValue) {
+    const existingAnchor = anchors.value.find(a => a.name === anchorValue)
+    if (existingAnchor) {
+      targetAnchorId = existingAnchor.id
+    } else {
+      try {
+        const newAnchor = await createAnchor(anchorValue)
+        targetAnchorId = newAnchor.id
+      } catch (error) {
+        // Error already handled
+      }
+    }
+  }
+  
+  // 处理产品
+  const productValue = productName.trim()
+  let targetProductId: number | null = null
+  if (productValue) {
+    const existingProduct = products.value.find(p => p.name === productValue)
+    if (existingProduct) {
+      targetProductId = existingProduct.id
+    } else {
+      try {
+        const newProduct = await createProduct(productValue)
+        targetProductId = newProduct.id
+      } catch (error) {
+        // Error already handled
+      }
+    }
+  }
+  
+  // 更新视频分类
+  try {
+    // 更新分组
+    await updateVideoGroup(videoId, targetGroupId, categoryVideoCurrentGroupId.value)
+    // 更新主播
+    await updateVideoAnchor(videoId, targetAnchorId, categoryVideoCurrentAnchorId.value)
+    // 更新产品
+    await updateVideoProduct(videoId, targetProductId, categoryVideoCurrentProductId.value)
+    
+    showCategoryModal.value = false
+    await fetchVideos()
+  } catch (error) {
+    // Error already handled
+  }
+}
+
+// 分组（保留用于兼容）
 const handleGroupMenuItem = (): void => {
   if (!contextMenuFile.value) return
   const file = contextMenuFile.value
@@ -1033,12 +1143,7 @@ const handleClickOutside = (e: MouseEvent): void => {
       :file="contextMenuFile"
       :position="contextMenuPosition"
       @rename="handleRenameMenuItem"
-      @group="handleGroupMenuItem"
-      @remove-group="handleRemoveGroupMenuItem"
-      @anchor="handleAnchorMenuItem"
-      @remove-anchor="handleRemoveAnchorMenuItem"
-      @product="handleProductMenuItem"
-      @remove-product="handleRemoveProductMenuItem"
+      @category="handleCategoryMenuItem"
       @delete="handleDeleteMenuItem"
     />
 
@@ -1093,6 +1198,18 @@ const handleClickOutside = (e: MouseEvent): void => {
       :products="products"
       :current-product-name="productVideoCurrentProductName"
       @confirm="handleProduct"
+    />
+
+    <!-- 统一的分类设置对话框 -->
+    <VideoCategoryModal
+      v-model:show="showCategoryModal"
+      :groups="groups"
+      :anchors="anchors"
+      :products="products"
+      :current-group-name="categoryVideoCurrentGroupName"
+      :current-anchor-name="categoryVideoCurrentAnchorName"
+      :current-product-name="categoryVideoCurrentProductName"
+      @confirm="handleCategoryConfirm"
     />
 
     <!-- 主播右键菜单 -->
