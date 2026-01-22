@@ -86,7 +86,8 @@ export function uploadVideosBatchApi(
       video_paths: paths,
       category_ids: categoryIds,
       subtitle_files: subtitleFiles
-    }
+    },
+    timeout: 10 * 60 * 1000 // 10 minutes in milliseconds
   })
 }
 

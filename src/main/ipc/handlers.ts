@@ -164,7 +164,7 @@ export function registerIpcHandlers(
     }
   })
 
-  // 选择视频文件（使用中文对话框，支持多选）
+  // 选择视频文件（使用中文对话框，支持多选，文件后缀大小写不敏感）
   ipcMain.handle('select-video-file', async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (!win) return { success: false, error: '没有活动窗口' }
@@ -182,10 +182,30 @@ export function registerIpcHandlers(
       return { success: false, canceled: true }
     }
 
+    // 验证文件扩展名（大小写不敏感）
+    const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v']
+    const validFilePaths: string[] = []
+    
+    for (const filePath of result.filePaths) {
+      const ext = path.extname(filePath).toLowerCase() // 转换为小写，实现大小写不敏感
+      if (videoExtensions.includes(ext)) {
+        validFilePaths.push(filePath)
+      } else {
+        console.warn(`[IPC] 跳过后缀不支持的文件: ${filePath} (扩展名: ${path.extname(filePath)})`)
+      }
+    }
+
+    if (validFilePaths.length === 0) {
+      return { 
+        success: false, 
+        error: '没有选择有效的视频文件（支持格式: mp4, webm, mov, avi, mkv, flv, wmv, m4v）' 
+      }
+    }
+
     // 统一返回 filePaths，单个或多个文件都使用批量上传
     return { 
       success: true, 
-      filePaths: result.filePaths
+      filePaths: validFilePaths
     }
   })
 
@@ -207,6 +227,7 @@ export function registerIpcHandlers(
     const folderPath = result.filePaths[0]
     
     // 扫描文件夹，查找视频文件和字幕文件
+    // 使用小写扩展名列表，通过 toLowerCase() 实现大小写不敏感匹配
     const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v']
     const subtitleExtensions = ['.srt', '.json']
     
@@ -216,27 +237,41 @@ export function registerIpcHandlers(
     try {
       const entries = await fs.promises.readdir(folderPath, { withFileTypes: true })
       
+      // 先收集所有文件信息，用于字幕文件匹配（大小写不敏感）
+      const allFiles: Array<{ name: string; path: string; ext: string; baseName: string }> = []
+      
       for (const entry of entries) {
         if (!entry.isFile()) continue
         
         const fileName = entry.name
         const filePath = path.join(folderPath, fileName)
-        const ext = path.extname(fileName).toLowerCase()
-        const baseName = path.basename(fileName, ext)
+        const ext = path.extname(fileName).toLowerCase() // 转换为小写，实现大小写不敏感
+        const baseName = path.basename(fileName, path.extname(fileName)) // 使用原始扩展名提取基础名
         
-        // 检查是否是视频文件
+        allFiles.push({ name: fileName, path: filePath, ext, baseName })
+        
+        // 检查是否是视频文件（大小写不敏感）
         if (videoExtensions.includes(ext)) {
           videoFiles.push(filePath)
+        }
+      }
+      
+      // 为每个视频文件查找匹配的字幕文件（大小写不敏感）
+      for (const videoFile of videoFiles) {
+        const videoInfo = allFiles.find(f => f.path === videoFile)
+        if (!videoInfo) continue
+        
+        // 查找匹配的字幕文件（通过文件名匹配，大小写不敏感）
+        for (const fileInfo of allFiles) {
+          // 跳过视频文件本身
+          if (fileInfo.path === videoFile) continue
           
-          // 查找匹配的字幕文件（通过文件名匹配）
-          for (const subExt of subtitleExtensions) {
-            const subtitlePath = path.join(folderPath, baseName + subExt)
-            try {
-              await fs.promises.access(subtitlePath)
-              subtitleFiles[filePath] = subtitlePath
+          // 检查基础名是否匹配
+          if (fileInfo.baseName.toLowerCase() === videoInfo.baseName.toLowerCase()) {
+            // 检查是否是字幕文件扩展名（大小写不敏感）
+            if (subtitleExtensions.includes(fileInfo.ext)) {
+              subtitleFiles[videoFile] = fileInfo.path
               break // 找到匹配的字幕文件就停止
-            } catch {
-              // 文件不存在，继续查找
             }
           }
         }
