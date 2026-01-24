@@ -65,7 +65,7 @@ const navigateTo = (path: string) => {
                 <span class="card-title">视频管理</span>
               </n-space>
             </template>
-            <p>管理您的本地和云端视频素材，支持批量导入与整理。</p>
+            <p>管理您的本地视频素材，支持批量导入与整理。</p>
           </n-card>
         </n-gi>
         <n-gi v-if="hasValidApiKey">

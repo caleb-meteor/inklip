@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { NButton, NSpace, NInput, NIcon } from 'naive-ui'
 import { SearchOutline, HomeOutline } from '@vicons/ionicons5'
 import type { DictItem } from '../api/dict'

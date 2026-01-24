@@ -51,3 +51,7 @@ resources/darwin-arm64/
 resources/darwin-x64/
 resources/win32-x64/
 resources/*.zip
+
+.cursor
+
+.shared

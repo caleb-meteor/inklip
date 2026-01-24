@@ -1,6 +1,6 @@
 import type { ForgeConfig } from '@electron-forge/shared-types'
 import { MakerZIP } from '@electron-forge/maker-zip'
-import { MakerWix } from '@electron-forge/maker-wix'
+import { MakerAppX } from '@electron-forge/maker-appx'
 import path from 'path'
 import fs from 'fs-extra'
 
@@ -40,32 +40,11 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerZIP({}, ['darwin', 'win32']),
-    new MakerWix({
-      // 应用名称
-      name: '影氪',
-      // 简短名称（无空格，用于路径等）
-      shortName: 'inklip',
-      // 制造商名称
-      manufacturer: 'Inklip',
-      // 应用描述
-      description: '影氪 - 智能视频编辑工具',
-      // 安装包图标
-      icon: './resources/icon.ico',
-      // 安装语言：2052 = 简体中文
-      language: 2052,
-      // 安装程序 UI 配置
-      ui: {
-        chooseDirectory: true // 允许用户选择安装目录
-      },
-      // 功能配置
-      features: {
-        autoUpdate: false, // 使用 electron-updater 处理更新
-        autoLaunch: false // 不自动启动
-      },
-      // 开始菜单文件夹名称
-      shortcutFolderName: '影氪',
-      // Program Files 下的文件夹名称
-      programFilesFolderName: 'Inklip'
+    new MakerAppX({
+      publisher: 'CN=Inklip',
+      packageName: 'Inklip',
+      packageDisplayName: '影氪',
+      packageDescription: '影氪 - 智能视频工具'
     })
   ],
   hooks: {
