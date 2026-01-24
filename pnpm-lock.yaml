@@ -50,6 +50,9 @@ importers:
       '@electron-forge/maker-dmg':
         specifier: ^7.11.1
         version: 7.11.1
+      '@electron-forge/maker-msix':
+        specifier: ^7.11.1
+        version: 7.11.1
       '@electron-forge/maker-squirrel':
         specifier: ^7.11.1
         version: 7.11.1
@@ -242,6 +245,10 @@ packages:
     resolution: {integrity: sha512-7zs5/Ewz1PcOl4N1102stFgBiFGWxU18+UPFUSd/fgf9MErBl4HBWuVNMIHyeJ/56rdfkcmTxTqE+9TBEYrZcg==}
     engines: {node: '>= 16.4.0'}
 
+  '@electron-forge/maker-msix@7.11.1':
+    resolution: {integrity: sha512-i9+Dp+B0mKscIsaVYhxeaXurKaT4K7geqwzDJUOZlOTfSmID6XIgBq7IINONLg8f/CGp+3rdQqHbn551bNsNQw==}
+    engines: {node: '>= 16.4.0'}
+
   '@electron-forge/maker-squirrel@7.11.1':
     resolution: {integrity: sha512-oSg7fgad6l+X0DjtRkSpMzB0AjzyDO4mb2gzM4kTodkP1ADeiMi08bxy0ZeCESqLm5+fG72cAPmEr3BAPvI1yw==}
     engines: {node: '>= 16.4.0'}
@@ -344,8 +351,8 @@ packages:
     resolution: {integrity: sha512-F+nKc0xW+kVbBRhFzaMgPy3KwmuNTYX1fx6+FxxoSnNgwYX6LD7AKBTWkU0MQ6IBoe7dz069CNkR673sPAgkCQ==}
     engines: {node: '>=14'}
 
-  '@electron/node-gyp@https://codeload.github.com/electron/node-gyp/tar.gz/06b29aafb7708acef8b3669835c8a7857ebc92d2':
-    resolution: {tarball: https://codeload.github.com/electron/node-gyp/tar.gz/06b29aafb7708acef8b3669835c8a7857ebc92d2}
+  '@electron/node-gyp@git+https://git@github.com:electron/node-gyp.git#06b29aafb7708acef8b3669835c8a7857ebc92d2':
+    resolution: {commit: 06b29aafb7708acef8b3669835c8a7857ebc92d2, repo: git@github.com:electron/node-gyp.git, type: git}
     version: 10.2.0-electron.1
     engines: {node: '>=12.13.0'}
     hasBin: true
@@ -1498,6 +1505,10 @@ packages:
     resolution: {integrity: sha512-Mti+f9lpJNcwF4tWV8/OrTTtF1gZi+f8FqlyAdouralcFWFQWF2+NgCHShjkCb+IFBLq9buZwE1xckQU4peSuQ==}
     engines: {node: '>=4'}
 
+  chalk@3.0.0:
+    resolution: {integrity: sha512-4D3B6Wf41KOYRFdszmDqMCGq5VV/uMAB273JILmO+3jAlh8X4qDtdtgCR3fxtbLEMzSx22QdhnDcJvu2u1fVwg==}
+    engines: {node: '>=8'}
+
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
     engines: {node: '>=10'}
@@ -1753,6 +1764,9 @@ packages:
     peerDependenciesMeta:
       '@swc/core':
         optional: true
+
+  electron-windows-msix@2.0.4:
+    resolution: {integrity: sha512-rYRrCWT7Hey52995JNgtmXKwG0saTTVPRd4KymeejOdIgNrSP5hHC5nSmVyClOICGbc5/vL4U5A2Am6L/5t0lw==}
 
   electron-windows-store@2.1.0:
     resolution: {integrity: sha512-+kBL20yeY2ahJxvZ6dDtE3gPqWLZI5Glnx7VBLA1cGXagS82PZTFueuvDyLGLcKtI48lhPhW9QmdZ9omh+yKTA==}
@@ -3550,6 +3564,9 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  xml-escape@1.1.0:
+    resolution: {integrity: sha512-B/T4sDK8Z6aUh/qNr7mjKAwwncIljFuUP+DO/D5hloYFj+90O88z8Wf7oSucZTHxBAsC1/CTP4rtx/x1Uf72Mg==}
+
   xml-name-validator@4.0.0:
     resolution: {integrity: sha512-ICP2e+jsHvAj2E2lIHxa5tjXRlKDJo4IdvPvCXbXQGdzSfmSpNVyIKMvoZHjDY9DP0zV17iI85o90vRFXNccRw==}
     engines: {node: '>=12'}
@@ -3853,6 +3870,19 @@ snapshots:
       - bluebird
       - supports-color
 
+  '@electron-forge/maker-msix@7.11.1':
+    dependencies:
+      '@electron-forge/core-utils': 7.11.1
+      '@electron-forge/maker-base': 7.11.1
+      '@electron-forge/shared-types': 7.11.1
+      cross-spawn: 7.0.6
+      electron-windows-msix: 2.0.4
+      fs-extra: 10.1.0
+      parse-author: 2.0.0
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+
   '@electron-forge/maker-squirrel@7.11.1':
     dependencies:
       '@electron-forge/maker-base': 7.11.1
@@ -4043,7 +4073,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@electron/node-gyp@https://codeload.github.com/electron/node-gyp/tar.gz/06b29aafb7708acef8b3669835c8a7857ebc92d2':
+  '@electron/node-gyp@git+https://git@github.com:electron/node-gyp.git#06b29aafb7708acef8b3669835c8a7857ebc92d2':
     dependencies:
       env-paths: 2.2.1
       exponential-backoff: 3.1.3
@@ -4106,7 +4136,7 @@ snapshots:
 
   '@electron/rebuild@3.7.2':
     dependencies:
-      '@electron/node-gyp': https://codeload.github.com/electron/node-gyp/tar.gz/06b29aafb7708acef8b3669835c8a7857ebc92d2
+      '@electron/node-gyp': git+https://git@github.com:electron/node-gyp.git#06b29aafb7708acef8b3669835c8a7857ebc92d2
       '@malept/cross-spawn-promise': 2.0.0
       chalk: 4.1.2
       debug: 4.4.3
@@ -5223,6 +5253,11 @@ snapshots:
       supports-color: 5.5.0
     optional: true
 
+  chalk@3.0.0:
+    dependencies:
+      ansi-styles: 4.3.0
+      supports-color: 7.2.0
+
   chalk@4.1.2:
     dependencies:
       ansi-styles: 4.3.0
@@ -5492,6 +5527,17 @@ snapshots:
       magic-string: 0.30.21
       picocolors: 1.1.1
       vite: 7.3.1(@types/node@22.19.7)(jiti@2.6.1)(terser@5.46.0)
+    transitivePeerDependencies:
+      - supports-color
+
+  electron-windows-msix@2.0.4:
+    dependencies:
+      '@electron/windows-sign': 1.2.2
+      '@malept/cross-spawn-promise': 2.0.0
+      chalk: 3.0.0
+      debug: 4.4.3
+      fs-extra: 11.3.3
+      xml-escape: 1.1.0
     transitivePeerDependencies:
       - supports-color
 
@@ -7402,6 +7448,8 @@ snapshots:
       strip-ansi: 7.1.2
 
   wrappy@1.0.2: {}
+
+  xml-escape@1.1.0: {}
 
   xml-name-validator@4.0.0: {}
 

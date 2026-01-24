@@ -37,6 +37,7 @@ const handleClose = (): void => {
 
 <template>
   <n-modal
+    :show="props.show"
     :mask-closable="!props.uploading"
     :closable="!props.uploading"
     preset="card"
