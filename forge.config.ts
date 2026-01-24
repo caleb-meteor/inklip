@@ -1,6 +1,6 @@
 import type { ForgeConfig } from '@electron-forge/shared-types'
 import { MakerZIP } from '@electron-forge/maker-zip'
-import { MakerAppX } from '@electron-forge/maker-appx'
+import { MakerSquirrel } from '@electron-forge/maker-squirrel'
 import path from 'path'
 import fs from 'fs-extra'
 
@@ -42,11 +42,10 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerZIP({}, ['darwin', 'win32']),
-    new MakerAppX({
-      publisher: 'CN=Inklip',
-      packageName: 'Inklip',
-      packageDisplayName: '影氪',
-      packageDescription: '影氪 - 智能视频工具'
+    new MakerSquirrel({
+      // name: 'Inklip', // Squirrel defaults to packagerConfig.name
+      setupIcon: './resources/icon.ico',
+      exe: 'inklip.exe'
     })
   ],
   hooks: {
