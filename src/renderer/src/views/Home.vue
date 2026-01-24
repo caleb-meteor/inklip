@@ -1,15 +1,38 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { NButton, NSpace, NH1, NText, NCard, NGrid, NGi, NIcon } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import { Videocam, Cut, Settings } from '@vicons/ionicons5'
-import { logout } from '../router'
 
 const router = useRouter()
 
-const handleLogout = () => {
-  logout()
-  router.push('/login')
+const DEFAULT_API_KEY = 'f9a3d6c2b8e4kqwxml5r0h1yvupnjsiotgafm8e6c2d9b7a4'
+
+const hasApiKey = ref(!!localStorage.getItem('apiKey'))
+
+// 判断是否使用了有效的 API Key（不是默认值）
+const hasValidApiKey = computed(() => {
+  const apiKey = localStorage.getItem('apiKey')
+  return apiKey && apiKey !== DEFAULT_API_KEY
+})
+
+const checkApiKey = () => {
+  hasApiKey.value = !!localStorage.getItem('apiKey')
 }
+
+// 监听自定义事件，以便在 Settings 页面更新 apiKey 时也能响应
+const handleApiKeyChanged = () => {
+  checkApiKey()
+}
+
+onMounted(() => {
+  checkApiKey()
+  window.addEventListener('apiKeyChanged', handleApiKeyChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('apiKeyChanged', handleApiKeyChanged)
+})
 
 const navigateTo = (path: string) => {
   router.push(path)
@@ -27,12 +50,11 @@ const navigateTo = (path: string) => {
           </template>
           设置
         </n-button>
-        <n-button secondary type="error" size="small" @click="handleLogout"> 退出登录 </n-button>
       </n-space>
     </div>
 
     <div class="content">
-      <n-grid x-gap="24" y-gap="24" :cols="2">
+      <n-grid x-gap="24" y-gap="24" :cols="hasValidApiKey ? 2 : 1">
         <n-gi>
           <n-card hoverable class="feature-card" @click="navigateTo('/video-manager')">
             <template #header>
@@ -46,7 +68,7 @@ const navigateTo = (path: string) => {
             <p>管理您的本地和云端视频素材，支持批量导入与整理。</p>
           </n-card>
         </n-gi>
-        <n-gi>
+        <n-gi v-if="hasValidApiKey">
           <n-card hoverable class="feature-card" @click="navigateTo('/smart-editor')">
             <template #header>
               <n-space align="center">

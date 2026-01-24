@@ -34,11 +34,9 @@ const initConnection = (port: number): void => {
   setBaseUrl(baseUrl)
   wsStore.setBaseUrl(`ws://127.0.0.1:${port}/api/ws`)
 
-  // Reconnect WebSocket if token exists
-  if (localStorage.getItem('token')) {
-    wsStore.disconnect()
-    wsStore.connect()
-  }
+  // 连接 WebSocket（不再需要 apiKey 检查）
+  wsStore.disconnect()
+  wsStore.connect()
 }
 
 onMounted(async () => {
@@ -66,7 +64,7 @@ onMounted(async () => {
       <n-dialog-provider>
         <div class="app-wrapper">
           <RouterView />
-          <Footer v-if="route.name !== 'Splash' && route.name !== 'Login'" />
+          <Footer v-if="route.name !== 'Splash'" />
         </div>
       </n-dialog-provider>
     </n-message-provider>

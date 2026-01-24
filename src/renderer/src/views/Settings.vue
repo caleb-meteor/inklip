@@ -1,17 +1,40 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NCard, NInput, NSpace, NText, NMessageProvider, useMessage, NAlert, NIcon, NH2 } from 'naive-ui'
 import { Settings as SettingsIcon } from '@vicons/ionicons5'
-import { saveConfig, getConfig } from '../api/config'
+import { saveConfig, getConfig, setApiKey, getApiKey, validateApiKey } from '../api/config'
+import { useWebsocketStore } from '../stores/websocket'
 
 const router = useRouter()
 const message = useMessage()
+const wsStore = useWebsocketStore()
 
 const videoDataDirectory = ref('')
+const apiKey = ref('')
+const hasApiKey = ref(false)
+const isEditingApiKey = ref(false)
 const loading = ref(false)
 const migrating = ref(false)
 const migrateProgress = ref('')
+const apiKeyRefresh = ref(0)
+
+// 计算掩盖后的 API Key 显示值
+const maskedApiKey = computed(() => {
+  // 添加刷新依赖，确保localStorage变化时能重新计算
+  apiKeyRefresh.value
+  if (!hasApiKey.value) {
+    return ''
+  }
+  const savedApiKey = localStorage.getItem('apiKey')
+  if (!savedApiKey) {
+    return ''
+  }
+  // 显示前 4 位 + 8 个 * + 后 4 位
+  const first4 = savedApiKey.slice(0, 4)
+  const last4 = savedApiKey.slice(-4)
+  return first4 + '********' + last4
+})
 
 const loadVideoDataDirectory = async () => {
   try {
@@ -92,8 +115,73 @@ const selectDirectory = async () => {
   }
 }
 
+const loadApiKey = async (): Promise<void> => {
+  const savedApiKey = localStorage.getItem('apiKey')
+  if (savedApiKey) {
+    hasApiKey.value = true
+    apiKey.value = ''
+  } else {
+    // 如果本地没有 apiKey，尝试从后端获取
+    try {
+      const response = await getApiKey()
+      if (response.api_key) {
+        // 保存到本地存储
+        localStorage.setItem('apiKey', response.api_key)
+        hasApiKey.value = true
+        apiKey.value = ''
+        console.log('[Settings] 从后端获取 API Key 成功')
+      } else {
+        hasApiKey.value = false
+        apiKey.value = ''
+      }
+    } catch (error) {
+      // 如果获取失败，则 apiKey 为空
+      console.debug('[Settings] 无法从后端获取 API Key:', error)
+      hasApiKey.value = false
+      apiKey.value = ''
+    }
+  }
+}
+
+const saveApiKey = (): void => {
+  const apiKeyValue = apiKey.value.trim()
+  if (apiKeyValue) {
+    loading.value = true
+    // 先验证 API Key 是否有效
+    validateApiKey(apiKeyValue)
+      .then((response) => {
+        if (!response.status) {
+          message.error('API Key 验证失败，请检查密钥是否正确')
+          return
+        }
+        // 验证成功，保存 API Key
+        return setApiKey(apiKeyValue)
+      })
+      .then(() => {
+        // 保存到本地存储
+        localStorage.setItem('apiKey', apiKeyValue)
+        message.success('API Key 已验证并保存')
+        hasApiKey.value = true
+        isEditingApiKey.value = false
+        apiKey.value = ''
+        // 触发刷新以更新 maskedApiKey
+        apiKeyRefresh.value++
+        // 触发自定义事件，通知其他组件 apiKey 已更新
+        window.dispatchEvent(new CustomEvent('apiKeyChanged', { detail: { hasApiKey: true } }))
+      })
+      .catch((error) => {
+        console.error('验证或设置 API Key 失败:', error)
+        message.error(`操作失败: ${(error as Error).message}`)
+      })
+      .finally(() => {
+        loading.value = false
+      })
+  }
+}
+
 onMounted(() => {
   loadVideoDataDirectory()
+  loadApiKey()
 })
 </script>
 
@@ -120,6 +208,65 @@ onMounted(() => {
               </div>
             
           </n-alert>
+
+          <div class="setting-item">
+            <div class="setting-label">
+              <n-text strong>API Key</n-text>
+            </div>
+            <n-space vertical style="width: 100%">
+              <div v-if="hasApiKey && !isEditingApiKey" class="api-key-display">
+                <n-input
+                  :value="maskedApiKey"
+                  readonly
+                  type="text"
+                  style="width: 100%"
+                />
+              </div>
+              <n-input
+                v-if="!hasApiKey || isEditingApiKey"
+                v-model:value="apiKey"
+                type="password"
+                placeholder="请输入 API Key"
+                show-password-on="click"
+                style="width: 100%"
+                @keyup.enter="saveApiKey"
+              />
+              <n-space>
+                <n-button
+                  v-if="!hasApiKey && !isEditingApiKey"
+                  type="primary"
+                  @click="isEditingApiKey = true"
+                >
+                  设置
+                </n-button>
+                <n-button
+                  v-if="isEditingApiKey"
+                  type="primary"
+                  :loading="loading"
+                  :disabled="!apiKey.trim()"
+                  @click="saveApiKey"
+                >
+                  保存
+                </n-button>
+                <n-button
+                  v-if="hasApiKey && !isEditingApiKey"
+                  type="primary"
+                  @click="isEditingApiKey = true"
+                >
+                  修改
+                </n-button>
+                <n-button
+                  v-if="isEditingApiKey"
+                  @click="() => { isEditingApiKey = false; apiKey = ''; }"
+                >
+                  取消
+                </n-button>
+              </n-space>
+              <n-text depth="3" style="font-size: 12px">
+                {{ hasApiKey && !isEditingApiKey ? '已保存 API Key' : '输入 API Key 后点击保存' }}
+              </n-text>
+            </n-space>
+          </div>
 
           <div class="setting-item">
             <div class="setting-label">

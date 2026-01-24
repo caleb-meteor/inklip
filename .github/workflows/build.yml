@@ -142,8 +142,8 @@ jobs:
             # macOS: 查找 ZIP 文件 (Electron Forge MakerZIP 输出)
             find out/make -type f -name "*.zip" -exec cp {} collected-artifacts/ \;
           elif [ "${{ matrix.platform }}" = "win32" ]; then
-            # Windows: 查找 ZIP 文件
-            find out/make -type f -name "*.zip" -exec cp {} collected-artifacts/ \;
+            # Windows: 查找 ZIP 和 MSI 文件
+            find out/make -type f \( -name "*.zip" -o -name "*.msi" \) -exec cp {} collected-artifacts/ \;
           fi
           
           # 验证是否收集到文件
@@ -201,6 +201,15 @@ jobs:
               for file in "$artifact_dir"*.zip; do
                 if [ -f "$file" ]; then
                   new_filename="Inklip-${VERSION}-${platform_arch}.zip"
+                  cp "$file" "release-files/$new_filename"
+                  echo "Prepared: $new_filename"
+                fi
+              done
+              
+              # 复制所有 MSI 文件并重命名 (Windows 平台)
+              for file in "$artifact_dir"*.msi; do
+                if [ -f "$file" ]; then
+                  new_filename="Inklip-${VERSION}-${platform_arch}.msi"
                   cp "$file" "release-files/$new_filename"
                   echo "Prepared: $new_filename"
                 fi

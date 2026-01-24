@@ -75,6 +75,7 @@ import HistoryItemCard from '../components/HistoryItemCard.vue'
 import VideoPreviewPlayer from '../components/VideoPreviewPlayer.vue'
 import VideoStatusOverlay from '../components/VideoStatusOverlay.vue'
 import { useWebsocketStore } from '../stores/websocket'
+import { MAX_SOURCE_VIDEO_DURATION, MAX_OUTPUT_VIDEO_DURATION, checkSourceVideoDuration, formatDuration } from '../constants/video'
 
 const wsStore = useWebsocketStore()
 
@@ -372,9 +373,25 @@ const durationError = computed(() => {
   return ''
 })
 
+const outputDurationTip = computed(() => {
+  if (!maxDuration.value) return ''
+  if (maxDuration.value > MAX_OUTPUT_VIDEO_DURATION) {
+    return `输出视频最长 ${Math.floor(MAX_OUTPUT_VIDEO_DURATION / 60)} 分钟，您的最大时长设置超过了限制`
+  }
+  return `输出视频最长 ${Math.floor(MAX_OUTPUT_VIDEO_DURATION / 60)} 分钟`
+})
+
 const handleStartSmartCut = async (prompt?: string, min?: number, max?: number): Promise<void> => {
   if (!selectedVideoIds.value.length) {
     message.warning('请先选择要剪辑的视频')
+    return
+  }
+
+  // 验证源视频总时长
+  const total = totalSelectedDuration.value
+  const sourceDurationError = checkSourceVideoDuration(Math.floor(total))
+  if (sourceDurationError) {
+    message.error(sourceDurationError)
     return
   }
 
@@ -387,7 +404,6 @@ const handleStartSmartCut = async (prompt?: string, min?: number, max?: number):
     return
   }
 
-  const total = totalSelectedDuration.value
   if (outMax > total) {
     message.error(`最大时长 (${outMax}s) 不能超过视频总时长 (${Math.floor(total)}s)`)
     return
@@ -681,8 +697,11 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
                   <span style="font-size: 16px; font-weight: 500">
                     已选择 {{ selectedVideos.length }}/3 个视频
                     <span class="header-total-duration">
-                      (当前总计 {{ Math.floor(totalSelectedDuration) }}s)
+                      (当前总计 {{ Math.floor(totalSelectedDuration) }}s / 最大 {{ Math.floor(MAX_SOURCE_VIDEO_DURATION) }}s)
                     </span>
+                  </span>
+                  <span v-if="checkSourceVideoDuration(Math.floor(totalSelectedDuration))" style="color: #d03050; font-size: 12px; margin-left: 16px;">
+                    ⚠️ {{ checkSourceVideoDuration(Math.floor(totalSelectedDuration)) }}
                   </span>
                 </div>
 
@@ -749,6 +768,9 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
                         {{ durationError }}
                       </div>
                     </Transition>
+                    <div class="form-info-hint" :class="{ 'form-warning-hint': maxDuration > MAX_OUTPUT_VIDEO_DURATION }">
+                      {{ outputDurationTip }}
+                    </div>
                   </n-form-item>
 
                   <!-- Product Field -->
@@ -1223,6 +1245,26 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
   font-size: 12px;
   color: #ff6b6b;
   margin-top: 4px;
+}
+
+.form-info-hint {
+  font-size: 12px;
+  color: #ff9800;
+  margin-top: 4px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form-info-hint::before {
+  content: "⚠️";
+  font-size: 14px;
+}
+
+.form-warning-hint {
+  color: #d03050 !important;
+  font-weight: 600;
 }
 
 .custom-edit-area {

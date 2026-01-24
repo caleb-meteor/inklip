@@ -261,7 +261,7 @@ const refreshAllData = (): void => {
   fetchProducts()
   
   // 检查并重新连接 WebSocket
-  if (!wsStore.connected && localStorage.getItem('token')) {
+  if (!wsStore.connected) {
     console.log('[VideoManager] WebSocket 未连接，尝试重新连接')
     wsStore.connect()
   }

@@ -92,10 +92,11 @@ export class WebSocketClient {
 
   private createConnection(): void {
     try {
+      console.log('[WebSocketClient] Creating connection to:', this.url)
       this.ws = new WebSocket(this.url)
       this.setupEventHandlers()
     } catch (error) {
-      console.error('Failed to create WebSocket:', error)
+      console.error('[WebSocketClient] Failed to create WebSocket:', error)
       this.handleError(error as Event)
     }
   }

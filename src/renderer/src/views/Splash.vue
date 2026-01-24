@@ -140,12 +140,7 @@ onMounted(async () => {
     status.value = '准备就绪'
 
     setTimeout(() => {
-      const token = localStorage.getItem('token')
-      if (token) {
-        router.push('/home')
-      } else {
-        router.push('/login')
-      }
+      router.push('/home')
     }, 500)
   } catch (e) {
     error.value = (e as Error).message

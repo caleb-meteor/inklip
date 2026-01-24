@@ -51,23 +51,6 @@ export function getVideosApi(): Promise<VideoItem[]> {
 }
 
 /**
- * Upload a video file by its local path
- * @param path The absolute path of the video file
- * @param categoryIds Optional list of category IDs to assign to the video
- * @returns Promise with upload response
- */
-export function uploadVideoApi(path: string, categoryIds?: number[]): Promise<VideoUploadResponse> {
-  return request({
-    url: '/api/video/upload',
-    method: 'post',
-    data: {
-      video_path: path,
-      category_ids: categoryIds
-    }
-  })
-}
-
-/**
  * Upload multiple video files by their local paths
  * @param paths Array of absolute paths of video files
  * @param categoryIds Optional list of category IDs to assign to all videos

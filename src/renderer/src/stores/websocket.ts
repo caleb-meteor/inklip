@@ -87,22 +87,10 @@ export const useWebsocketStore = defineStore('websocket', () => {
   }
 
   /**
-   * 构建带 token 的 WebSocket URL
+   * 构建 WebSocket URL
    */
-  const buildUrlWithToken = (url: string): string | null => {
-    const token = localStorage.getItem('token')
-    if (!token) {
-      return null
-    }
-
-    try {
-      const urlObj = new URL(url)
-      urlObj.searchParams.set('token', token)
-      return urlObj.toString()
-    } catch (error) {
-      console.error('Failed to build WebSocket URL with token:', error)
-      return null
-    }
+  const buildUrlWithApiKey = (url: string): string => {
+    return url
   }
 
   /**
@@ -115,24 +103,20 @@ export const useWebsocketStore = defineStore('websocket', () => {
       return
     }
 
-    const token = localStorage.getItem('token')
-    if (!token) {
-      console.log('WebSocket connection skipped: no authentication token')
-      return
-    }
-
     // 断开现有连接
     disconnect()
 
-    // 保存基础 URL（不带 token）
+    // 保存基础 URL
     baseUrlWithoutToken = targetUrl
 
-    // 在 URL 中添加 token 查询参数
-    const urlWithToken = buildUrlWithToken(targetUrl)
-    if (!urlWithToken) {
-      console.error('Failed to build WebSocket URL with token')
+    // 构建 WebSocket URL
+    const urlWithApiKey = buildUrlWithApiKey(targetUrl)
+    if (!urlWithApiKey) {
+      console.error('Failed to build WebSocket URL')
       return
     }
+
+    console.log('[WebSocket] URL:', urlWithApiKey)
 
     // 创建消息处理器
     messageHandler = new WebSocketMessageHandler({
@@ -239,10 +223,10 @@ export const useWebsocketStore = defineStore('websocket', () => {
     })
 
     // 创建 WebSocket 客户端
-    wsClient = new WebSocketClient(urlWithToken, {
+    wsClient = new WebSocketClient(urlWithApiKey, {
       onOpen: () => {
         connected.value = true
-        console.log('WebSocket connected with token in URL')
+        console.log('[WebSocket] Connected successfully')
         // 清除重连定时器
         if (reconnectTimeout) {
           clearTimeout(reconnectTimeout)
@@ -251,13 +235,16 @@ export const useWebsocketStore = defineStore('websocket', () => {
       },
       onClose: (event) => {
         connected.value = false
-        // 如果不是正常关闭，并且应该重连，则在 store 层处理重连（使用最新的 token）
+        console.log('[WebSocket] Connection closed:', { code: event.code, reason: event.reason })
+        // 如果不是正常关闭（code 1000），并且有基础 URL，则触发重连
         if (event.code !== 1000 && baseUrlWithoutToken) {
+          console.log('[WebSocket] Scheduling reconnection...')
           handleReconnect()
         }
       },
       onError: () => {
         connected.value = false
+        console.error('[WebSocket] Connection error occurred')
       },
       onMessage: (data) => {
         messageHandler?.handle(data)
@@ -270,7 +257,7 @@ export const useWebsocketStore = defineStore('websocket', () => {
   }
 
   /**
-   * 处理重连逻辑（使用最新的 token）
+   * 处理重连逻辑
    */
   const handleReconnect = (): void => {
     // 清除现有的重连定时器
@@ -279,39 +266,25 @@ export const useWebsocketStore = defineStore('websocket', () => {
       reconnectTimeout = null
     }
 
-    // 检查 token 是否存在
-    const hasToken = !!localStorage.getItem('token')
-    if (!hasToken) {
-      console.log('WebSocket reconnection skipped: no authentication token')
-      return
-    }
-
-    // 延迟重连，使用最新的 token
+    // 延迟重连
+    console.log('[WebSocket] Will attempt to reconnect in 2 seconds...')
     reconnectTimeout = setTimeout(() => {
       if (baseUrlWithoutToken) {
-        console.log('Attempting to reconnect WebSocket with latest token...')
+        console.log('[WebSocket] Attempting to reconnect...')
         connect(baseUrlWithoutToken)
       }
     }, 2000) // 2秒后重连
   }
 
   /**
-   * 重新认证：使用最新的 token 重新连接
-   * 当 token 更新时调用此方法
+   * 重新连接
+   * 当需要重新连接时调用此方法
    */
   const reauthenticate = (): void => {
-    if (!connected.value) {
-      return
-    }
-
-    const token = localStorage.getItem('token')
-    if (token) {
-      // token 更新时重新连接，使用新的 token
-      console.log('WebSocket reauthenticating with updated token')
-      connect()
-    } else {
-      console.warn('WebSocket reauthentication skipped: no token found')
-      disconnect()
+    console.log('[WebSocket] Reauthenticating, reconnecting...')
+    disconnect()
+    if (baseUrlWithoutToken) {
+      connect(baseUrlWithoutToken)
     }
   }
 
@@ -345,6 +318,7 @@ export const useWebsocketStore = defineStore('websocket', () => {
     reauthenticate,
     updateVideoProgress,
     clearVideoProgress,
-    getVideoProgress
+    getVideoProgress,
+    buildUrlWithApiKey
   }
 })

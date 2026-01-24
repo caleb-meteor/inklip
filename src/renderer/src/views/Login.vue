@@ -15,7 +15,6 @@ import {
 } from 'naive-ui'
 
 import { useRouter } from 'vue-router'
-import { login } from '../router'
 import { loginApi } from '../api/login'
 import { useWebsocketStore } from '../stores/websocket'
 
@@ -42,7 +41,6 @@ const handleLogin = (e: MouseEvent): void => {
           localStorage.setItem('token', data.token)
           localStorage.setItem('userInfo', JSON.stringify(data.user))
 
-          login() // Update auth state
           wsStore.connect()
           router.push('/home')
         })

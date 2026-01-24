@@ -42,18 +42,6 @@ export function getDictsByTypeApi(type: string): Promise<DictItem[]> {
 }
 
 /**
- * Get dict item by id
- * @param id Dict id
- * @returns Promise with dict item
- */
-export function getDictByIdApi(id: number): Promise<DictItem> {
-  return request({
-    url: `/api/dict/${id}`,
-    method: 'get'
-  })
-}
-
-/**
  * Update dict item
  * @param id Dict id
  * @param name Optional new name
