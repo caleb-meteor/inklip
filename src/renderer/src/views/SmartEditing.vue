@@ -23,23 +23,15 @@ import {
   useMessage,
   useDialog
 } from 'naive-ui'
-import { ChevronBack, AddOutline, Cut, CloseOutline, SearchOutline, CreateOutline } from '@vicons/ionicons5'
-interface FileItem {
-  id: number
-  name: string
-  type: 'video' | 'image' | 'document' | 'audio'
-  size: string
-  modified: string
-  path: string
-  parentId: number | null
-  cover?: string
-  duration?: number
-  width?: number
-  height?: number
-  status?: number
-  categories?: Array<{ id: number; name: string; type: string }>
-  imageError?: boolean
-}
+import {
+  ChevronBack,
+  AddOutline,
+  Cut,
+  CloseOutline,
+  SearchOutline,
+  CreateOutline
+} from '@vicons/ionicons5'
+import { FileItem } from '../types/video'
 
 interface HistoryItem {
   id: number
@@ -59,7 +51,6 @@ interface HistoryItem {
   imageError?: boolean
 }
 
-
 import {
   getVideosApi,
   smartCutApi,
@@ -75,7 +66,12 @@ import HistoryItemCard from '../components/HistoryItemCard.vue'
 import VideoPreviewPlayer from '../components/VideoPreviewPlayer.vue'
 import VideoStatusOverlay from '../components/VideoStatusOverlay.vue'
 import { useWebsocketStore } from '../stores/websocket'
-import { MAX_SOURCE_VIDEO_DURATION, MAX_OUTPUT_VIDEO_DURATION, checkSourceVideoDuration, formatDuration } from '../constants/video'
+import {
+  MAX_SOURCE_VIDEO_DURATION,
+  MAX_OUTPUT_VIDEO_DURATION,
+  checkSourceVideoDuration,
+  formatDuration
+} from '../constants/video'
 
 const wsStore = useWebsocketStore()
 
@@ -83,26 +79,11 @@ const router = useRouter()
 const allFiles = ref<FileItem[]>([])
 
 // 使用 composables
-const {
-  groups,
-  activeGroupId,
-  fetchGroups,
-  getFileGroup
-} = useVideoGroups()
+const { groups, activeGroupId, fetchGroups, getFileGroup } = useVideoGroups()
 
-const {
-  anchors,
-  activeAnchorId,
-  fetchAnchors,
-  getFileAnchor
-} = useVideoAnchors()
+const { anchors, activeAnchorId, fetchAnchors, getFileAnchor } = useVideoAnchors()
 
-const {
-  products,
-  activeProductId,
-  fetchProducts,
-  getFileProduct
-} = useVideoProducts()
+const { products, activeProductId, fetchProducts, getFileProduct } = useVideoProducts()
 
 const fetchVideos = async (): Promise<void> => {
   try {
@@ -158,34 +139,38 @@ const formData = computed(() => ({
 }))
 
 // 监听选择的视频，如果所有视频都有相同的产品，自动填充
-watch(selectedVideos, (videos) => {
-  if (videos.length === 0) {
-    selectedProductName.value = ''
-    return
-  }
-  
-  // 获取所有视频的产品
-  const productNames = videos
-    .map(video => {
-      const product = getFileProduct(video)
-      return product?.name || null
-    })
-    .filter(name => name !== null)
-  
-  // 如果所有视频都有产品，且产品相同，则自动填充
-  if (productNames.length === videos.length) {
-    const uniqueProductNames = [...new Set(productNames)]
-    if (uniqueProductNames.length === 1) {
-      selectedProductName.value = uniqueProductNames[0] as string
+watch(
+  selectedVideos,
+  (videos) => {
+    if (videos.length === 0) {
+      selectedProductName.value = ''
+      return
+    }
+
+    // 获取所有视频的产品
+    const productNames = videos
+      .map((video) => {
+        const product = getFileProduct(video)
+        return product?.name || null
+      })
+      .filter((name) => name !== null)
+
+    // 如果所有视频都有产品，且产品相同，则自动填充
+    if (productNames.length === videos.length) {
+      const uniqueProductNames = [...new Set(productNames)]
+      if (uniqueProductNames.length === 1) {
+        selectedProductName.value = uniqueProductNames[0] as string
+      } else {
+        // 如果产品不一致，清空选择
+        selectedProductName.value = ''
+      }
     } else {
-      // 如果产品不一致，清空选择
+      // 如果有视频没有产品，清空选择
       selectedProductName.value = ''
     }
-  } else {
-    // 如果有视频没有产品，清空选择
-    selectedProductName.value = ''
-  }
-}, { immediate: true })
+  },
+  { immediate: true }
+)
 
 const openSelector = async (): Promise<void> => {
   searchKeyword.value = '' // Clear search keyword when opening
@@ -233,7 +218,7 @@ const filteredVideoFiles = computed(() => {
 
   // 按分组筛选
   if (activeGroupId.value !== null) {
-    filtered = filtered.filter(file => {
+    filtered = filtered.filter((file) => {
       const group = getFileGroup(file)
       return group?.id === activeGroupId.value
     })
@@ -241,7 +226,7 @@ const filteredVideoFiles = computed(() => {
 
   // 按主播筛选
   if (activeAnchorId.value !== null) {
-    filtered = filtered.filter(file => {
+    filtered = filtered.filter((file) => {
       const anchor = getFileAnchor(file)
       return anchor?.id === activeAnchorId.value
     })
@@ -249,7 +234,7 @@ const filteredVideoFiles = computed(() => {
 
   // 按产品筛选
   if (activeProductId.value !== null) {
-    filtered = filtered.filter(file => {
+    filtered = filtered.filter((file) => {
       const product = getFileProduct(file)
       return product?.id === activeProductId.value
     })
@@ -309,27 +294,39 @@ const renderSchemeLabel = (option: SelectOption): VNodeChild => {
     })
   }
   if (option.value === 'custom') {
-    return h('div', {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        color: '#f59e0b'
-      }
-    }, [
-      h(NIcon, {
-        size: 16,
-        color: '#f59e0b'
-      }, {
-        default: () => h(CreateOutline)
-      }),
-      h('span', {
+    return h(
+      'div',
+      {
         style: {
-          color: '#f59e0b',
-          fontWeight: 500
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: '#f59e0b'
         }
-      }, option.label as string)
-    ])
+      },
+      [
+        h(
+          NIcon,
+          {
+            size: 16,
+            color: '#f59e0b'
+          },
+          {
+            default: () => h(CreateOutline)
+          }
+        ),
+        h(
+          'span',
+          {
+            style: {
+              color: '#f59e0b',
+              fontWeight: 500
+            }
+          },
+          option.label as string
+        )
+      ]
+    )
   }
   return option.label as string
 }
@@ -697,10 +694,14 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
                   <span style="font-size: 16px; font-weight: 500">
                     已选择 {{ selectedVideos.length }}/3 个视频
                     <span class="header-total-duration">
-                      (当前总计 {{ Math.floor(totalSelectedDuration) }}s / 最大 {{ Math.floor(MAX_SOURCE_VIDEO_DURATION) }}s)
+                      (当前总计 {{ Math.floor(totalSelectedDuration) }}s / 最大
+                      {{ Math.floor(MAX_SOURCE_VIDEO_DURATION) }}s)
                     </span>
                   </span>
-                  <span v-if="checkSourceVideoDuration(Math.floor(totalSelectedDuration))" style="color: #d03050; font-size: 12px; margin-left: 16px;">
+                  <span
+                    v-if="checkSourceVideoDuration(Math.floor(totalSelectedDuration))"
+                    style="color: #d03050; font-size: 12px; margin-left: 16px"
+                  >
                     ⚠️ {{ checkSourceVideoDuration(Math.floor(totalSelectedDuration)) }}
                   </span>
                 </div>
@@ -768,7 +769,10 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
                         {{ durationError }}
                       </div>
                     </Transition>
-                    <div class="form-info-hint" :class="{ 'form-warning-hint': maxDuration > MAX_OUTPUT_VIDEO_DURATION }">
+                    <div
+                      class="form-info-hint"
+                      :class="{ 'form-warning-hint': maxDuration > MAX_OUTPUT_VIDEO_DURATION }"
+                    >
                       {{ outputDurationTip }}
                     </div>
                   </n-form-item>
@@ -786,7 +790,7 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
 
                   <!-- Scheme Field -->
                   <n-form-item label="方案">
-                    <div style="width: 100%; display: flex; flex-direction: column;">
+                    <div style="width: 100%; display: flex; flex-direction: column">
                       <n-select
                         v-model:value="selectedSchemeValue"
                         :options="schemeOptions"
@@ -880,21 +884,17 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
       </div>
       <template v-else>
         <n-space vertical :size="12" style="margin-bottom: 16px">
-          <n-input
-            v-model:value="searchKeyword"
-            placeholder="搜索视频名称..."
-            clearable
-          >
+          <n-input v-model:value="searchKeyword" placeholder="搜索视频名称..." clearable>
             <template #prefix>
               <n-icon><SearchOutline /></n-icon>
             </template>
           </n-input>
-          
+
           <!-- 筛选器 -->
           <n-space :size="8">
             <n-select
               v-model:value="activeGroupId"
-              :options="groups.map(g => ({ label: g.name, value: g.id }))"
+              :options="groups.map((g) => ({ label: g.name, value: g.id }))"
               placeholder="分组"
               clearable
               size="small"
@@ -902,7 +902,7 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
             />
             <n-select
               v-model:value="activeAnchorId"
-              :options="anchors.map(a => ({ label: a.name, value: a.id }))"
+              :options="anchors.map((a) => ({ label: a.name, value: a.id }))"
               placeholder="主播"
               clearable
               size="small"
@@ -910,7 +910,7 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
             />
             <n-select
               v-model:value="activeProductId"
-              :options="products.map(p => ({ label: p.name, value: p.id }))"
+              :options="products.map((p) => ({ label: p.name, value: p.id }))"
               placeholder="产品"
               clearable
               size="small"
@@ -1077,7 +1077,6 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-
 .header-total-duration {
   font-weight: normal;
   font-size: 13px;
@@ -1091,7 +1090,6 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
   align-items: center;
   color: #aaa;
 }
-
 
 .compact-card-top {
   position: relative;
@@ -1155,7 +1153,6 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
   color: #63e2b7;
 }
 
-
 .video-list-compact {
   display: flex;
   justify-content: center;
@@ -1183,7 +1180,6 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
   border-color: #63e2b7;
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
 }
-
 
 .history-container {
   height: 100%;
@@ -1221,7 +1217,6 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
   font-size: 12px;
 }
 
-
 .form-wrapper {
   width: 100%;
   background: #2a2a2a;
@@ -1258,7 +1253,7 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
 }
 
 .form-info-hint::before {
-  content: "⚠️";
+  content: '⚠️';
   font-size: 14px;
 }
 
@@ -1351,7 +1346,6 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
   border-color: #63e2b7;
 }
 
-
 .file-item-modal.disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1361,5 +1355,4 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
 .file-item-modal.disabled:hover .icon-wrapper-modal {
   border-color: #333;
 }
-
 </style>
