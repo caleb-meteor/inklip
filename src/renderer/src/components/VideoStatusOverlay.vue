@@ -38,29 +38,28 @@ const getProcessingText = (): string => {
 
 <template>
   <!-- Pending State Overlay -->
-  <div
-    v-if="status === 'pending'"
-    class="status-overlay pending"
-    @click.stop
-    @dblclick.stop
-  >
+  <div v-if="status === 'pending'" class="status-overlay pending" @click.stop @dblclick.stop>
     <div class="status-content">
       <div class="status-label">等待处理...</div>
     </div>
   </div>
 
   <!-- Processing State Overlay -->
-  <div
-    v-if="status === 'processing'"
-    class="status-overlay processing"
-    @click.stop
-    @dblclick.stop
-  >
+  <div v-if="status === 'processing'" class="status-overlay processing" @click.stop @dblclick.stop>
     <div class="status-content">
       <div class="status-label">
         {{ getProcessingText() }}
       </div>
-      <div v-if="parseProgress && parseProgress.percentage !== undefined && parseProgress.percentage >= 0 && (videoStatus === 3 || (parseProgress.status && ['transcribing', 'parsing'].includes(parseProgress.status)))" class="progress-bar-container">
+      <div
+        v-if="
+          parseProgress &&
+          parseProgress.percentage !== undefined &&
+          parseProgress.percentage >= 0 &&
+          (videoStatus === 3 ||
+            (parseProgress.status && ['transcribing', 'parsing'].includes(parseProgress.status)))
+        "
+        class="progress-bar-container"
+      >
         <div class="progress-bar">
           <div
             class="progress-fill"

@@ -41,7 +41,7 @@ protocol.registerSchemesAsPrivileged([
 
 function createMenu(): void {
   const isMac = process.platform === 'darwin'
-  
+
   const template: Electron.MenuItemConstructorOptions[] = [
     // macOS 应用菜单
     ...(isMac
@@ -76,9 +76,7 @@ function createMenu(): void {
       ? [
           {
             label: '文件',
-            submenu: [
-              { role: 'quit' as const, label: '退出' }
-            ]
+            submenu: [{ role: 'quit' as const, label: '退出' }]
           }
         ]
       : []),
@@ -87,13 +85,11 @@ function createMenu(): void {
       ? [
           {
             label: '视图',
-            submenu: [
-              { role: 'toggleDevTools' as const, label: '切换开发者工具' },
-            ]
+            submenu: [{ role: 'toggleDevTools' as const, label: '切换开发者工具' }]
           }
         ]
       : []),
-    
+
     // 帮助菜单
     {
       role: 'help' as const,
@@ -227,7 +223,7 @@ app.on('window-all-closed', () => {
  */
 function decodeUrlPath(url: string): string {
   let pathPart = url.replace(/^media:\/\/+/, '')
-  
+
   try {
     pathPart = decodeURIComponent(pathPart)
   } catch (e) {
@@ -238,7 +234,7 @@ function decodeUrlPath(url: string): string {
       pathPart = driveLetter + ':/' + pathPart.substring(2)
     }
   }
-  
+
   return pathPart
 }
 
@@ -249,13 +245,13 @@ function normalizeFilePath(pathPart: string): string {
   if (process.platform === 'win32') {
     // Normalize to forward slashes first
     pathPart = pathPart.replace(/\\/g, '/')
-    
+
     // Fix missing colon in drive letter (e/data -> E:/data)
     if (pathPart.match(/^[A-Za-z]\//) && !pathPart.match(/^[A-Za-z]:\//)) {
       const driveLetter = pathPart[0].toUpperCase()
       pathPart = driveLetter + ':/' + pathPart.substring(2)
     }
-    
+
     // Convert to Windows native format (E:/path -> E:\path)
     if (pathPart.match(/^[A-Za-z]:\//)) {
       return pathPart.replace(/\//g, '\\')
@@ -279,7 +275,7 @@ function normalizeFilePath(pathPart: string): string {
  */
 function tryAlternativePaths(filePath: string): string | null {
   if (process.platform !== 'win32') return null
-  
+
   // Try uppercase drive letter
   if (filePath.match(/^[a-z]\\/)) {
     const altPath = filePath[0].toUpperCase() + filePath.substring(1)
@@ -288,7 +284,7 @@ function tryAlternativePaths(filePath: string): string | null {
       return altPath
     }
   }
-  
+
   // Try adding missing colon
   if (!filePath.match(/^[A-Za-z]:\\/) && filePath.match(/^[A-Za-z]\\/)) {
     const altPath = filePath[0].toUpperCase() + ':\\' + filePath.substring(2)
@@ -297,7 +293,7 @@ function tryAlternativePaths(filePath: string): string | null {
       return altPath
     }
   }
-  
+
   return null
 }
 
@@ -320,11 +316,11 @@ async function handleRangeRequest(
 ): Promise<Response | null> {
   const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/)
   if (!rangeMatch) return null
-  
+
   const start = parseInt(rangeMatch[1], 10)
   const end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : fileSize - 1
   const chunkSize = end - start + 1
-  
+
   // Validate range
   if (start < 0 || end >= fileSize || start > end) {
     return new Response('Range Not Satisfiable', {
@@ -334,13 +330,13 @@ async function handleRangeRequest(
       }
     })
   }
-  
+
   try {
     const fileHandle = await fs.promises.open(filePath, 'r')
     const buffer = Buffer.alloc(chunkSize)
     await fileHandle.read(buffer, 0, chunkSize, start)
     await fileHandle.close()
-    
+
     return new Response(buffer, {
       status: 206, // Partial Content
       headers: {
@@ -362,7 +358,7 @@ async function handleRangeRequest(
 async function handleMediaProtocol(request: Request): Promise<Response> {
   const pathPart = decodeUrlPath(request.url)
   let filePath = normalizeFilePath(pathPart)
-  
+
   // Log request (Chinese characters may appear as乱码 in console)
   console.log('[Main] Media protocol request:', {
     originalUrl: request.url,
@@ -370,7 +366,7 @@ async function handleMediaProtocol(request: Request): Promise<Response> {
     normalizedPath: filePath,
     exists: fs.existsSync(filePath)
   })
-  
+
   // Check if file exists, try alternatives if not
   if (!fs.existsSync(filePath)) {
     console.error('[Main] File not found:', filePath)
@@ -381,25 +377,25 @@ async function handleMediaProtocol(request: Request): Promise<Response> {
       return new Response('File not found', { status: 404 })
     }
   }
-  
+
   // Get file stats
   const stats = fs.statSync(filePath)
   if (!stats.isFile()) {
     return new Response('Not a file', { status: 400 })
   }
-  
+
   // Determine MIME type
   const mimeType = getMimeType(filePath)
   const fileSize = stats.size
   const isVideo = mimeType.startsWith('video/')
-  
+
   // Handle Range requests for videos
   const rangeHeader = request.headers.get('range')
   if (rangeHeader && isVideo) {
     const rangeResponse = await handleRangeRequest(filePath, rangeHeader, fileSize, mimeType)
     if (rangeResponse) return rangeResponse
   }
-  
+
   // Read entire file for images or full requests
   try {
     const fileBuffer = fs.readFileSync(filePath)
@@ -407,12 +403,12 @@ async function handleMediaProtocol(request: Request): Promise<Response> {
       'Content-Type': mimeType,
       'Content-Length': fileBuffer.length.toString()
     }
-    
+
     // Add Accept-Ranges header for videos
     if (isVideo) {
       headers['Accept-Ranges'] = 'bytes'
     }
-    
+
     return new Response(fileBuffer, { headers })
   } catch (error) {
     console.error('[Main] Error reading file:', error)

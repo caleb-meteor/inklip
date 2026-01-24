@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { NIcon, NEllipsis } from 'naive-ui'
 import { FolderOutline, PersonOutline, CubeOutline } from '@vicons/ionicons5'
 import VideoPreviewPlayer from './VideoPreviewPlayer.vue'
@@ -170,4 +169,3 @@ const emit = defineEmits<{
   color: #888;
 }
 </style>
-

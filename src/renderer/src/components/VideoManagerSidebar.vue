@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { NTree, NIcon, NDivider } from 'naive-ui'
 import { FilmOutline, ChevronDownOutline, ChevronForwardOutline } from '@vicons/ionicons5'
 import type { DictItem } from '../api/dict'
@@ -33,7 +33,7 @@ const isProductsExpanded = ref(true)
 
 // 分组树形数据
 const groupsTreeData = computed<TreeOption[]>(() => {
-  return props.groups.map(group => ({
+  return props.groups.map((group) => ({
     label: group.name,
     key: `group-${group.id}`,
     groupId: group.id,
@@ -43,7 +43,7 @@ const groupsTreeData = computed<TreeOption[]>(() => {
 
 // 主播树形数据
 const anchorsTreeData = computed<TreeOption[]>(() => {
-  return props.anchors.map(anchor => ({
+  return props.anchors.map((anchor) => ({
     label: anchor.name,
     key: `anchor-${anchor.id}`,
     anchorId: anchor.id,
@@ -53,7 +53,7 @@ const anchorsTreeData = computed<TreeOption[]>(() => {
 
 // 产品树形数据
 const productsTreeData = computed<TreeOption[]>(() => {
-  return props.products.map(product => ({
+  return props.products.map((product) => ({
     label: product.name,
     key: `product-${product.id}`,
     productId: product.id,
@@ -85,25 +85,25 @@ const productsSelectedKeys = computed(() => {
   return []
 })
 
-const handleAllVideosClick = () => {
+const handleAllVideosClick = (): void => {
   emit('menuSelect', 'all')
 }
 
-const handleGroupsSelect = (keys: Array<string | number>) => {
+const handleGroupsSelect = (keys: Array<string | number>): void => {
   if (keys.length > 0) {
     const key = String(keys[0])
     emit('menuSelect', key)
   }
 }
 
-const handleAnchorsSelect = (keys: Array<string | number>) => {
+const handleAnchorsSelect = (keys: Array<string | number>): void => {
   if (keys.length > 0) {
     const key = String(keys[0])
     emit('menuSelect', key)
   }
 }
 
-const handleProductsSelect = (keys: Array<string | number>) => {
+const handleProductsSelect = (keys: Array<string | number>): void => {
   if (keys.length > 0) {
     const key = String(keys[0])
     emit('menuSelect', key)
@@ -111,7 +111,7 @@ const handleProductsSelect = (keys: Array<string | number>) => {
 }
 
 // 使用 node-props 处理右键菜单
-function groupNodeProps({ option }: { option: TreeOption }) {
+function groupNodeProps({ option }: { option: TreeOption }): Record<string, unknown> {
   return {
     onContextmenu(e: MouseEvent): void {
       const key = String(option.key || '')
@@ -128,7 +128,7 @@ function groupNodeProps({ option }: { option: TreeOption }) {
   }
 }
 
-function anchorNodeProps({ option }: { option: TreeOption }) {
+function anchorNodeProps({ option }: { option: TreeOption }): Record<string, unknown> {
   return {
     onContextmenu(e: MouseEvent): void {
       const key = String(option.key || '')
@@ -145,7 +145,7 @@ function anchorNodeProps({ option }: { option: TreeOption }) {
   }
 }
 
-function productNodeProps({ option }: { option: TreeOption }) {
+function productNodeProps({ option }: { option: TreeOption }): Record<string, unknown> {
   return {
     onContextmenu(e: MouseEvent): void {
       const key = String(option.key || '')
@@ -165,96 +165,96 @@ function productNodeProps({ option }: { option: TreeOption }) {
 
 <template>
   <div class="sidebar">
-        <!-- 全部视频 -->
-        <div 
-          class="all-videos-item"
-          :class="{ 'is-selected': activeKey === 'all' }"
-          @click="handleAllVideosClick"
-        >
-          <n-icon class="item-icon"><FilmOutline /></n-icon>
-          <span class="item-label">全部视频</span>
-        </div>
-        
-        <!-- 分组标题（可折叠） -->
-        <div class="section-header" @click="isGroupsExpanded = !isGroupsExpanded">
-          <n-icon class="collapse-icon" :class="{ 'is-expanded': isGroupsExpanded }">
-            <ChevronDownOutline v-if="isGroupsExpanded" />
-            <ChevronForwardOutline v-else />
-          </n-icon>
-          <n-divider dashed style="margin: 10px 0;font-size: 12px; flex: 1;">
-            <span class="section-title section-title-group">分组</span>
-          </n-divider>
-        </div>
-        <!-- 分组列表 -->
-        <div v-show="isGroupsExpanded">
-          <n-tree
-            v-if="groups.length > 0"
-            :data="groupsTreeData"
-            :selected-keys="groupsSelectedKeys"
-            :expanded-keys="expandedKeys"
-            :default-expand-all="true"
-            selectable
-            block-line
-            :node-props="groupNodeProps"
-            @update:selected-keys="handleGroupsSelect"
-            @update:expanded-keys="(keys) => expandedKeys = keys as string[]"
-          >
-          </n-tree>
-        </div>
+    <!-- 全部视频 -->
+    <div
+      class="all-videos-item"
+      :class="{ 'is-selected': activeKey === 'all' }"
+      @click="handleAllVideosClick"
+    >
+      <n-icon class="item-icon"><FilmOutline /></n-icon>
+      <span class="item-label">全部视频</span>
+    </div>
 
-        <!-- 主播标题（可折叠） -->
-        <div class="section-header" @click="isAnchorsExpanded = !isAnchorsExpanded">
-          <n-icon class="collapse-icon" :class="{ 'is-expanded': isAnchorsExpanded }">
-            <ChevronDownOutline v-if="isAnchorsExpanded" />
-            <ChevronForwardOutline v-else />
-          </n-icon>
-          <n-divider dashed style="margin: 10px 0;font-size: 12px; flex: 1;">
-            <span class="section-title section-title-anchor">主播</span>
-          </n-divider>
-        </div>
-        <!-- 主播列表 -->
-        <div v-show="isAnchorsExpanded">
-          <n-tree
-            v-if="anchors.length > 0"
-            :data="anchorsTreeData"
-            :selected-keys="anchorsSelectedKeys"
-            :expanded-keys="expandedKeys"
-            :default-expand-all="true"
-            selectable
-            block-line
-            :node-props="anchorNodeProps"
-            @update:selected-keys="handleAnchorsSelect"
-            @update:expanded-keys="(keys) => expandedKeys = keys as string[]"
-          >
-          </n-tree>
-        </div>
+    <!-- 分组标题（可折叠） -->
+    <div class="section-header" @click="isGroupsExpanded = !isGroupsExpanded">
+      <n-icon class="collapse-icon" :class="{ 'is-expanded': isGroupsExpanded }">
+        <ChevronDownOutline v-if="isGroupsExpanded" />
+        <ChevronForwardOutline v-else />
+      </n-icon>
+      <n-divider dashed style="margin: 10px 0; font-size: 12px; flex: 1">
+        <span class="section-title section-title-group">分组</span>
+      </n-divider>
+    </div>
+    <!-- 分组列表 -->
+    <div v-show="isGroupsExpanded">
+      <n-tree
+        v-if="groups.length > 0"
+        :data="groupsTreeData"
+        :selected-keys="groupsSelectedKeys"
+        :expanded-keys="expandedKeys"
+        :default-expand-all="true"
+        selectable
+        block-line
+        :node-props="groupNodeProps"
+        @update:selected-keys="handleGroupsSelect"
+        @update:expanded-keys="(keys) => (expandedKeys = keys as string[])"
+      >
+      </n-tree>
+    </div>
 
-        <!-- 产品标题（可折叠） -->
-        <div class="section-header" @click="isProductsExpanded = !isProductsExpanded">
-          <n-icon class="collapse-icon" :class="{ 'is-expanded': isProductsExpanded }">
-            <ChevronDownOutline v-if="isProductsExpanded" />
-            <ChevronForwardOutline v-else />
-          </n-icon>
-          <n-divider dashed style="margin: 10px 0;font-size: 12px; flex: 1;">
-            <span class="section-title section-title-product">产品</span>
-          </n-divider>
-        </div>
-        <!-- 产品列表 -->
-        <div v-show="isProductsExpanded">
-          <n-tree
-            v-if="products.length > 0"
-            :data="productsTreeData"
-            :selected-keys="productsSelectedKeys"
-            :expanded-keys="expandedKeys"
-            :default-expand-all="true"
-            selectable
-            block-line
-            :node-props="productNodeProps"
-            @update:selected-keys="handleProductsSelect"
-            @update:expanded-keys="(keys) => expandedKeys = keys as string[]"
-          >
-          </n-tree>
-        </div>
+    <!-- 主播标题（可折叠） -->
+    <div class="section-header" @click="isAnchorsExpanded = !isAnchorsExpanded">
+      <n-icon class="collapse-icon" :class="{ 'is-expanded': isAnchorsExpanded }">
+        <ChevronDownOutline v-if="isAnchorsExpanded" />
+        <ChevronForwardOutline v-else />
+      </n-icon>
+      <n-divider dashed style="margin: 10px 0; font-size: 12px; flex: 1">
+        <span class="section-title section-title-anchor">主播</span>
+      </n-divider>
+    </div>
+    <!-- 主播列表 -->
+    <div v-show="isAnchorsExpanded">
+      <n-tree
+        v-if="anchors.length > 0"
+        :data="anchorsTreeData"
+        :selected-keys="anchorsSelectedKeys"
+        :expanded-keys="expandedKeys"
+        :default-expand-all="true"
+        selectable
+        block-line
+        :node-props="anchorNodeProps"
+        @update:selected-keys="handleAnchorsSelect"
+        @update:expanded-keys="(keys) => (expandedKeys = keys as string[])"
+      >
+      </n-tree>
+    </div>
+
+    <!-- 产品标题（可折叠） -->
+    <div class="section-header" @click="isProductsExpanded = !isProductsExpanded">
+      <n-icon class="collapse-icon" :class="{ 'is-expanded': isProductsExpanded }">
+        <ChevronDownOutline v-if="isProductsExpanded" />
+        <ChevronForwardOutline v-else />
+      </n-icon>
+      <n-divider dashed style="margin: 10px 0; font-size: 12px; flex: 1">
+        <span class="section-title section-title-product">产品</span>
+      </n-divider>
+    </div>
+    <!-- 产品列表 -->
+    <div v-show="isProductsExpanded">
+      <n-tree
+        v-if="products.length > 0"
+        :data="productsTreeData"
+        :selected-keys="productsSelectedKeys"
+        :expanded-keys="expandedKeys"
+        :default-expand-all="true"
+        selectable
+        block-line
+        :node-props="productNodeProps"
+        @update:selected-keys="handleProductsSelect"
+        @update:expanded-keys="(keys) => (expandedKeys = keys as string[])"
+      >
+      </n-tree>
+    </div>
   </div>
 </template>
 
@@ -294,7 +294,7 @@ function productNodeProps({ option }: { option: TreeOption }) {
 }
 
 .all-videos-item.is-selected {
-  background-color: #007AFF !important;
+  background-color: #007aff !important;
   color: #ffffff !important;
 }
 
@@ -324,13 +324,21 @@ function productNodeProps({ option }: { option: TreeOption }) {
   margin: 0;
 }
 
-
 /* Tree 组件选中状态样式，与全部视频保持一致 */
-:deep(.n-tree.n-tree--block-line .n-tree-node:not(.n-tree-node--disabled).n-tree-node--selected .n-tree-node-content) {
+:deep(
+  .n-tree.n-tree--block-line
+    .n-tree-node:not(.n-tree-node--disabled).n-tree-node--selected
+    .n-tree-node-content
+) {
   color: #ffffff !important;
 }
 
-:deep(.n-tree.n-tree--block-line .n-tree-node:not(.n-tree-node--disabled).n-tree-node--selected .n-tree-node-content .n-icon) {
+:deep(
+  .n-tree.n-tree--block-line
+    .n-tree-node:not(.n-tree-node--disabled).n-tree-node--selected
+    .n-tree-node-content
+    .n-icon
+) {
   color: #ffffff !important;
 }
 
@@ -354,7 +362,9 @@ function productNodeProps({ option }: { option: TreeOption }) {
   width: 16px;
   height: 16px;
   color: #888;
-  transition: transform 0.2s ease, color 0.15s ease;
+  transition:
+    transform 0.2s ease,
+    color 0.15s ease;
   margin-right: 4px;
   flex-shrink: 0;
 }
@@ -384,6 +394,4 @@ function productNodeProps({ option }: { option: TreeOption }) {
 .section-title-product {
   color: #f39c12;
 }
-
 </style>
-

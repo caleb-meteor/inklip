@@ -1,9 +1,31 @@
 import { ref, computed } from 'vue'
 import { useMessage } from 'naive-ui'
-import { getDictsByTypeApi, createDictApi, deleteDictApi, updateDictApi, type DictItem } from '../api/dict'
+import {
+  getDictsByTypeApi,
+  createDictApi,
+  deleteDictApi,
+  updateDictApi,
+  type DictItem
+} from '../api/dict'
 import { addVideoCategoryApi, removeVideoCategoryApi } from '../api/video'
 
-export function useVideoAnchors() {
+export function useVideoAnchors(): {
+  anchors: import('vue').Ref<DictItem[]>
+  activeAnchorId: import('vue').Ref<number | null>
+  currentAnchor: import('vue').ComputedRef<DictItem | null>
+  fetchAnchors: () => Promise<void>
+  createAnchor: (name: string) => Promise<DictItem>
+  renameAnchor: (anchorId: number, newName: string) => Promise<void>
+  deleteAnchor: (anchorId: number) => Promise<void>
+  updateVideoAnchor: (
+    videoId: number,
+    anchorId: number | null,
+    currentAnchorId?: number | null
+  ) => Promise<void>
+  getFileAnchor: (file: {
+    categories?: Array<{ id: number; name: string; type: string }>
+  }) => DictItem | null
+} {
   const message = useMessage()
   const anchors = ref<DictItem[]>([])
   const activeAnchorId = ref<number | null>(null)
@@ -53,13 +75,17 @@ export function useVideoAnchors() {
     }
   }
 
-  const updateVideoAnchor = async (videoId: number, anchorId: number | null, currentAnchorId?: number | null): Promise<void> => {
+  const updateVideoAnchor = async (
+    videoId: number,
+    anchorId: number | null,
+    currentAnchorId?: number | null
+  ): Promise<void> => {
     try {
       // 如果已有主播，先删除
       if (currentAnchorId !== null && currentAnchorId !== undefined) {
         await removeVideoCategoryApi(videoId, currentAnchorId)
       }
-      
+
       // 如果设置了新主播，添加
       if (anchorId !== null) {
         await addVideoCategoryApi(videoId, anchorId)
@@ -71,22 +97,24 @@ export function useVideoAnchors() {
     }
   }
 
-  const getFileAnchor = (file: { categories?: Array<{ id: number; name: string; type: string }> }): DictItem | null => {
+  const getFileAnchor = (file: {
+    categories?: Array<{ id: number; name: string; type: string }>
+  }): DictItem | null => {
     if (!file.categories) {
       return null
     }
-    const anchorCategory = file.categories.find(cat => cat.type === 'video_anchor')
+    const anchorCategory = file.categories.find((cat) => cat.type === 'video_anchor')
     if (!anchorCategory) {
       return null
     }
-    return anchors.value.find(anchor => anchor.id === anchorCategory.id) || null
+    return anchors.value.find((anchor) => anchor.id === anchorCategory.id) || null
   }
 
   const currentAnchor = computed(() => {
     if (activeAnchorId.value === null) {
       return null
     }
-    return anchors.value.find(anchor => anchor.id === activeAnchorId.value) || null
+    return anchors.value.find((anchor) => anchor.id === activeAnchorId.value) || null
   })
 
   return {
@@ -101,4 +129,3 @@ export function useVideoAnchors() {
     getFileAnchor
   }
 }
-

@@ -13,7 +13,14 @@ let cleanupTimer: ReturnType<typeof setTimeout> | null = null
  * Global video preview composable
  * Ensures only one video preview exists at a time across the entire app
  */
-export function useGlobalVideoPreview() {
+export function useGlobalVideoPreview(): {
+  currentVideoPath: Ref<string | null>
+  isLoading: Ref<boolean>
+  hasError: Ref<boolean>
+  showPreview: (path: string, container: HTMLElement) => void
+  hidePreview: () => void
+  isCurrentlyPreviewing: (path: string) => boolean
+} {
   /**
    * Show video preview in the specified container
    * @param path Original video path (not converted)

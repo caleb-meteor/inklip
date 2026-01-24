@@ -108,4 +108,3 @@ const getTypeLabel = (): string => {
   font-size: 16px;
 }
 </style>
-

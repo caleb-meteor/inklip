@@ -11,7 +11,7 @@ const MODEL_FILE_NAME = 'ggml-silero-v6.2.0.bin'
  * 下载源配置 - 使用 HF Mirror 镜像站点
  * 参考: https://hf-mirror.com/
  * 模型仓库: https://hf-mirror.com/ggml-org/whisper-vad
- * 
+ *
  * Shell 脚本中的 URL 构建逻辑：
  * src="https://huggingface.co/ggerganov/whisper.cpp"
  * pfx="resolve/main/ggml"
@@ -25,12 +25,12 @@ const DOWNLOAD_SOURCE = {
 
 /**
  * 将 HuggingFace 浏览 URL 转换为真实下载链接
- * 
+ *
  * 浏览 URL 格式: https://hf-mirror.com/ggml-org/whisper-vad/tree/main/ggml-silero-v6.2.0.bin
  * 下载 URL 格式: https://hf-mirror.com/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
- * 
+ *
  * 关键转换：将 /tree/ 替换为 /resolve/
- * 
+ *
  * @param browseUrl HuggingFace 浏览页面的 URL
  * @returns 真实的下载链接
  */
@@ -40,12 +40,12 @@ export function convertToDownloadUrl(browseUrl: string): string {
 
 /**
  * 按照 shell 脚本的方式构建下载 URL
- * 
+ *
  * Shell 脚本逻辑：
  * 1. 定义源仓库: src="https://huggingface.co/ggerganov/whisper.cpp"
  * 2. 定义路径前缀: pfx="resolve/main/ggml"
  * 3. 构建 URL: $src/$pfx-"$model".bin
- * 
+ *
  * @param repoUrl 仓库 URL (例如: https://hf-mirror.com/ggerganov/whisper.cpp)
  * @param branch 分支名称 (例如: main)
  * @param fileName 文件名 (例如: ggml-large-v3-turbo-q5_0.bin)
@@ -66,7 +66,7 @@ export function buildDownloadUrlFromRepo(
  * 构建下载 URL
  * 使用 HF Mirror 镜像站点加速下载
  * URL 格式: https://hf-mirror.com/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
- * 
+ *
  * 参照 shell 脚本的构建方式：
  * src = "https://hf-mirror.com/ggml-org/whisper-vad"
  * pfx = "resolve/main"
@@ -109,25 +109,23 @@ export interface DownloadModelOptions {
 /**
  * 下载模型 (ggml-silero-v6.2.0.bin)
  * 使用 HF Mirror 镜像站点进行下载，提升国内下载速度
- * 
+ *
  * 下载逻辑参照 download.ts：
  * - 检查文件是否已存在，存在则跳过
  * - 使用 Electron net 模块进行下载（支持多线程断点续传）
  * - 支持进度回调和 SHA256 校验
  * - 自动处理并发下载和重试机制
- * 
+ *
  * @param options 下载选项
  * @returns 下载的文件路径
  * @throws 如果下载失败
  */
-export async function downloadModel(
-  options: DownloadModelOptions = {}
-): Promise<string> {
+export async function downloadModel(options: DownloadModelOptions = {}): Promise<string> {
   const { modelsPath, onProgress, isQuitting, expectedSha256 } = options
 
   // 确定下载目录
   const downloadDir = modelsPath || process.cwd()
-  
+
   // 确保目录存在
   if (!fs.existsSync(downloadDir)) {
     fs.mkdirSync(downloadDir, { recursive: true })
@@ -138,7 +136,9 @@ export async function downloadModel(
 
   // 检查文件是否已存在
   if (fs.existsSync(targetPath)) {
-    console.log(`[Model Downloader] Model ${MODEL_FILE_NAME} already exists at ${targetPath}. Skipping download.`)
+    console.log(
+      `[Model Downloader] Model ${MODEL_FILE_NAME} already exists at ${targetPath}. Skipping download.`
+    )
     return targetPath
   }
 
@@ -147,13 +147,15 @@ export async function downloadModel(
   console.log(`[Model Downloader] Downloading model ${MODEL_FILE_NAME} from '${downloadUrl}' ...`)
 
   // 默认进度回调
-  const defaultProgress = onProgress || ((progress) => {
-    console.log(
-      `[Model Downloader] Progress: ${progress.percentage.toFixed(1)}% ` +
-      `(${formatBytes(progress.current)}/${formatBytes(progress.total)}) ` +
-      `Speed: ${formatBytes(progress.speed)}/s`
-    )
-  })
+  const defaultProgress =
+    onProgress ||
+    ((progress) => {
+      console.log(
+        `[Model Downloader] Progress: ${progress.percentage.toFixed(1)}% ` +
+          `(${formatBytes(progress.current)}/${formatBytes(progress.total)}) ` +
+          `Speed: ${formatBytes(progress.speed)}/s`
+      )
+    })
 
   // 默认退出检查
   const defaultIsQuitting = isQuitting || (() => false)
@@ -162,13 +164,7 @@ export async function downloadModel(
     // 使用现有的 downloadFile 函数进行下载
     // downloadFile 内部使用 Electron net 模块，支持多线程断点续传
     // 参照 download.ts 的下载逻辑，自动处理并发、重试、SHA256 校验等
-    await downloadFile(
-      downloadUrl,
-      targetPath,
-      defaultProgress,
-      defaultIsQuitting,
-      expectedSha256
-    )
+    await downloadFile(downloadUrl, targetPath, defaultProgress, defaultIsQuitting, expectedSha256)
 
     console.log(`[Model Downloader] Done! Model '${MODEL_FILE_NAME}' saved in '${targetPath}'`)
     return targetPath
@@ -176,7 +172,7 @@ export async function downloadModel(
     console.error(`[Model Downloader] Failed to download model ${MODEL_FILE_NAME}:`, error)
     throw new Error(
       `Failed to download model ${MODEL_FILE_NAME}. ` +
-      `Please try again later or download the model files manually.`
+        `Please try again later or download the model files manually.`
     )
   }
 }
@@ -185,9 +181,7 @@ export async function downloadModel(
  * 兼容旧接口，重定向到新的 downloadModel 函数
  * @deprecated 使用 downloadModel 代替
  */
-export async function downloadWhisperModel(
-  options: DownloadModelOptions = {}
-): Promise<string> {
+export async function downloadWhisperModel(options: DownloadModelOptions = {}): Promise<string> {
   return downloadModel(options)
 }
 

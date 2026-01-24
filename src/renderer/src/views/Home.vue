@@ -16,12 +16,12 @@ const hasValidApiKey = computed(() => {
   return apiKey && apiKey !== DEFAULT_API_KEY
 })
 
-const checkApiKey = () => {
+const checkApiKey = (): void => {
   hasApiKey.value = !!localStorage.getItem('apiKey')
 }
 
 // 监听自定义事件，以便在 Settings 页面更新 apiKey 时也能响应
-const handleApiKeyChanged = () => {
+const handleApiKeyChanged = (): void => {
   checkApiKey()
 }
 
@@ -34,7 +34,7 @@ onUnmounted(() => {
   window.removeEventListener('apiKeyChanged', handleApiKeyChanged)
 })
 
-const navigateTo = (path: string) => {
+const navigateTo = (path: string): void => {
   router.push(path)
 }
 </script>

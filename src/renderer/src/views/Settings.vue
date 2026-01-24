@@ -1,14 +1,23 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NCard, NInput, NSpace, NText, NMessageProvider, useMessage, NAlert, NIcon, NH2 } from 'naive-ui'
+import {
+  NButton,
+  NCard,
+  NInput,
+  NSpace,
+  NText,
+  NMessageProvider,
+  useMessage,
+  NAlert,
+  NIcon,
+  NH2
+} from 'naive-ui'
 import { Settings as SettingsIcon } from '@vicons/ionicons5'
 import { saveConfig, getConfig, setApiKey, getApiKey, validateApiKey } from '../api/config'
-import { useWebsocketStore } from '../stores/websocket'
 
 const router = useRouter()
 const message = useMessage()
-const wsStore = useWebsocketStore()
 
 const videoDataDirectory = ref('')
 const apiKey = ref('')
@@ -22,7 +31,7 @@ const apiKeyRefresh = ref(0)
 // 计算掩盖后的 API Key 显示值
 const maskedApiKey = computed(() => {
   // 添加刷新依赖，确保localStorage变化时能重新计算
-  apiKeyRefresh.value
+  void apiKeyRefresh.value
   if (!hasApiKey.value) {
     return ''
   }
@@ -36,19 +45,19 @@ const maskedApiKey = computed(() => {
   return first4 + '********' + last4
 })
 
-const loadVideoDataDirectory = async () => {
+const loadVideoDataDirectory = async (): Promise<void> => {
   try {
     // 先从 Electron 获取当前配置
     const dir = await window.api.getVideoDataDirectory()
     videoDataDirectory.value = dir
-    
+
     // 然后从 Python 后端获取配置（如果存在）
     try {
       const config = await getConfig()
       if (config.videoDataDirectory) {
         videoDataDirectory.value = config.videoDataDirectory
       }
-    } catch (error) {
+    } catch {
       // 如果后端未启动或配置不存在，使用 Electron 的配置
       console.debug('无法从后端获取配置，使用 Electron 配置')
     }
@@ -60,12 +69,12 @@ const loadVideoDataDirectory = async () => {
 
 const restarting = ref(false)
 
-const selectDirectory = async () => {
+const selectDirectory = async (): Promise<void> => {
   try {
     loading.value = true
     migrating.value = false
     migrateProgress.value = ''
-    
+
     // 1. 选择目录（Electron 负责）
     const result = await window.api.selectVideoDataDirectory()
     if (!result.success || !result.directory) {
@@ -74,21 +83,21 @@ const selectDirectory = async () => {
       }
       return
     }
-    
+
     const newDir = result.directory
     const oldDir = result.oldDirectory || videoDataDirectory.value
-    
+
     // 2. 如果目录不同，显示迁移提示
     if (oldDir !== newDir) {
       migrating.value = true
       migrateProgress.value = '正在迁移文件并更新配置...'
     }
-    
+
     // 3. 保存配置到 Python 后端（后端会自动处理文件迁移）
     try {
       await saveConfig({ videoDataDirectory: newDir })
       console.log('[Settings] 配置已保存到后端')
-      
+
       if (oldDir !== newDir) {
         migrateProgress.value = '文件迁移和配置更新完成'
         message.success('视频数据目录已更新，文件已自动迁移')
@@ -101,7 +110,7 @@ const selectDirectory = async () => {
       migrating.value = false
       return
     }
-    
+
     // 4. 更新本地显示
     videoDataDirectory.value = newDir
     migrating.value = false
@@ -204,9 +213,8 @@ onMounted(() => {
         <n-card title="设置" class="settings-card">
           <n-alert type="info" style="margin-bottom: 20px">
             <div>
-                <strong> 修改目录后，系统会自动将原目录下的所有视频文件迁移到新目录。</strong>
-              </div>
-            
+              <strong> 修改目录后，系统会自动将原目录下的所有视频文件迁移到新目录。</strong>
+            </div>
           </n-alert>
 
           <div class="setting-item">
@@ -215,12 +223,7 @@ onMounted(() => {
             </div>
             <n-space vertical style="width: 100%">
               <div v-if="hasApiKey && !isEditingApiKey" class="api-key-display">
-                <n-input
-                  :value="maskedApiKey"
-                  readonly
-                  type="text"
-                  style="width: 100%"
-                />
+                <n-input :value="maskedApiKey" readonly type="text" style="width: 100%" />
               </div>
               <n-input
                 v-if="!hasApiKey || isEditingApiKey"
@@ -257,7 +260,12 @@ onMounted(() => {
                 </n-button>
                 <n-button
                   v-if="isEditingApiKey"
-                  @click="() => { isEditingApiKey = false; apiKey = ''; }"
+                  @click="
+                    () => {
+                      isEditingApiKey = false
+                      apiKey = ''
+                    }
+                  "
                 >
                   取消
                 </n-button>
@@ -335,4 +343,3 @@ onMounted(() => {
   align-items: center;
 }
 </style>
-

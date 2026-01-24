@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, type GlobalThemeOverrides } from 'naive-ui'
+import {
+  NConfigProvider,
+  NMessageProvider,
+  NDialogProvider,
+  darkTheme,
+  type GlobalThemeOverrides
+} from 'naive-ui'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { onMounted } from 'vue'
 import { useWebsocketStore } from './stores/websocket'

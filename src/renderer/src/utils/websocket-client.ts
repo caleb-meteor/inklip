@@ -76,10 +76,7 @@ export class WebSocketClient {
   }
 
   private isConnectingOrOpen(): boolean {
-    return (
-      this.ws?.readyState === WebSocket.OPEN ||
-      this.ws?.readyState === WebSocket.CONNECTING
-    )
+    return this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING
   }
 
   private closeExistingConnection(): void {
@@ -174,7 +171,10 @@ export class WebSocketClient {
 
     // 排除正常关闭（code 1000），其他所有情况才考虑重连
     if (event.code === 1000) {
-      console.log('WebSocket closed normally, not reconnecting', { code: event.code, reason: event.reason })
+      console.log('WebSocket closed normally, not reconnecting', {
+        code: event.code,
+        reason: event.reason
+      })
       return
     }
 
@@ -195,7 +195,10 @@ export class WebSocketClient {
           console.log('WebSocket reconnection cancelled: token check failed')
           return
         }
-        console.log('Attempting to reconnect WebSocket...', { code: event.code, reason: event.reason })
+        console.log('Attempting to reconnect WebSocket...', {
+          code: event.code,
+          reason: event.reason
+        })
         this.connect()
       }
     }, RECONNECT_DELAY)

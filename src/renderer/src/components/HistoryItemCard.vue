@@ -91,14 +91,7 @@ const handleTogglePlay = (): void => {
       </div>
       <div class="v-item-actions">
         <div v-if="item.status === 'processing'" class="action-row">
-          <n-button
-            secondary
-            disabled
-            size="medium"
-            style="width: 100%"
-          >
-            待处理...
-          </n-button>
+          <n-button secondary disabled size="medium" style="width: 100%"> 待处理... </n-button>
         </div>
         <div v-else class="action-row">
           <n-button
@@ -123,8 +116,8 @@ const handleTogglePlay = (): void => {
             type="error"
             size="medium"
             quaternary
-            @click.stop="emit('delete', item)"
             style="min-width: 40px"
+            @click.stop="emit('delete', item)"
           >
             <template #icon>
               <n-icon><TrashOutline /></n-icon>

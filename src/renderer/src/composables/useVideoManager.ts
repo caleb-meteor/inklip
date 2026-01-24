@@ -4,7 +4,26 @@ import { getVideosApi, uploadVideosBatchApi, renameVideoApi, deleteVideoApi } fr
 import { useWebsocketStore, type VideoParseProgress } from '../stores/websocket'
 import type { FileItem } from '../types/video'
 
-export function useVideoManager() {
+export function useVideoManager(): {
+  allFiles: import('vue').Ref<FileItem[]>
+  isRefreshing: import('vue').Ref<boolean>
+  isUploading: import('vue').Ref<boolean>
+  selectedFileId: import('vue').Ref<number | null>
+  fetchVideos: () => Promise<void>
+  uploadFilesBatch: (
+    paths: string[],
+    categoryIds?: number[],
+    subtitleFiles?: Record<string, string>
+  ) => Promise<void>
+  uploadFolder: (categoryIds?: number[]) => Promise<void>
+  renameVideo: (videoId: number, newName: string) => Promise<void>
+  deleteVideo: (videoId: number) => Promise<void>
+  getAspectRatio: (file: FileItem) => string
+  getVideoStatus: (file: FileItem) => 'processing' | 'completed' | 'failed' | 'pending' | undefined
+  getVideoProgress: (videoId: number, file?: FileItem) => VideoParseProgress | undefined
+  getStatusText: (status?: number) => string
+  updateVideoStatus: (videoId: number, status: number, parsePercentage?: number) => void
+} {
   const message = useMessage()
   const wsStore = useWebsocketStore()
   const allFiles = ref<FileItem[]>([])
@@ -51,18 +70,22 @@ export function useVideoManager() {
     }
   }
 
-  const uploadFilesBatch = async (paths: string[], categoryIds?: number[], subtitleFiles?: Record<string, string>): Promise<void> => {
+  const uploadFilesBatch = async (
+    paths: string[],
+    categoryIds?: number[],
+    subtitleFiles?: Record<string, string>
+  ): Promise<void> => {
     if (isUploading.value) return
     if (paths.length === 0) return
 
     // 统一使用批量上传，单个文件也作为数组处理
     const countText = paths.length === 1 ? '1 个视频' : `${paths.length} 个视频`
     let messageReactive: ReturnType<typeof message.loading> | null = null
-    
+
     try {
       isUploading.value = true
       messageReactive = message.loading(`正在上传 ${countText}...`, { duration: 0 })
-      
+
       const res = await uploadVideosBatchApi(paths, categoryIds, subtitleFiles)
 
       // 成功时销毁 loading 消息
@@ -70,17 +93,18 @@ export function useVideoManager() {
         messageReactive.destroy()
         messageReactive = null
       }
-      
+
       // 兼容两种返回格式：
       // 1. Python 后端：直接返回数组
       // 2. Go 后端：返回对象 {videos: [...], task_ids: [...], status: "queued"}
-      const videos = Array.isArray(res) ? res : (res?.videos || [])
+      const videos = Array.isArray(res) ? res : res?.videos || []
       const successCount = videos.length
-      const successText = successCount === 1 
-        ? '视频已上传，正在处理中...' 
-        : `成功上传 ${successCount} 个视频，正在处理中...`
+      const successText =
+        successCount === 1
+          ? '视频已上传，正在处理中...'
+          : `成功上传 ${successCount} 个视频，正在处理中...`
       message.success(successText)
-      
+
       // 刷新列表以获取最新状态（避免重复添加，因为fetchVideos会获取所有视频）
       await fetchVideos()
     } catch (err: any) {
@@ -159,7 +183,9 @@ export function useVideoManager() {
   // 3: TRANSCRIBING - 转录音频中
   // 4: COMPLETED - 处理完成
   // 5: FAILED - 处理失败
-  const mapStatus = (status?: number): 'processing' | 'completed' | 'failed' | 'pending' | undefined => {
+  const mapStatus = (
+    status?: number
+  ): 'processing' | 'completed' | 'failed' | 'pending' | undefined => {
     if (status === undefined) return undefined
     switch (status) {
       case 0: // PENDING
@@ -199,9 +225,7 @@ export function useVideoManager() {
 
   const videoProgressMap = computed(() => {
     const progressObj = wsStore.videoParseProgress
-    Object.keys(progressObj).forEach(key => {
-      const _ = progressObj[Number(key)]
-    })
+    Object.keys(progressObj).forEach(() => {})
     return progressObj
   })
 
@@ -210,42 +234,54 @@ export function useVideoManager() {
     if (wsProgress) {
       return wsProgress
     }
-    
+
     // 如果文件状态为3（转录中）且有进度百分比，从数据库获取进度
     if (file?.status === 3 && file?.parse_percentage !== undefined && file.parse_percentage >= 0) {
       return {
         videoId,
         percentage: file.parse_percentage,
-        status: 'transcribing'  // 转录中状态
+        status: 'transcribing' // 转录中状态
       }
     }
-    
+
     // 如果状态是处理中（1或2）且有进度，也返回进度
-    if ((file?.status === 1 || file?.status === 2) && file?.parse_percentage !== undefined && file.parse_percentage >= 0) {
+    if (
+      (file?.status === 1 || file?.status === 2) &&
+      file?.parse_percentage !== undefined &&
+      file.parse_percentage >= 0
+    ) {
       return {
         videoId,
         percentage: file.parse_percentage,
         status: 'parsing'
       }
     }
-    
+
     return undefined
   }
 
-  const getVideoStatus = (file: FileItem): 'processing' | 'completed' | 'failed' | 'pending' | undefined => {
+  const getVideoStatus = (
+    file: FileItem
+  ): 'processing' | 'completed' | 'failed' | 'pending' | undefined => {
     // 优先检查完成和失败状态
-    if (file.status === 4) { // COMPLETED
+    if (file.status === 4) {
+      // COMPLETED
       return 'completed'
     }
-    if (file.status === 5) { // FAILED
+    if (file.status === 5) {
+      // FAILED
       return 'failed'
     }
-    
+
     // 对于转录中状态，检查进度和完成情况
-    if (file.status === 3) { // TRANSCRIBING
+    if (file.status === 3) {
+      // TRANSCRIBING
       const progress = getVideoProgress(file.id, file)
       // 如果进度显示已完成，返回 completed
-      if (progress?.status === 'completed' || (file.parse_percentage !== undefined && file.parse_percentage >= 100)) {
+      if (
+        progress?.status === 'completed' ||
+        (file.parse_percentage !== undefined && file.parse_percentage >= 100)
+      ) {
         return 'completed'
       }
       // 如果进度显示失败，返回 failed
@@ -255,7 +291,7 @@ export function useVideoManager() {
       // 否则返回处理中
       return 'processing'
     }
-    
+
     // 使用状态映射
     const mapped = mapStatus(file.status)
     return mapped || 'processing'
@@ -263,7 +299,7 @@ export function useVideoManager() {
 
   // 更新视频状态（从 WebSocket 消息）
   const updateVideoStatus = (videoId: number, status: number, parsePercentage?: number): void => {
-    const fileIndex = allFiles.value.findIndex(f => f.id === videoId)
+    const fileIndex = allFiles.value.findIndex((f) => f.id === videoId)
     if (fileIndex !== -1) {
       allFiles.value[fileIndex].status = status
       if (parsePercentage !== undefined) {
@@ -291,4 +327,3 @@ export function useVideoManager() {
     updateVideoStatus
   }
 }
-

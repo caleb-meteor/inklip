@@ -96,4 +96,3 @@ const emit = defineEmits<{
   font-size: 16px;
 }
 </style>
-

@@ -36,11 +36,7 @@ const handleSelectFolder = (): void => {
 
 <template>
   <div>
-    <div
-      class="file-item upload-card"
-      :class="{ disabled: props.uploading }"
-      @click="handleClick"
-    >
+    <div class="file-item upload-card" :class="{ disabled: props.uploading }" @click="handleClick">
       <div class="icon-wrapper upload-icon-wrapper">
         <n-icon size="32" color="#63e2b7">
           <span v-if="props.uploading" style="font-size: 14px; position: absolute">...</span>
@@ -126,4 +122,3 @@ const handleSelectFolder = (): void => {
   margin-top: 2px;
 }
 </style>
-

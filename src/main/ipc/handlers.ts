@@ -1,9 +1,8 @@
 import { ipcMain, BrowserWindow, app, dialog, Notification, net } from 'electron'
 import fs from 'fs'
 import path, { join } from 'path'
-import { downloadFile, downloadFileSimple } from '../utils/download'
+import { downloadFileSimple } from '../utils/download'
 import { BackendService } from '../services/backend'
-import { is } from '@electron-toolkit/utils'
 
 export function registerIpcHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -108,7 +107,7 @@ export function registerIpcHandlers(
               } else {
                 resolve({ available: false, reason: '后端服务响应异常' })
               }
-            } catch (error) {
+            } catch {
               resolve({ available: false, reason: '无法解析后端响应' })
             }
           } else {
@@ -120,9 +119,9 @@ export function registerIpcHandlers(
       request.on('error', (error) => {
         if (timeout) clearTimeout(timeout)
         console.error('[IPC] 后端健康检查失败:', error)
-        resolve({ 
-          available: false, 
-          reason: `无法连接到后端服务: ${error.message}` 
+        resolve({
+          available: false,
+          reason: `无法连接到后端服务: ${error.message}`
         })
       })
 
@@ -135,7 +134,6 @@ export function registerIpcHandlers(
   ipcMain.handle('get-video-data-directory', () => {
     return app.getPath('userData')
   })
-
 
   ipcMain.handle('select-video-data-directory', async () => {
     const win = BrowserWindow.getFocusedWindow()
@@ -155,10 +153,10 @@ export function registerIpcHandlers(
     }
 
     const selectedDir = result.filePaths[0]
-    
+
     // 只返回选择的目录，迁移工作由前端调用 Python API 完成
-    return { 
-      success: true, 
+    return {
+      success: true,
       directory: selectedDir,
       oldDirectory: currentDir
     }
@@ -185,7 +183,7 @@ export function registerIpcHandlers(
     // 验证文件扩展名（大小写不敏感）
     const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v']
     const validFilePaths: string[] = []
-    
+
     for (const filePath of result.filePaths) {
       const ext = path.extname(filePath).toLowerCase() // 转换为小写，实现大小写不敏感
       if (videoExtensions.includes(ext)) {
@@ -196,15 +194,15 @@ export function registerIpcHandlers(
     }
 
     if (validFilePaths.length === 0) {
-      return { 
-        success: false, 
-        error: '没有选择有效的视频文件（支持格式: mp4, webm, mov, avi, mkv, flv, wmv, m4v）' 
+      return {
+        success: false,
+        error: '没有选择有效的视频文件（支持格式: mp4, webm, mov, avi, mkv, flv, wmv, m4v）'
       }
     }
 
     // 统一返回 filePaths，单个或多个文件都使用批量上传
-    return { 
-      success: true, 
+    return {
+      success: true,
       filePaths: validFilePaths
     }
   })
@@ -225,47 +223,47 @@ export function registerIpcHandlers(
     }
 
     const folderPath = result.filePaths[0]
-    
+
     // 扫描文件夹，查找视频文件和字幕文件
     // 使用小写扩展名列表，通过 toLowerCase() 实现大小写不敏感匹配
     const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v']
     const subtitleExtensions = ['.srt', '.json']
-    
+
     const videoFiles: string[] = []
     const subtitleFiles: Record<string, string> = {} // 视频文件名 -> 字幕文件路径
-    
+
     try {
       const entries = await fs.promises.readdir(folderPath, { withFileTypes: true })
-      
+
       // 先收集所有文件信息，用于字幕文件匹配（大小写不敏感）
       const allFiles: Array<{ name: string; path: string; ext: string; baseName: string }> = []
-      
+
       for (const entry of entries) {
         if (!entry.isFile()) continue
-        
+
         const fileName = entry.name
         const filePath = path.join(folderPath, fileName)
         const ext = path.extname(fileName).toLowerCase() // 转换为小写，实现大小写不敏感
         const baseName = path.basename(fileName, path.extname(fileName)) // 使用原始扩展名提取基础名
-        
+
         allFiles.push({ name: fileName, path: filePath, ext, baseName })
-        
+
         // 检查是否是视频文件（大小写不敏感）
         if (videoExtensions.includes(ext)) {
           videoFiles.push(filePath)
         }
       }
-      
+
       // 为每个视频文件查找匹配的字幕文件（大小写不敏感）
       for (const videoFile of videoFiles) {
-        const videoInfo = allFiles.find(f => f.path === videoFile)
+        const videoInfo = allFiles.find((f) => f.path === videoFile)
         if (!videoInfo) continue
-        
+
         // 查找匹配的字幕文件（通过文件名匹配，大小写不敏感）
         for (const fileInfo of allFiles) {
           // 跳过视频文件本身
           if (fileInfo.path === videoFile) continue
-          
+
           // 检查基础名是否匹配
           if (fileInfo.baseName.toLowerCase() === videoInfo.baseName.toLowerCase()) {
             // 检查是否是字幕文件扩展名（大小写不敏感）
@@ -276,7 +274,7 @@ export function registerIpcHandlers(
           }
         }
       }
-      
+
       return {
         success: true,
         folderPath,
@@ -285,9 +283,9 @@ export function registerIpcHandlers(
       }
     } catch (error) {
       console.error('扫描文件夹失败:', error)
-      return { 
-        success: false, 
-        error: `扫描文件夹失败: ${(error as Error).message}` 
+      return {
+        success: false,
+        error: `扫描文件夹失败: ${(error as Error).message}`
       }
     }
   })
@@ -338,7 +336,7 @@ export function registerIpcHandlers(
 
     // 使用 HF Mirror 镜像站点下载模型，提升国内下载速度
     // 参考: https://hf-mirror.com/
-    // 
+    //
     // Shell 脚本中的 URL 构建逻辑解析：
     // 1. 定义源仓库: src="https://huggingface.co/ggerganov/whisper.cpp"
     // 2. 定义路径前缀: pfx="resolve/main/ggml"

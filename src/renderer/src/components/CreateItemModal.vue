@@ -20,13 +20,16 @@ const emit = defineEmits<{
 
 const inputValue = ref('')
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    inputValue.value = ''
+watch(
+  () => props.show,
+  (newVal) => {
+    if (newVal) {
+      inputValue.value = ''
+    }
   }
-})
+)
 
-const handleConfirm = () => {
+const handleConfirm = (): boolean => {
   if (!inputValue.value.trim()) {
     return false
   }

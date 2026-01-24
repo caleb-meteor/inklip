@@ -3,7 +3,6 @@ import Splash from '../views/Splash.vue'
 import Home from '../views/Home.vue'
 import VideoManager from '../views/VideoManager.vue'
 import Settings from '../views/Settings.vue'
-import { useWebsocketStore } from '../stores/websocket'
 
 const routes = [
   {

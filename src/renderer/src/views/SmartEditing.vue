@@ -69,8 +69,7 @@ import { useWebsocketStore } from '../stores/websocket'
 import {
   MAX_SOURCE_VIDEO_DURATION,
   MAX_OUTPUT_VIDEO_DURATION,
-  checkSourceVideoDuration,
-  formatDuration
+  checkSourceVideoDuration
 } from '../constants/video'
 
 const wsStore = useWebsocketStore()
@@ -436,7 +435,7 @@ const handleStartSmartCut = async (prompt?: string, min?: number, max?: number):
     isProcessing.value = true
     message.info('任务提交成功，等待处理...')
 
-    const res = await smartCutApi(
+    await smartCutApi(
       selectedVideoIds.value,
       finalPromptText,
       outMin,
@@ -513,7 +512,6 @@ const mapAiGenVideoStatus = (status: number): 'processing' | 'completed' | 'fail
 }
 
 // 兼容旧代码，默认使用 Video 状态映射
-const mapStatus = mapVideoStatus
 
 const fetchHistory = async (isLoadMore = false): Promise<void> => {
   if (isHistoryLoading.value || (!hasMoreHistory.value && isLoadMore)) return
@@ -825,8 +823,8 @@ const handleDelete = async (item: HistoryItem): Promise<void> => {
                       color="#63e2b7"
                       size="medium"
                       :loading="isProcessing"
-                      @click="handleStartSmartCut()"
                       style="width: 100%"
+                      @click="handleStartSmartCut()"
                     >
                       <template #icon
                         ><n-icon><Cut /></n-icon

@@ -19,25 +19,28 @@ const emit = defineEmits<{
 const anchorInputValue = ref('')
 const showAnchorDropdown = ref(false)
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    anchorInputValue.value = props.currentAnchorName || ''
-    showAnchorDropdown.value = false
+watch(
+  () => props.show,
+  (newVal) => {
+    if (newVal) {
+      anchorInputValue.value = props.currentAnchorName || ''
+      showAnchorDropdown.value = false
+    }
   }
-})
+)
 
 const anchorInputOptions = computed(() => {
   const inputValue = anchorInputValue.value.toLowerCase()
   if (!inputValue) {
-    return props.anchors.map(anchor => ({
+    return props.anchors.map((anchor) => ({
       label: anchor.name,
       value: anchor.name,
       id: anchor.id
     }))
   }
   return props.anchors
-    .filter(anchor => anchor.name.toLowerCase().includes(inputValue))
-    .map(anchor => ({
+    .filter((anchor) => anchor.name.toLowerCase().includes(inputValue))
+    .map((anchor) => ({
       label: anchor.name,
       value: anchor.name,
       id: anchor.id
@@ -50,7 +53,7 @@ const handleAnchorInputBlur = (): void => {
   }, 200)
 }
 
-const handleConfirm = () => {
+const handleConfirm = (): boolean => {
   emit('confirm', anchorInputValue.value.trim())
   return true
 }
@@ -68,7 +71,7 @@ const handleConfirm = () => {
   >
     <n-form>
       <n-form-item label="主播名称">
-        <div style="position: relative;">
+        <div style="position: relative">
           <n-input
             v-model:value="anchorInputValue"
             placeholder="选择已有主播或输入新主播名称"
@@ -77,18 +80,17 @@ const handleConfirm = () => {
             @blur="handleAnchorInputBlur"
             @input="showAnchorDropdown = true"
           />
-          <div
-            v-if="showAnchorDropdown && anchorInputOptions.length > 0"
-            class="anchor-dropdown"
-          >
+          <div v-if="showAnchorDropdown && anchorInputOptions.length > 0" class="anchor-dropdown">
             <div
               v-for="option in anchorInputOptions"
               :key="option.id"
               class="anchor-dropdown-item"
-              @mousedown.prevent="() => {
-                anchorInputValue = option.value
-                showAnchorDropdown = false
-              }"
+              @mousedown.prevent="
+                () => {
+                  anchorInputValue = option.value
+                  showAnchorDropdown = false
+                }
+              "
             >
               {{ option.label }}
             </div>
@@ -128,4 +130,3 @@ const handleConfirm = () => {
   color: #63e2b7;
 }
 </style>
-

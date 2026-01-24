@@ -51,16 +51,16 @@ async function calculateFileSha256(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256')
     const stream = fs.createReadStream(filePath)
-    
+
     stream.on('data', (data) => {
       hash.update(data)
     })
-    
+
     stream.on('end', () => {
       const sha256 = hash.digest('hex')
       resolve(sha256)
     })
-    
+
     stream.on('error', (err) => {
       reject(err)
     })
@@ -114,7 +114,7 @@ export function abortAllDownloads(): void {
   activeDownloadRequests.forEach((req) => {
     try {
       req.abort()
-    } catch (e) {
+    } catch {
       console.error('[Download Utils] Error aborting request:', e)
     }
   })
@@ -182,7 +182,7 @@ async function checkExistingFile(
   }
 
   console.log(`[Download Utils] File ${targetPath} exists, verifying...`)
-  
+
   if (expectedSha256) {
     try {
       const { isValid } = await verifyFileSha256(targetPath, expectedSha256)
@@ -195,7 +195,7 @@ async function checkExistingFile(
         console.log(`[Download Utils] File exists but SHA256 doesn't match, re-downloading`)
         try {
           fs.unlinkSync(targetPath)
-        } catch (e) {
+        } catch {
           // Ignore cleanup errors
         }
       }
@@ -203,7 +203,7 @@ async function checkExistingFile(
       console.warn(`[Download Utils] Failed to verify existing file, re-downloading:`, error)
       try {
         fs.unlinkSync(targetPath)
-      } catch (e) {
+      } catch {
         // Ignore cleanup errors
       }
     }
@@ -213,7 +213,7 @@ async function checkExistingFile(
     onProgress({ percentage: 100, current: stats.size, total: stats.size, speed: 0 })
     return true
   }
-  
+
   return false
 }
 
@@ -275,7 +275,7 @@ function cleanupPartFiles(targetPath: string, threadCount: number): void {
     if (fs.existsSync(partPath)) {
       try {
         fs.unlinkSync(partPath)
-      } catch (e) {
+      } catch {
         // Ignore cleanup errors
       }
     }
@@ -340,7 +340,9 @@ async function mergePartFiles(
       const mergedStats = fs.statSync(tempTargetPath)
       if (mergedStats.size !== totalSize) {
         fs.unlinkSync(tempTargetPath)
-        reject(new Error(`Merged file size mismatch: expected ${totalSize}, got ${mergedStats.size}`))
+        reject(
+          new Error(`Merged file size mismatch: expected ${totalSize}, got ${mergedStats.size}`)
+        )
         return
       }
 
@@ -352,7 +354,7 @@ async function mergePartFiles(
       for (const partPath of partPaths) {
         try {
           fs.unlinkSync(partPath)
-        } catch (e) {
+        } catch {
           console.warn(`[Download Utils] Failed to clean up part file ${partPath}:`, e)
         }
       }
@@ -378,12 +380,10 @@ async function mergePartFiles(
               if (fs.existsSync(sha256Path)) {
                 fs.unlinkSync(sha256Path)
               }
-            } catch (e) {
+            } catch {
               // Ignore cleanup errors
             }
-            reject(
-              new Error(`SHA256 mismatch: expected ${expectedSha256}, got ${sha256}`)
-            )
+            reject(new Error(`SHA256 mismatch: expected ${expectedSha256}, got ${sha256}`))
             return
           } else {
             console.log(`[Download Utils] SHA256 verification passed: ${sha256}`)
@@ -405,7 +405,7 @@ async function mergePartFiles(
       if (fs.existsSync(tempTargetPath)) {
         fs.unlinkSync(tempTargetPath)
       }
-    } catch (e) {
+    } catch {
       // Ignore cleanup errors
     }
     reject(new Error(`Failed to merge part files: ${mergeErr}`))
@@ -466,7 +466,7 @@ function setupSimpleDownloadResponse(
  * Simple single-threaded download helper.
  * Suitable for mirror downloads (e.g., HF Mirror).
  * Supports SHA256 verification with caching.
- * 
+ *
  * This is a simplified version that doesn't use multi-threading,
  * making it more suitable for mirror sites that may not support range requests well.
  */
@@ -504,7 +504,9 @@ export async function downloadFileSimple(
         return
       }
 
-      console.log(`[Download Utils] Starting simple download (attempt ${attempt}/${MAX_RETRIES}): ${url}`)
+      console.log(
+        `[Download Utils] Starting simple download (attempt ${attempt}/${MAX_RETRIES}): ${url}`
+      )
 
       const req = net.request({ method: 'GET', url })
       activeDownloadRequests.add(req)
@@ -625,7 +627,7 @@ export async function downloadFileSimple(
  * Multi-threaded resumable download helper.
  * Uses persistent .part files to resume across app restarts.
  * Supports SHA256 verification with caching to avoid repeated calculations.
- * 
+ *
  * This function uses multiple threads for faster downloads, suitable for
  * direct downloads from original sources. For mirror sites, consider using
  * downloadFileSimple instead.
@@ -656,11 +658,14 @@ export async function downloadFile(
     const checkExistingFile = async (): Promise<boolean> => {
       if (fs.existsSync(targetPath)) {
         console.log(`[Download Utils] File ${targetPath} exists, verifying...`)
-        
+
         // If expected SHA256 is provided, verify it first (using cache if available)
         if (expectedSha256) {
           try {
-            const { isValid, sha256, fromCache } = await verifyFileSha256(targetPath, expectedSha256)
+            const { isValid, sha256, fromCache } = await verifyFileSha256(
+              targetPath,
+              expectedSha256
+            )
             if (isValid) {
               console.log(
                 `[Download Utils] File ${targetPath} SHA256 verified${fromCache ? ' (from cache)' : ''}: ${sha256}`
@@ -682,7 +687,7 @@ export async function downloadFile(
                 if (fs.existsSync(sha256Path)) {
                   fs.unlinkSync(sha256Path)
                 }
-              } catch (e) {
+              } catch {
                 console.warn(`[Download Utils] Failed to remove invalid file:`, e)
               }
             }
@@ -715,341 +720,353 @@ export async function downloadFile(
 
       // Continue with download process
 
-    // 1. Get total file size
-    const request = net.request({ method: 'HEAD', url })
-    activeDownloadRequests.add(request)
+      // 1. Get total file size
+      const request = net.request({ method: 'HEAD', url })
+      activeDownloadRequests.add(request)
 
-    let headTimeout: NodeJS.Timeout | null = null
-    const cleanupRequest = (): void => {
-      if (headTimeout) clearTimeout(headTimeout)
-      activeDownloadRequests.delete(request)
-    }
-
-    headTimeout = setTimeout(() => {
-      cleanupRequest()
-      reject(new Error('HEAD request timeout after 30s'))
-    }, REQUEST_TIMEOUT)
-
-    request.on('response', (response) => {
-      cleanupRequest()
-      if (response.statusCode !== 200) {
-        reject(new Error(`HEAD request failed with status ${response.statusCode}`))
-        return
+      let headTimeout: NodeJS.Timeout | null = null
+      const cleanupRequest = (): void => {
+        if (headTimeout) clearTimeout(headTimeout)
+        activeDownloadRequests.delete(request)
       }
 
-      const lengthHeader = response.headers['content-length']
-      const totalSize = parseInt(
-        Array.isArray(lengthHeader) ? lengthHeader[0] : (lengthHeader as string) || '0',
-        10
-      )
+      headTimeout = setTimeout(() => {
+        cleanupRequest()
+        reject(new Error('HEAD request timeout after 30s'))
+      }, REQUEST_TIMEOUT)
 
-      if (!totalSize || totalSize === 0) {
-        reject(new Error('Remote file has 0 size or content-length missing'))
-        return
-      }
-
-      // Double-check if file was completed between initial check and HEAD response
-      // This prevents race conditions where file might be created by another process
-      if (fs.existsSync(targetPath)) {
-        const stats = fs.statSync(targetPath)
-        if (stats.size === totalSize) {
-          // If expected SHA256 is provided, verify it (edge case: file created between checks)
-          if (expectedSha256) {
-            verifyFileSha256(targetPath, expectedSha256)
-              .then(({ isValid, sha256, fromCache }) => {
-                if (isValid) {
-                  console.log(
-                    `[Download Utils] File ${targetPath} already complete and SHA256 verified${fromCache ? ' (from cache)' : ''}: ${sha256}`
-                  )
-                  // Clean up any leftover part files
-                  cleanupPartFiles(targetPath, THREAD_COUNT)
-                  onProgress({ percentage: 100, current: totalSize, total: totalSize, speed: 0 })
-                  resolve()
-                } else {
-                  console.log(
-                    `[Download Utils] File ${targetPath} size matches but SHA256 mismatch (expected: ${expectedSha256}, got: ${sha256}). Re-downloading.`
-                  )
-                  // Remove invalid file
-                  try {
-                    fs.unlinkSync(targetPath)
-                    const sha256Path = getSha256Path(targetPath)
-                    if (fs.existsSync(sha256Path)) {
-                      fs.unlinkSync(sha256Path)
-                    }
-                  } catch (e) {
-                    console.warn(`[Download Utils] Failed to remove invalid file:`, e)
-                  }
-                  // Continue with download - don't return here
-                }
-              })
-              .catch((err) => {
-                console.warn(`[Download Utils] SHA256 verification failed:`, err)
-                // If verification fails, continue with download to be safe
-              })
-            return // Don't continue until SHA256 verification completes
-          } else {
-            // No expected SHA256, just check size
-            console.log(`[Download Utils] File ${targetPath} already complete (${totalSize} bytes). Skipping download.`)
-            
-            // Clean up any leftover part files
-            cleanupPartFiles(targetPath, THREAD_COUNT)
-            
-            onProgress({ percentage: 100, current: totalSize, total: totalSize, speed: 0 })
-            resolve()
-            return
-          }
-        } else {
-          console.log(`[Download Utils] File ${targetPath} exists but size mismatch (local: ${stats.size}, remote: ${totalSize}). Will resume or re-download.`)
-          // Don't remove the file here - let the download logic handle it based on part files
-          // If part files exist, we'll resume; otherwise, we'll start fresh
-        }
-      }
-
-      // 2. Prepare Chunks
-      const chunkSize = Math.ceil(totalSize / THREAD_COUNT)
-      const threadDownloaded: number[] = new Array(THREAD_COUNT).fill(0)
-      let activeThreads = 0
-      let hasError = false
-
-      // Speed calculation
-      let lastEmitTime = Date.now()
-      let lastEmitBytes = 0
-
-      const emitProgress = (force = false): void => {
-        const currentTotal = threadDownloaded.reduce((a, b) => a + b, 0)
-        const now = Date.now()
-        const timeDiff = now - lastEmitTime
-
-        if (force || timeDiff >= 500 || currentTotal === totalSize) {
-          let speed = 0
-          if (timeDiff > 0) {
-            const bytesDiff = currentTotal - lastEmitBytes
-            speed = (bytesDiff / timeDiff) * 1000
-          }
-
-          onProgress({
-            percentage: Math.min(100, Math.round((currentTotal / totalSize) * 100)),
-            current: currentTotal,
-            total: totalSize,
-            speed
-          })
-
-          lastEmitTime = now
-          lastEmitBytes = currentTotal
-        }
-      }
-
-      const getRetryDelay = (attempt: number): number => {
-        return Math.min(1000 * Math.pow(2, attempt - 1), 30000)
-      }
-
-      // Function to handle a single thread download
-      const downloadThread = (index: number, attempt = 1): void => {
-        if (hasError || isQuitting()) return
-
-        const startOriginal = index * chunkSize
-        const endOriginal = Math.min((index + 1) * chunkSize - 1, totalSize - 1)
-        const partPath = `${targetPath}.part${index}`
-
-        // Check existing part - use atomic file operations to prevent race conditions
-        let existingSize = 0
-        let partExists = false
-        try {
-          if (fs.existsSync(partPath)) {
-            const partStats = fs.statSync(partPath)
-            existingSize = partStats.size
-            partExists = true
-          }
-        } catch (e) {
-          console.warn(`[Download Utils] Failed to check part file ${partPath}:`, e)
-          existingSize = 0
-          partExists = false
-        }
-
-        const expectedPartSize = endOriginal - startOriginal + 1
-        threadDownloaded[index] = existingSize
-        emitProgress()
-
-        // Check if this part is already complete
-        if (partExists && existingSize >= expectedPartSize) {
-          console.log(`[Download Utils] Thread ${index} already finished (${existingSize}/${expectedPartSize} bytes).`)
-          activeThreads--
-          checkAllFinished()
+      request.on('response', (response) => {
+        cleanupRequest()
+        if (response.statusCode !== 200) {
+          reject(new Error(`HEAD request failed with status ${response.statusCode}`))
           return
         }
 
-        // If part exists but is incomplete, resume from where we left off
-        // If part doesn't exist, start from the beginning of the chunk
-        const currentStart = startOriginal + existingSize
-        console.log(
-          `[Download Utils] Thread ${index} (Attempt ${attempt}/${MAX_RETRIES}): Requesting bytes=${currentStart}-${endOriginal}`
+        const lengthHeader = response.headers['content-length']
+        const totalSize = parseInt(
+          Array.isArray(lengthHeader) ? lengthHeader[0] : (lengthHeader as string) || '0',
+          10
         )
 
-        const chunkReq = net.request({ method: 'GET', url })
-        activeDownloadRequests.add(chunkReq)
-        chunkReq.setHeader('Range', `bytes=${currentStart}-${endOriginal}`)
+        if (!totalSize || totalSize === 0) {
+          reject(new Error('Remote file has 0 size or content-length missing'))
+          return
+        }
 
-        let chunkTimeout: NodeJS.Timeout | null = null
-        let isTimedOut = false
+        // Double-check if file was completed between initial check and HEAD response
+        // This prevents race conditions where file might be created by another process
+        if (fs.existsSync(targetPath)) {
+          const stats = fs.statSync(targetPath)
+          if (stats.size === totalSize) {
+            // If expected SHA256 is provided, verify it (edge case: file created between checks)
+            if (expectedSha256) {
+              verifyFileSha256(targetPath, expectedSha256)
+                .then(({ isValid, sha256, fromCache }) => {
+                  if (isValid) {
+                    console.log(
+                      `[Download Utils] File ${targetPath} already complete and SHA256 verified${fromCache ? ' (from cache)' : ''}: ${sha256}`
+                    )
+                    // Clean up any leftover part files
+                    cleanupPartFiles(targetPath, THREAD_COUNT)
+                    onProgress({ percentage: 100, current: totalSize, total: totalSize, speed: 0 })
+                    resolve()
+                  } else {
+                    console.log(
+                      `[Download Utils] File ${targetPath} size matches but SHA256 mismatch (expected: ${expectedSha256}, got: ${sha256}). Re-downloading.`
+                    )
+                    // Remove invalid file
+                    try {
+                      fs.unlinkSync(targetPath)
+                      const sha256Path = getSha256Path(targetPath)
+                      if (fs.existsSync(sha256Path)) {
+                        fs.unlinkSync(sha256Path)
+                      }
+                    } catch {
+                      console.warn(`[Download Utils] Failed to remove invalid file:`, e)
+                    }
+                    // Continue with download - don't return here
+                  }
+                })
+                .catch((err) => {
+                  console.warn(`[Download Utils] SHA256 verification failed:`, err)
+                  // If verification fails, continue with download to be safe
+                })
+              return // Don't continue until SHA256 verification completes
+            } else {
+              // No expected SHA256, just check size
+              console.log(
+                `[Download Utils] File ${targetPath} already complete (${totalSize} bytes). Skipping download.`
+              )
 
-        const handleRetry = (error: string): void => {
-          if (chunkTimeout) clearTimeout(chunkTimeout)
-          activeDownloadRequests.delete(chunkReq)
-          if (isQuitting()) return
+              // Clean up any leftover part files
+              cleanupPartFiles(targetPath, THREAD_COUNT)
 
-          if (attempt < MAX_RETRIES) {
-            const delay = getRetryDelay(attempt)
-            console.log(
-              `[Download Utils] Thread ${index} failed: ${error}. Retrying in ${delay}ms...`
-            )
-            setTimeout(() => downloadThread(index, attempt + 1), delay)
+              onProgress({ percentage: 100, current: totalSize, total: totalSize, speed: 0 })
+              resolve()
+              return
+            }
           } else {
-            hasError = true
-            reject(new Error(`Thread ${index} failed after ${MAX_RETRIES} attempts: ${error}`))
+            console.log(
+              `[Download Utils] File ${targetPath} exists but size mismatch (local: ${stats.size}, remote: ${totalSize}). Will resume or re-download.`
+            )
+            // Don't remove the file here - let the download logic handle it based on part files
+            // If part files exist, we'll resume; otherwise, we'll start fresh
           }
         }
 
-        chunkTimeout = setTimeout(() => {
-          isTimedOut = true
-          chunkReq.abort()
-          handleRetry('Timeout')
-        }, REQUEST_TIMEOUT)
+        // 2. Prepare Chunks
+        const chunkSize = Math.ceil(totalSize / THREAD_COUNT)
+        const threadDownloaded: number[] = new Array(THREAD_COUNT).fill(0)
+        let activeThreads = 0
+        let hasError = false
 
-        chunkReq.on('response', (chunkRes) => {
-          if (chunkRes.statusCode !== 200 && chunkRes.statusCode !== 206) {
-            handleRetry(`Status ${chunkRes.statusCode}`)
+        // Speed calculation
+        let lastEmitTime = Date.now()
+        let lastEmitBytes = 0
+
+        const emitProgress = (force = false): void => {
+          const currentTotal = threadDownloaded.reduce((a, b) => a + b, 0)
+          const now = Date.now()
+          const timeDiff = now - lastEmitTime
+
+          if (force || timeDiff >= 500 || currentTotal === totalSize) {
+            let speed = 0
+            if (timeDiff > 0) {
+              const bytesDiff = currentTotal - lastEmitBytes
+              speed = (bytesDiff / timeDiff) * 1000
+            }
+
+            onProgress({
+              percentage: Math.min(100, Math.round((currentTotal / totalSize) * 100)),
+              current: currentTotal,
+              total: totalSize,
+              speed
+            })
+
+            lastEmitTime = now
+            lastEmitBytes = currentTotal
+          }
+        }
+
+        const getRetryDelay = (attempt: number): number => {
+          return Math.min(1000 * Math.pow(2, attempt - 1), 30000)
+        }
+
+        // Function to handle a single thread download
+        const downloadThread = (index: number, attempt = 1): void => {
+          if (hasError || isQuitting()) return
+
+          const startOriginal = index * chunkSize
+          const endOriginal = Math.min((index + 1) * chunkSize - 1, totalSize - 1)
+          const partPath = `${targetPath}.part${index}`
+
+          // Check existing part - use atomic file operations to prevent race conditions
+          let existingSize = 0
+          let partExists = false
+          try {
+            if (fs.existsSync(partPath)) {
+              const partStats = fs.statSync(partPath)
+              existingSize = partStats.size
+              partExists = true
+            }
+          } catch {
+            console.warn(`[Download Utils] Failed to check part file ${partPath}:`, e)
+            existingSize = 0
+            partExists = false
+          }
+
+          const expectedPartSize = endOriginal - startOriginal + 1
+          threadDownloaded[index] = existingSize
+          emitProgress()
+
+          // Check if this part is already complete
+          if (partExists && existingSize >= expectedPartSize) {
+            console.log(
+              `[Download Utils] Thread ${index} already finished (${existingSize}/${expectedPartSize} bytes).`
+            )
+            activeThreads--
+            checkAllFinished()
             return
           }
 
-          // Use append mode if part file exists, otherwise create new
-          const fileStream = fs.createWriteStream(partPath, { flags: 'a' })
+          // If part exists but is incomplete, resume from where we left off
+          // If part doesn't exist, start from the beginning of the chunk
+          const currentStart = startOriginal + existingSize
+          console.log(
+            `[Download Utils] Thread ${index} (Attempt ${attempt}/${MAX_RETRIES}): Requesting bytes=${currentStart}-${endOriginal}`
+          )
 
-          chunkRes.on('data', (data) => {
-            if (isQuitting()) {
-              chunkReq.abort()
-              fileStream.close()
-              return
-            }
-            if (hasError) {
-              fileStream.close()
-              return
-            }
-            try {
-              fileStream.write(data)
-              threadDownloaded[index] += data.length
-              emitProgress()
-            } catch (writeErr) {
-              console.error(`[Download Utils] Write error in thread ${index}:`, writeErr)
-              fileStream.close()
-              handleRetry(`Write error: ${writeErr}`)
-            }
-          })
+          const chunkReq = net.request({ method: 'GET', url })
+          activeDownloadRequests.add(chunkReq)
+          chunkReq.setHeader('Range', `bytes=${currentStart}-${endOriginal}`)
 
-          chunkRes.on('end', () => {
+          let chunkTimeout: NodeJS.Timeout | null = null
+          let isTimedOut = false
+
+          const handleRetry = (error: string): void => {
             if (chunkTimeout) clearTimeout(chunkTimeout)
             activeDownloadRequests.delete(chunkReq)
-            fileStream.end(() => {
-              console.log(`[Download Utils] Thread ${index} segment finished.`)
-              activeThreads--
-              checkAllFinished()
+            if (isQuitting()) return
+
+            if (attempt < MAX_RETRIES) {
+              const delay = getRetryDelay(attempt)
+              console.log(
+                `[Download Utils] Thread ${index} failed: ${error}. Retrying in ${delay}ms...`
+              )
+              setTimeout(() => downloadThread(index, attempt + 1), delay)
+            } else {
+              hasError = true
+              reject(new Error(`Thread ${index} failed after ${MAX_RETRIES} attempts: ${error}`))
+            }
+          }
+
+          chunkTimeout = setTimeout(() => {
+            isTimedOut = true
+            chunkReq.abort()
+            handleRetry('Timeout')
+          }, REQUEST_TIMEOUT)
+
+          chunkReq.on('response', (chunkRes) => {
+            if (chunkRes.statusCode !== 200 && chunkRes.statusCode !== 206) {
+              handleRetry(`Status ${chunkRes.statusCode}`)
+              return
+            }
+
+            // Use append mode if part file exists, otherwise create new
+            const fileStream = fs.createWriteStream(partPath, { flags: 'a' })
+
+            chunkRes.on('data', (data) => {
+              if (isQuitting()) {
+                chunkReq.abort()
+                fileStream.close()
+                return
+              }
+              if (hasError) {
+                fileStream.close()
+                return
+              }
+              try {
+                fileStream.write(data)
+                threadDownloaded[index] += data.length
+                emitProgress()
+              } catch (writeErr) {
+                console.error(`[Download Utils] Write error in thread ${index}:`, writeErr)
+                fileStream.close()
+                handleRetry(`Write error: ${writeErr}`)
+              }
+            })
+
+            chunkRes.on('end', () => {
+              if (chunkTimeout) clearTimeout(chunkTimeout)
+              activeDownloadRequests.delete(chunkReq)
+              fileStream.end(() => {
+                console.log(`[Download Utils] Thread ${index} segment finished.`)
+                activeThreads--
+                checkAllFinished()
+              })
+            })
+
+            chunkRes.on('error', (err) => {
+              fileStream.close()
+              if (!isTimedOut) handleRetry(err.message)
             })
           })
 
-          chunkRes.on('error', (err) => {
-            fileStream.close()
-            if (!isTimedOut) handleRetry(err.message)
+          chunkReq.on('error', (err) => {
+            if (!isTimedOut && !isQuitting()) handleRetry(err.message)
           })
-        })
 
-        chunkReq.on('error', (err) => {
-          if (!isTimedOut && !isQuitting()) handleRetry(err.message)
-        })
+          chunkReq.end()
+        }
 
-        chunkReq.end()
-      }
+        const checkAllFinished = async (): Promise<void> => {
+          if (activeThreads === 0 && !hasError) {
+            try {
+              console.log(
+                `[Download Utils] All threads finished for ${targetPath}. Verifying and merging...`
+              )
 
-      const checkAllFinished = async (): Promise<void> => {
-        if (activeThreads === 0 && !hasError) {
-          try {
-            console.log(`[Download Utils] All threads finished for ${targetPath}. Verifying and merging...`)
+              // Verify part files
+              const partPaths = verifyPartFiles(targetPath, THREAD_COUNT, chunkSize, totalSize)
 
-            // Verify part files
-            const partPaths = verifyPartFiles(targetPath, THREAD_COUNT, chunkSize, totalSize)
+              // Check if target file already exists (might have been created by another process)
+              if (fs.existsSync(targetPath)) {
+                const existingStats = fs.statSync(targetPath)
+                if (existingStats.size === totalSize) {
+                  console.log(
+                    `[Download Utils] Target file already exists with correct size, cleaning up part files...`
+                  )
+                  cleanupPartFiles(targetPath, THREAD_COUNT)
 
-            // Check if target file already exists (might have been created by another process)
-            if (fs.existsSync(targetPath)) {
-              const existingStats = fs.statSync(targetPath)
-              if (existingStats.size === totalSize) {
-                console.log(`[Download Utils] Target file already exists with correct size, cleaning up part files...`)
-                cleanupPartFiles(targetPath, THREAD_COUNT)
-
-                // Verify SHA256 if provided
-                if (expectedSha256) {
-                  try {
-                    const { isValid, sha256 } = await verifyFileSha256(targetPath, expectedSha256)
-                    if (isValid) {
-                      console.log(`[Download Utils] Existing file SHA256 verified: ${sha256}`)
-                      emitProgress(true)
-                      resolve()
-                      return
-                    } else {
-                      console.log(`[Download Utils] Existing file SHA256 mismatch, will overwrite`)
-                      fs.unlinkSync(targetPath)
+                  // Verify SHA256 if provided
+                  if (expectedSha256) {
+                    try {
+                      const { isValid, sha256 } = await verifyFileSha256(targetPath, expectedSha256)
+                      if (isValid) {
+                        console.log(`[Download Utils] Existing file SHA256 verified: ${sha256}`)
+                        emitProgress(true)
+                        resolve()
+                        return
+                      } else {
+                        console.log(
+                          `[Download Utils] Existing file SHA256 mismatch, will overwrite`
+                        )
+                        fs.unlinkSync(targetPath)
+                      }
+                    } catch (err) {
+                      console.warn(`[Download Utils] SHA256 verification failed:`, err)
+                      // Continue with merge
                     }
-                  } catch (err) {
-                    console.warn(`[Download Utils] SHA256 verification failed:`, err)
-                    // Continue with merge
+                  } else {
+                    emitProgress(true)
+                    resolve()
+                    return
                   }
                 } else {
-                  emitProgress(true)
-                  resolve()
-                  return
-                }
-              } else {
-                // Remove incomplete target file
-                try {
-                  fs.unlinkSync(targetPath)
-                } catch (e) {
-                  console.warn(`[Download Utils] Failed to remove incomplete target file:`, e)
+                  // Remove incomplete target file
+                  try {
+                    fs.unlinkSync(targetPath)
+                  } catch {
+                    console.warn(`[Download Utils] Failed to remove incomplete target file:`, e)
+                  }
                 }
               }
-            }
 
-            // Merge part files
-            await mergePartFiles(
-              targetPath,
-              partPaths,
-              totalSize,
-              expectedSha256,
-              onProgress,
-              emitProgress,
-              resolve,
-              reject
-            )
-          } catch (err) {
-            reject(err)
+              // Merge part files
+              await mergePartFiles(
+                targetPath,
+                partPaths,
+                totalSize,
+                expectedSha256,
+                onProgress,
+                emitProgress,
+                resolve,
+                reject
+              )
+            } catch (err) {
+              reject(err)
+            }
           }
         }
-      }
 
-      activeThreads = THREAD_COUNT
-      lastEmitBytes = threadDownloaded.reduce((a, b) => a + b, 0)
-      for (let i = 0; i < THREAD_COUNT; i++) {
-        downloadThread(i)
-      }
-    })
+        activeThreads = THREAD_COUNT
+        lastEmitBytes = threadDownloaded.reduce((a, b) => a + b, 0)
+        for (let i = 0; i < THREAD_COUNT; i++) {
+          downloadThread(i)
+        }
+      })
 
-    request.on('error', (err) => {
-      cleanupRequest()
-      if (!isQuitting()) reject(err)
-    })
-    request.end()
+      request.on('error', (err) => {
+        cleanupRequest()
+        if (!isQuitting()) reject(err)
+      })
+      request.end()
     })
   })
 
   // Store the download promise and clean up when done
   activeDownloads.set(targetPath, downloadPromise)
-  
+
   downloadPromise
     .then(() => {
       activeDownloads.delete(targetPath)
@@ -1058,6 +1075,6 @@ export async function downloadFile(
       activeDownloads.delete(targetPath)
       throw err
     })
-  
+
   return downloadPromise
 }

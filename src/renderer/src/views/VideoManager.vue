@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent } from 'naive-ui'
+import { NLayout, NLayoutSider, NLayoutHeader } from 'naive-ui'
 import { useVideoManager } from '../composables/useVideoManager'
 import { useVideoGroups } from '../composables/useVideoGroups'
 import { useVideoAnchors } from '../composables/useVideoAnchors'
@@ -40,7 +40,7 @@ const {
   getAspectRatio,
   getVideoStatus,
   getVideoProgress,
-  getStatusText,
+
   updateVideoStatus
 } = useVideoManager()
 
@@ -59,7 +59,7 @@ const {
 const {
   anchors,
   activeAnchorId,
-  currentAnchor,
+
   fetchAnchors,
   createAnchor,
   renameAnchor,
@@ -71,7 +71,7 @@ const {
 const {
   products,
   activeProductId,
-  currentProduct,
+
   fetchProducts,
   createProduct,
   renameProduct,
@@ -79,7 +79,6 @@ const {
   updateVideoProduct,
   getFileProduct
 } = useVideoProducts()
-
 
 // 对话框状态
 const showRenameModal = ref(false)
@@ -167,7 +166,7 @@ const currentFiles = computed(() => {
 
   // 先按分组过滤
   if (activeGroupId.value !== null) {
-    filtered = filtered.filter(file => {
+    filtered = filtered.filter((file) => {
       const group = getFileGroup(file)
       return group?.id === activeGroupId.value
     })
@@ -175,7 +174,7 @@ const currentFiles = computed(() => {
 
   // 按主播过滤
   if (activeAnchorId.value !== null) {
-    filtered = filtered.filter(file => {
+    filtered = filtered.filter((file) => {
       const anchor = getFileAnchor(file)
       return anchor?.id === activeAnchorId.value
     })
@@ -183,7 +182,7 @@ const currentFiles = computed(() => {
 
   // 按产品过滤
   if (activeProductId.value !== null) {
-    filtered = filtered.filter(file => {
+    filtered = filtered.filter((file) => {
       const product = getFileProduct(file)
       return product?.id === activeProductId.value
     })
@@ -192,9 +191,7 @@ const currentFiles = computed(() => {
   // 再按搜索关键词过滤
   if (searchKeyword.value.trim()) {
     const keyword = searchKeyword.value.trim().toLowerCase()
-    filtered = filtered.filter(file => 
-      file.name.toLowerCase().includes(keyword)
-    )
+    filtered = filtered.filter((file) => file.name.toLowerCase().includes(keyword))
   }
 
   return filtered
@@ -224,7 +221,7 @@ watch(
           updateVideoStatus(videoId, 5) // 5 = FAILED
         } else if (progress.status === 'parsing' || progress.status === 'transcribing') {
           // 处理中状态，根据当前状态决定更新
-          const file = allFiles.value.find(f => f.id === videoId)
+          const file = allFiles.value.find((f) => f.id === videoId)
           if (file) {
             // 如果当前状态不是处理中状态（1, 2, 3），则更新状态
             if (file.status !== 1 && file.status !== 2 && file.status !== 3) {
@@ -259,7 +256,7 @@ const refreshAllData = (): void => {
   fetchGroups()
   fetchAnchors()
   fetchProducts()
-  
+
   // 检查并重新连接 WebSocket
   if (!wsStore.connected) {
     console.log('[VideoManager] WebSocket 未连接，尝试重新连接')
@@ -297,7 +294,7 @@ watch(
 // 初始化
 onMounted(() => {
   refreshAllData()
-  
+
   // 监听窗口可见性变化
   document.addEventListener('visibilitychange', handleVisibilityChange)
   // 监听窗口焦点变化
@@ -322,7 +319,7 @@ onUnmounted(() => {
 // 文件上传（统一使用批量上传）
 const triggerUpload = async (): Promise<void> => {
   if (isUploading.value) return
-  
+
   try {
     const result = await window.api.selectVideoFile()
     if (result.success) {
@@ -337,13 +334,10 @@ const triggerUpload = async (): Promise<void> => {
       if (activeProductId.value !== null) {
         categoryIds.push(activeProductId.value)
       }
-      
+
       // 统一使用批量上传
       if (result.filePaths && result.filePaths.length > 0) {
-        await uploadFilesBatch(
-          result.filePaths, 
-          categoryIds.length > 0 ? categoryIds : undefined
-        )
+        await uploadFilesBatch(result.filePaths, categoryIds.length > 0 ? categoryIds : undefined)
       }
     }
   } catch (error) {
@@ -354,7 +348,7 @@ const triggerUpload = async (): Promise<void> => {
 // 文件夹上传（自动检测视频和字幕文件）
 const triggerFolderUpload = async (): Promise<void> => {
   if (isUploading.value) return
-  
+
   // 如果当前选中了分组、主播或产品，上传时自动添加到对应的分类
   const categoryIds: number[] = []
   if (activeGroupId.value !== null) {
@@ -366,7 +360,7 @@ const triggerFolderUpload = async (): Promise<void> => {
   if (activeProductId.value !== null) {
     categoryIds.push(activeProductId.value)
   }
-  
+
   await uploadFolder(categoryIds.length > 0 ? categoryIds : undefined)
 }
 
@@ -398,15 +392,15 @@ const handleDrop = async (e: DragEvent): Promise<void> => {
   e.preventDefault()
   if (e.dataTransfer && e.dataTransfer.files.length > 0) {
     // 过滤出视频文件
-    const videoFiles = Array.from(e.dataTransfer.files).filter(file => 
+    const videoFiles = Array.from(e.dataTransfer.files).filter((file) =>
       file.type.startsWith('video/')
     )
-    
+
     if (videoFiles.length === 0) {
       console.warn('No video files found')
       return
     }
-    
+
     try {
       // 如果当前选中了分组、主播或产品，上传时自动添加到对应的分类
       const categoryIds: number[] = []
@@ -419,10 +413,10 @@ const handleDrop = async (e: DragEvent): Promise<void> => {
       if (activeProductId.value !== null) {
         categoryIds.push(activeProductId.value)
       }
-      
+
       // 获取所有视频文件的路径
-      const filePaths = videoFiles.map(file => window.api.getPathForFile(file))
-      
+      const filePaths = videoFiles.map((file) => window.api.getPathForFile(file))
+
       // 统一使用批量上传
       await uploadFilesBatch(filePaths, categoryIds.length > 0 ? categoryIds : undefined)
     } catch (error) {
@@ -435,7 +429,6 @@ const handleDrop = async (e: DragEvent): Promise<void> => {
 const handleFileSelect = (file: FileItem): void => {
   selectedFileId.value = file.id
 }
-
 
 // 右键菜单
 const handleContextMenu = (e: MouseEvent, file: FileItem): void => {
@@ -475,7 +468,7 @@ const handleRename = async (newName: string): Promise<void> => {
   try {
     await renameVideo(renameVideoId.value, newName)
     showRenameModal.value = false
-  } catch (error) {
+  } catch {
     // Error already handled in composable
   }
 }
@@ -486,83 +479,83 @@ const handleCategoryMenuItem = (): void => {
   const file = contextMenuFile.value
   closeContextMenu()
   categoryVideoId.value = file.id
-  
+
   const currentGroup = getFileGroup(file)
   const currentAnchor = getFileAnchor(file)
   const currentProduct = getFileProduct(file)
-  
+
   categoryVideoCurrentGroupName.value = currentGroup?.name || ''
   categoryVideoCurrentAnchorName.value = currentAnchor?.name || ''
   categoryVideoCurrentProductName.value = currentProduct?.name || ''
-  
+
   categoryVideoCurrentGroupId.value = currentGroup?.id || null
   categoryVideoCurrentAnchorId.value = currentAnchor?.id || null
   categoryVideoCurrentProductId.value = currentProduct?.id || null
-  
+
   showCategoryModal.value = true
 }
 
 // 处理统一的分类设置确认
 const handleCategoryConfirm = async (
-  groupName: string, 
-  anchorName: string, 
+  groupName: string,
+  anchorName: string,
   productName: string
 ): Promise<void> => {
   if (!categoryVideoId.value) return
-  
+
   const videoId = categoryVideoId.value
-  
+
   // 处理分组
   const groupValue = groupName.trim()
   let targetGroupId: number | null = null
   if (groupValue) {
-    const existingGroup = groups.value.find(g => g.name === groupValue)
+    const existingGroup = groups.value.find((g) => g.name === groupValue)
     if (existingGroup) {
       targetGroupId = existingGroup.id
     } else {
       try {
         const newGroup = await createGroup(groupValue)
         targetGroupId = newGroup.id
-      } catch (error) {
+      } catch {
         // Error already handled
       }
     }
   }
-  
+
   // 处理主播
   const anchorValue = anchorName.trim()
   let targetAnchorId: number | null = null
   if (anchorValue) {
-    const existingAnchor = anchors.value.find(a => a.name === anchorValue)
+    const existingAnchor = anchors.value.find((a) => a.name === anchorValue)
     if (existingAnchor) {
       targetAnchorId = existingAnchor.id
     } else {
       try {
         const newAnchor = await createAnchor(anchorValue)
         targetAnchorId = newAnchor.id
-      } catch (error) {
+      } catch {
         // Error already handled
       }
     }
   }
-  
+
   // 处理产品
   const productValue = productName.trim()
   let targetProductId: number | null = null
   if (productValue) {
-    const existingProduct = products.value.find(p => p.name === productValue)
+    const existingProduct = products.value.find((p) => p.name === productValue)
     if (existingProduct) {
       targetProductId = existingProduct.id
     } else {
       try {
         const newProduct = await createProduct(productValue)
         targetProductId = newProduct.id
-      } catch (error) {
+      } catch {
         // Error already handled
       }
     }
   }
-  
+
   // 更新视频分类
   try {
     // 更新分组
@@ -571,41 +564,11 @@ const handleCategoryConfirm = async (
     await updateVideoAnchor(videoId, targetAnchorId, categoryVideoCurrentAnchorId.value)
     // 更新产品
     await updateVideoProduct(videoId, targetProductId, categoryVideoCurrentProductId.value)
-    
+
     showCategoryModal.value = false
     await fetchVideos()
-  } catch (error) {
+  } catch {
     // Error already handled
-  }
-}
-
-// 分组（保留用于兼容）
-const handleGroupMenuItem = (): void => {
-  if (!contextMenuFile.value) return
-  const file = contextMenuFile.value
-  closeContextMenu()
-  groupVideoId.value = file.id
-  const currentGroup = getFileGroup(file)
-  if (currentGroup) {
-    groupVideoCurrentGroupName.value = currentGroup.name
-    groupVideoCurrentGroupId.value = currentGroup.id
-  } else {
-    groupVideoCurrentGroupName.value = ''
-    groupVideoCurrentGroupId.value = null
-  }
-  showGroupModal.value = true
-}
-
-const handleRemoveGroupMenuItem = async (): Promise<void> => {
-  if (!contextMenuFile.value) return
-  const file = contextMenuFile.value
-  closeContextMenu()
-  const currentGroup = getFileGroup(file)
-  try {
-    await updateVideoGroup(file.id, null, currentGroup?.id)
-    await fetchVideos()
-  } catch (error) {
-    // Error already handled in composable
   }
 }
 
@@ -613,28 +576,28 @@ const handleGroup = async (groupName: string): Promise<void> => {
   if (!groupVideoId.value) return
 
   const inputValue = groupName.trim()
-  
+
   if (!inputValue) {
     try {
       await updateVideoGroup(groupVideoId.value, null, groupVideoCurrentGroupId.value)
       showGroupModal.value = false
       await fetchVideos()
-    } catch (error) {
+    } catch {
       // Error already handled
     }
     return
   }
 
   let targetGroupId: number | null = null
-  const existingGroup = groups.value.find(g => g.name === inputValue)
-  
+  const existingGroup = groups.value.find((g) => g.name === inputValue)
+
   if (existingGroup) {
     targetGroupId = existingGroup.id
   } else {
     try {
       const newGroup = await createGroup(inputValue)
       targetGroupId = newGroup.id
-    } catch (error) {
+    } catch {
       return
     }
   }
@@ -643,38 +606,8 @@ const handleGroup = async (groupName: string): Promise<void> => {
     await updateVideoGroup(groupVideoId.value, targetGroupId, groupVideoCurrentGroupId.value)
     showGroupModal.value = false
     await fetchVideos()
-  } catch (error) {
+  } catch {
     // Error already handled
-  }
-}
-
-// 主播
-const handleAnchorMenuItem = (): void => {
-  if (!contextMenuFile.value) return
-  const file = contextMenuFile.value
-  closeContextMenu()
-  anchorVideoId.value = file.id
-  const currentAnchor = getFileAnchor(file)
-  if (currentAnchor) {
-    anchorVideoCurrentAnchorName.value = currentAnchor.name
-    anchorVideoCurrentAnchorId.value = currentAnchor.id
-  } else {
-    anchorVideoCurrentAnchorName.value = ''
-    anchorVideoCurrentAnchorId.value = null
-  }
-  showAnchorModal.value = true
-}
-
-const handleRemoveAnchorMenuItem = async (): Promise<void> => {
-  if (!contextMenuFile.value) return
-  const file = contextMenuFile.value
-  closeContextMenu()
-  const currentAnchor = getFileAnchor(file)
-  try {
-    await updateVideoAnchor(file.id, null, currentAnchor?.id)
-    await fetchVideos()
-  } catch (error) {
-    // Error already handled in composable
   }
 }
 
@@ -682,28 +615,28 @@ const handleAnchor = async (anchorName: string): Promise<void> => {
   if (!anchorVideoId.value) return
 
   const inputValue = anchorName.trim()
-  
+
   if (!inputValue) {
     try {
       await updateVideoAnchor(anchorVideoId.value, null, anchorVideoCurrentAnchorId.value)
       showAnchorModal.value = false
       await fetchVideos()
-    } catch (error) {
+    } catch {
       // Error already handled
     }
     return
   }
 
   let targetAnchorId: number | null = null
-  const existingAnchor = anchors.value.find(a => a.name === inputValue)
-  
+  const existingAnchor = anchors.value.find((a) => a.name === inputValue)
+
   if (existingAnchor) {
     targetAnchorId = existingAnchor.id
   } else {
     try {
       const newAnchor = await createAnchor(inputValue)
       targetAnchorId = newAnchor.id
-    } catch (error) {
+    } catch {
       return
     }
   }
@@ -712,38 +645,8 @@ const handleAnchor = async (anchorName: string): Promise<void> => {
     await updateVideoAnchor(anchorVideoId.value, targetAnchorId, anchorVideoCurrentAnchorId.value)
     showAnchorModal.value = false
     await fetchVideos()
-  } catch (error) {
+  } catch {
     // Error already handled
-  }
-}
-
-// 产品
-const handleProductMenuItem = (): void => {
-  if (!contextMenuFile.value) return
-  const file = contextMenuFile.value
-  closeContextMenu()
-  productVideoId.value = file.id
-  const currentProduct = getFileProduct(file)
-  if (currentProduct) {
-    productVideoCurrentProductName.value = currentProduct.name
-    productVideoCurrentProductId.value = currentProduct.id
-  } else {
-    productVideoCurrentProductName.value = ''
-    productVideoCurrentProductId.value = null
-  }
-  showProductModal.value = true
-}
-
-const handleRemoveProductMenuItem = async (): Promise<void> => {
-  if (!contextMenuFile.value) return
-  const file = contextMenuFile.value
-  closeContextMenu()
-  const currentProduct = getFileProduct(file)
-  try {
-    await updateVideoProduct(file.id, null, currentProduct?.id)
-    await fetchVideos()
-  } catch (error) {
-    // Error already handled in composable
   }
 }
 
@@ -751,37 +654,41 @@ const handleProduct = async (productName: string): Promise<void> => {
   if (!productVideoId.value) return
 
   const inputValue = productName.trim()
-  
+
   if (!inputValue) {
     try {
       await updateVideoProduct(productVideoId.value, null, productVideoCurrentProductId.value)
       showProductModal.value = false
       await fetchVideos()
-    } catch (error) {
+    } catch {
       // Error already handled
     }
     return
   }
 
   let targetProductId: number | null = null
-  const existingProduct = products.value.find(p => p.name === inputValue)
-  
+  const existingProduct = products.value.find((p) => p.name === inputValue)
+
   if (existingProduct) {
     targetProductId = existingProduct.id
   } else {
     try {
       const newProduct = await createProduct(inputValue)
       targetProductId = newProduct.id
-    } catch (error) {
+    } catch {
       return
     }
   }
 
   try {
-    await updateVideoProduct(productVideoId.value, targetProductId, productVideoCurrentProductId.value)
+    await updateVideoProduct(
+      productVideoId.value,
+      targetProductId,
+      productVideoCurrentProductId.value
+    )
     showProductModal.value = false
     await fetchVideos()
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -801,7 +708,7 @@ const handleDelete = async (): Promise<void> => {
   try {
     await deleteVideo(deleteVideoId.value)
     showDeleteModal.value = false
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -816,7 +723,7 @@ const handleMenuSelect = (key: string): void => {
     activeProductId.value = null
     return
   }
-  
+
   // 分组选择
   if (key.startsWith('group-')) {
     const groupId = parseInt(key.replace('group-', ''))
@@ -832,7 +739,7 @@ const handleMenuSelect = (key: string): void => {
       // 更新 activeKey，但不清空其他筛选
       activeKey.value = key
     }
-  } 
+  }
   // 主播选择
   else if (key.startsWith('anchor-')) {
     const anchorId = parseInt(key.replace('anchor-', ''))
@@ -848,7 +755,7 @@ const handleMenuSelect = (key: string): void => {
       // 更新 activeKey，但不清空其他筛选
       activeKey.value = key
     }
-  } 
+  }
   // 产品选择
   else if (key.startsWith('product-')) {
     const productId = parseInt(key.replace('product-', ''))
@@ -884,7 +791,7 @@ const closeGroupContextMenu = (): void => {
 
 const handleRenameGroupMenuItem = (): void => {
   if (!groupContextMenuId.value) return
-  const group = groups.value.find(g => g.id === groupContextMenuId.value)
+  const group = groups.value.find((g) => g.id === groupContextMenuId.value)
   if (group) {
     renameGroupId.value = group.id
     renameGroupName.value = group.name
@@ -898,7 +805,7 @@ const handleRenameGroup = async (newName: string): Promise<void> => {
   try {
     await renameGroup(renameGroupId.value, newName)
     showRenameGroupModal.value = false
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -908,7 +815,7 @@ const handleDeleteGroup = async (): Promise<void> => {
   try {
     await deleteGroup(groupContextMenuId.value)
     closeGroupContextMenu()
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -922,7 +829,7 @@ const handleCreateGroup = async (groupName: string): Promise<void> => {
   try {
     await createGroup(groupName)
     showCreateGroupModal.value = false
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -944,7 +851,7 @@ const closeAnchorContextMenu = (): void => {
 
 const handleRenameAnchorMenuItem = (): void => {
   if (!anchorContextMenuId.value) return
-  const anchor = anchors.value.find(a => a.id === anchorContextMenuId.value)
+  const anchor = anchors.value.find((a) => a.id === anchorContextMenuId.value)
   if (anchor) {
     renameAnchorId.value = anchor.id
     renameAnchorName.value = anchor.name
@@ -958,7 +865,7 @@ const handleRenameAnchor = async (newName: string): Promise<void> => {
   try {
     await renameAnchor(renameAnchorId.value, newName)
     showRenameAnchorModal.value = false
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -968,7 +875,7 @@ const handleDeleteAnchor = async (): Promise<void> => {
   try {
     await deleteAnchor(anchorContextMenuId.value)
     closeAnchorContextMenu()
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -982,7 +889,7 @@ const handleCreateAnchor = async (anchorName: string): Promise<void> => {
   try {
     await createAnchor(anchorName)
     showCreateAnchorModal.value = false
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -1004,7 +911,7 @@ const closeProductContextMenu = (): void => {
 
 const handleRenameProductMenuItem = (): void => {
   if (!productContextMenuId.value) return
-  const product = products.value.find(p => p.id === productContextMenuId.value)
+  const product = products.value.find((p) => p.id === productContextMenuId.value)
   if (product) {
     renameProductId.value = product.id
     renameProductName.value = product.name
@@ -1018,7 +925,7 @@ const handleRenameProduct = async (newName: string): Promise<void> => {
   try {
     await renameProduct(renameProductId.value, newName)
     showRenameProductModal.value = false
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -1028,7 +935,7 @@ const handleDeleteProduct = async (): Promise<void> => {
   try {
     await deleteProduct(productContextMenuId.value)
     closeProductContextMenu()
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -1042,7 +949,7 @@ const handleCreateProduct = async (productName: string): Promise<void> => {
   try {
     await createProduct(productName)
     showCreateProductModal.value = false
-  } catch (error) {
+  } catch {
     // Error already handled
   }
 }
@@ -1050,40 +957,36 @@ const handleCreateProduct = async (productName: string): Promise<void> => {
 // 点击外部关闭菜单
 const handleClickOutside = (e: MouseEvent): void => {
   const target = e.target as HTMLElement
-  
+
   if (showContextMenu.value && !target.closest('.context-menu')) {
     closeContextMenu()
   }
-  
+
   if (showGroupContextMenu.value && !target.closest('.group-context-menu')) {
     closeGroupContextMenu()
   }
-  
+
   if (showAnchorContextMenu.value && !target.closest('.anchor-context-menu')) {
     closeAnchorContextMenu()
   }
-  
+
   if (showProductContextMenu.value && !target.closest('.product-context-menu')) {
     closeProductContextMenu()
   }
 }
-
 </script>
 
 <template>
   <div class="video-manager-container" @dragover="handleDragOver" @drop="handleDrop">
     <n-layout position="absolute">
       <!-- 头部 - 绝对定位，覆盖右侧区域 -->
-      <n-layout-header
-        style="height: 50px; right: 0; top: 0"
-        bordered
-      >
+      <n-layout-header style="height: 50px; right: 0; top: 0" bordered>
         <VideoManagerToolbar
           :is-refreshing="isRefreshing"
           :current-group="currentGroup"
           @refresh="fetchVideos"
           @go-home="router.push('/home')"
-          @search="(keyword) => searchKeyword = keyword"
+          @search="(keyword) => (searchKeyword = keyword)"
         />
       </n-layout-header>
 
@@ -1095,9 +998,7 @@ const handleClickOutside = (e: MouseEvent): void => {
         style="top: 50px; bottom: 0; left: 0; right: 0"
       >
         <!-- 侧边栏 -->
-        <n-layout-sider
-          bordered
-        >
+        <n-layout-sider bordered>
           <VideoManagerSidebar
             :groups="groups"
             :anchors="anchors"
@@ -1116,7 +1017,11 @@ const handleClickOutside = (e: MouseEvent): void => {
         <!-- 内容区域 -->
         <n-layout content-style="padding: 24px; overflow-y: auto;">
           <div class="file-grid">
-            <UploadCard :uploading="isUploading" @select-file="triggerUpload" @select-folder="triggerFolderUpload" />
+            <UploadCard
+              :uploading="isUploading"
+              @select-file="triggerUpload"
+              @select-folder="triggerFolderUpload"
+            />
 
             <VideoCard
               v-for="file in currentFiles"
@@ -1303,5 +1208,4 @@ const handleClickOutside = (e: MouseEvent): void => {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
 }
-
 </style>

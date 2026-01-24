@@ -19,4 +19,3 @@ export interface FileItem {
   updated_at?: string
   imageError?: boolean
 }
-

@@ -16,19 +16,23 @@ const emit = defineEmits<{
 
 const renameVideoName = ref('')
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    // 获取文件名（不含扩展名）
-    const lastDotIndex = props.videoName.lastIndexOf('.')
-    renameVideoName.value = lastDotIndex === -1 ? props.videoName : props.videoName.substring(0, lastDotIndex)
+watch(
+  () => props.show,
+  (newVal) => {
+    if (newVal) {
+      // 获取文件名（不含扩展名）
+      const lastDotIndex = props.videoName.lastIndexOf('.')
+      renameVideoName.value =
+        lastDotIndex === -1 ? props.videoName : props.videoName.substring(0, lastDotIndex)
+    }
   }
-})
+)
 
-const handleConfirm = () => {
+const handleConfirm = (): boolean => {
   if (!renameVideoName.value.trim()) {
     return false
   }
-  
+
   // 如果用户输入的名称不包含扩展名，自动添加原文件的扩展名
   let newName = renameVideoName.value.trim()
   const lastDotIndex = props.videoName.lastIndexOf('.')
@@ -38,7 +42,7 @@ const handleConfirm = () => {
       newName = newName + extension
     }
   }
-  
+
   emit('confirm', newName)
   return true
 }
@@ -65,4 +69,3 @@ const handleConfirm = () => {
     </n-form>
   </n-modal>
 </template>
-

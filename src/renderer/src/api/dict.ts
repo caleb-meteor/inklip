@@ -74,4 +74,3 @@ export function deleteDictApi(id: number): Promise<void> {
     }
   })
 }
-

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NModal, NForm, NFormItem, NInput, NSpace } from 'naive-ui'
+import { NModal, NFormItem, NInput } from 'naive-ui'
 import type { DictItem } from '../api/dict'
 
 interface Props {
@@ -28,29 +28,32 @@ const showGroupDropdown = ref(false)
 const showAnchorDropdown = ref(false)
 const showProductDropdown = ref(false)
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    groupInputValue.value = props.currentGroupName || ''
-    anchorInputValue.value = props.currentAnchorName || ''
-    productInputValue.value = props.currentProductName || ''
-    showGroupDropdown.value = false
-    showAnchorDropdown.value = false
-    showProductDropdown.value = false
+watch(
+  () => props.show,
+  (newVal) => {
+    if (newVal) {
+      groupInputValue.value = props.currentGroupName || ''
+      anchorInputValue.value = props.currentAnchorName || ''
+      productInputValue.value = props.currentProductName || ''
+      showGroupDropdown.value = false
+      showAnchorDropdown.value = false
+      showProductDropdown.value = false
+    }
   }
-})
+)
 
 const groupInputOptions = computed(() => {
   const inputValue = groupInputValue.value.toLowerCase()
   if (!inputValue) {
-    return props.groups.map(group => ({
+    return props.groups.map((group) => ({
       label: group.name,
       value: group.name,
       id: group.id
     }))
   }
   return props.groups
-    .filter(group => group.name.toLowerCase().includes(inputValue))
-    .map(group => ({
+    .filter((group) => group.name.toLowerCase().includes(inputValue))
+    .map((group) => ({
       label: group.name,
       value: group.name,
       id: group.id
@@ -60,15 +63,15 @@ const groupInputOptions = computed(() => {
 const anchorInputOptions = computed(() => {
   const inputValue = anchorInputValue.value.toLowerCase()
   if (!inputValue) {
-    return props.anchors.map(anchor => ({
+    return props.anchors.map((anchor) => ({
       label: anchor.name,
       value: anchor.name,
       id: anchor.id
     }))
   }
   return props.anchors
-    .filter(anchor => anchor.name.toLowerCase().includes(inputValue))
-    .map(anchor => ({
+    .filter((anchor) => anchor.name.toLowerCase().includes(inputValue))
+    .map((anchor) => ({
       label: anchor.name,
       value: anchor.name,
       id: anchor.id
@@ -78,15 +81,15 @@ const anchorInputOptions = computed(() => {
 const productInputOptions = computed(() => {
   const inputValue = productInputValue.value.toLowerCase()
   if (!inputValue) {
-    return props.products.map(product => ({
+    return props.products.map((product) => ({
       label: product.name,
       value: product.name,
       id: product.id
     }))
   }
   return props.products
-    .filter(product => product.name.toLowerCase().includes(inputValue))
-    .map(product => ({
+    .filter((product) => product.name.toLowerCase().includes(inputValue))
+    .map((product) => ({
       label: product.name,
       value: product.name,
       id: product.id
@@ -111,10 +114,11 @@ const handleProductInputBlur = (): void => {
   }, 200)
 }
 
-const handleConfirm = () => {
-  emit('confirm', 
-    groupInputValue.value.trim(), 
-    anchorInputValue.value.trim(), 
+const handleConfirm = (): boolean => {
+  emit(
+    'confirm',
+    groupInputValue.value.trim(),
+    anchorInputValue.value.trim(),
     productInputValue.value.trim()
   )
   return true
@@ -134,7 +138,7 @@ const handleConfirm = () => {
   >
     <div class="category-form-container">
       <n-form-item label="分组" class="category-form-item">
-        <div style="position: relative;">
+        <div style="position: relative">
           <n-input
             v-model:value="groupInputValue"
             placeholder="选择已有分组或输入新分组名称"
@@ -143,27 +147,26 @@ const handleConfirm = () => {
             @blur="handleGroupInputBlur"
             @input="showGroupDropdown = true"
           />
-          <div
-            v-if="showGroupDropdown && groupInputOptions.length > 0"
-            class="category-dropdown"
-          >
+          <div v-if="showGroupDropdown && groupInputOptions.length > 0" class="category-dropdown">
             <div
               v-for="option in groupInputOptions"
               :key="option.id"
               class="category-dropdown-item"
-              @mousedown.prevent="() => {
-                groupInputValue = option.value
-                showGroupDropdown = false
-              }"
+              @mousedown.prevent="
+                () => {
+                  groupInputValue = option.value
+                  showGroupDropdown = false
+                }
+              "
             >
               {{ option.label }}
             </div>
           </div>
         </div>
       </n-form-item>
-      
+
       <n-form-item label="主播" class="category-form-item">
-        <div style="position: relative;">
+        <div style="position: relative">
           <n-input
             v-model:value="anchorInputValue"
             placeholder="选择已有主播或输入新主播名称"
@@ -172,27 +175,26 @@ const handleConfirm = () => {
             @blur="handleAnchorInputBlur"
             @input="showAnchorDropdown = true"
           />
-          <div
-            v-if="showAnchorDropdown && anchorInputOptions.length > 0"
-            class="category-dropdown"
-          >
+          <div v-if="showAnchorDropdown && anchorInputOptions.length > 0" class="category-dropdown">
             <div
               v-for="option in anchorInputOptions"
               :key="option.id"
               class="category-dropdown-item"
-              @mousedown.prevent="() => {
-                anchorInputValue = option.value
-                showAnchorDropdown = false
-              }"
+              @mousedown.prevent="
+                () => {
+                  anchorInputValue = option.value
+                  showAnchorDropdown = false
+                }
+              "
             >
               {{ option.label }}
             </div>
           </div>
         </div>
       </n-form-item>
-      
+
       <n-form-item label="产品" class="category-form-item">
-        <div style="position: relative;">
+        <div style="position: relative">
           <n-input
             v-model:value="productInputValue"
             placeholder="选择已有产品或输入新产品名称"
@@ -209,10 +211,12 @@ const handleConfirm = () => {
               v-for="option in productInputOptions"
               :key="option.id"
               class="category-dropdown-item"
-              @mousedown.prevent="() => {
-                productInputValue = option.value
-                showProductDropdown = false
-              }"
+              @mousedown.prevent="
+                () => {
+                  productInputValue = option.value
+                  showProductDropdown = false
+                }
+              "
             >
               {{ option.label }}
             </div>

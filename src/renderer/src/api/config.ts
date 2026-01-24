@@ -60,4 +60,3 @@ export function validateApiKey(apiKey: string): Promise<{ status: boolean }> {
     data: { api_key: apiKey }
   })
 }
-

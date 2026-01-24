@@ -19,25 +19,28 @@ const emit = defineEmits<{
 const productInputValue = ref('')
 const showProductDropdown = ref(false)
 
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    productInputValue.value = props.currentProductName || ''
-    showProductDropdown.value = false
+watch(
+  () => props.show,
+  (newVal) => {
+    if (newVal) {
+      productInputValue.value = props.currentProductName || ''
+      showProductDropdown.value = false
+    }
   }
-})
+)
 
 const productInputOptions = computed(() => {
   const inputValue = productInputValue.value.toLowerCase()
   if (!inputValue) {
-    return props.products.map(product => ({
+    return props.products.map((product) => ({
       label: product.name,
       value: product.name,
       id: product.id
     }))
   }
   return props.products
-    .filter(product => product.name.toLowerCase().includes(inputValue))
-    .map(product => ({
+    .filter((product) => product.name.toLowerCase().includes(inputValue))
+    .map((product) => ({
       label: product.name,
       value: product.name,
       id: product.id
@@ -50,7 +53,7 @@ const handleProductInputBlur = (): void => {
   }, 200)
 }
 
-const handleConfirm = () => {
+const handleConfirm = (): boolean => {
   emit('confirm', productInputValue.value.trim())
   return true
 }
@@ -68,7 +71,7 @@ const handleConfirm = () => {
   >
     <n-form>
       <n-form-item label="产品名称">
-        <div style="position: relative;">
+        <div style="position: relative">
           <n-input
             v-model:value="productInputValue"
             placeholder="选择已有产品或输入新产品名称"
@@ -85,10 +88,12 @@ const handleConfirm = () => {
               v-for="option in productInputOptions"
               :key="option.id"
               class="product-dropdown-item"
-              @mousedown.prevent="() => {
-                productInputValue = option.value
-                showProductDropdown = false
-              }"
+              @mousedown.prevent="
+                () => {
+                  productInputValue = option.value
+                  showProductDropdown = false
+                }
+              "
             >
               {{ option.label }}
             </div>
@@ -128,4 +133,3 @@ const handleConfirm = () => {
   color: #63e2b7;
 }
 </style>
-

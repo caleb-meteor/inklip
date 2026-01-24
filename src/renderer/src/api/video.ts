@@ -58,10 +58,12 @@ export function getVideosApi(): Promise<VideoItem[]> {
  * @returns Promise with array of upload responses (Python backend) or object with videos array (Go backend)
  */
 export function uploadVideosBatchApi(
-  paths: string[], 
+  paths: string[],
   categoryIds?: number[],
   subtitleFiles?: Record<string, string>
-): Promise<VideoUploadResponse[] | { videos: VideoUploadResponse[]; task_ids?: string[]; status?: string }> {
+): Promise<
+  VideoUploadResponse[] | { videos: VideoUploadResponse[]; task_ids?: string[]; status?: string }
+> {
   return request({
     url: '/api/video/upload/batch',
     method: 'post',

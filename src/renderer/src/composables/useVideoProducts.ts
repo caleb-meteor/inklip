@@ -1,9 +1,31 @@
 import { ref, computed } from 'vue'
 import { useMessage } from 'naive-ui'
-import { getDictsByTypeApi, createDictApi, deleteDictApi, updateDictApi, type DictItem } from '../api/dict'
+import {
+  getDictsByTypeApi,
+  createDictApi,
+  deleteDictApi,
+  updateDictApi,
+  type DictItem
+} from '../api/dict'
 import { addVideoCategoryApi, removeVideoCategoryApi } from '../api/video'
 
-export function useVideoProducts() {
+export function useVideoProducts(): {
+  products: import('vue').Ref<DictItem[]>
+  activeProductId: import('vue').Ref<number | null>
+  currentProduct: import('vue').ComputedRef<DictItem | null>
+  fetchProducts: () => Promise<void>
+  createProduct: (name: string) => Promise<DictItem>
+  renameProduct: (productId: number, newName: string) => Promise<void>
+  deleteProduct: (productId: number) => Promise<void>
+  updateVideoProduct: (
+    videoId: number,
+    productId: number | null,
+    currentProductId?: number | null
+  ) => Promise<void>
+  getFileProduct: (file: {
+    categories?: Array<{ id: number; name: string; type: string }>
+  }) => DictItem | null
+} {
   const message = useMessage()
   const products = ref<DictItem[]>([])
   const activeProductId = ref<number | null>(null)
@@ -53,13 +75,17 @@ export function useVideoProducts() {
     }
   }
 
-  const updateVideoProduct = async (videoId: number, productId: number | null, currentProductId?: number | null): Promise<void> => {
+  const updateVideoProduct = async (
+    videoId: number,
+    productId: number | null,
+    currentProductId?: number | null
+  ): Promise<void> => {
     try {
       // 如果已有产品，先删除
       if (currentProductId !== null && currentProductId !== undefined) {
         await removeVideoCategoryApi(videoId, currentProductId)
       }
-      
+
       // 如果设置了新产品，添加
       if (productId !== null) {
         await addVideoCategoryApi(videoId, productId)
@@ -71,22 +97,24 @@ export function useVideoProducts() {
     }
   }
 
-  const getFileProduct = (file: { categories?: Array<{ id: number; name: string; type: string }> }): DictItem | null => {
+  const getFileProduct = (file: {
+    categories?: Array<{ id: number; name: string; type: string }>
+  }): DictItem | null => {
     if (!file.categories) {
       return null
     }
-    const productCategory = file.categories.find(cat => cat.type === 'video_product')
+    const productCategory = file.categories.find((cat) => cat.type === 'video_product')
     if (!productCategory) {
       return null
     }
-    return products.value.find(product => product.id === productCategory.id) || null
+    return products.value.find((product) => product.id === productCategory.id) || null
   }
 
   const currentProduct = computed(() => {
     if (activeProductId.value === null) {
       return null
     }
-    return products.value.find(product => product.id === activeProductId.value) || null
+    return products.value.find((product) => product.id === activeProductId.value) || null
   })
 
   return {
@@ -101,4 +129,3 @@ export function useVideoProducts() {
     getFileProduct
   }
 }
-

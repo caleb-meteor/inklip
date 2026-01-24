@@ -42,8 +42,8 @@ const handleDblClick = (e: MouseEvent): void => {
   if (!props.path || props.disabled) {
     return
   }
-    e.stopPropagation()
-    showFullscreen.value = true
+  e.stopPropagation()
+  showFullscreen.value = true
   emit('dblclick')
 }
 

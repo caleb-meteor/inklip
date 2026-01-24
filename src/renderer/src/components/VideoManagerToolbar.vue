@@ -9,7 +9,7 @@ interface Props {
   currentGroup: DictItem | null
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 
 const searchKeyword = ref('')
 
@@ -25,8 +25,8 @@ const debounce = <T extends (...args: any[]) => void>(
   wait: number
 ): ((...args: Parameters<T>) => void) => {
   let timeout: ReturnType<typeof setTimeout> | null = null
-  return function executedFunction(...args: Parameters<T>) {
-    const later = () => {
+  return function executedFunction(...args: Parameters<T>): void {
+    const later = (): void => {
       timeout = null
       func(...args)
     }
@@ -61,12 +61,7 @@ watch(searchKeyword, (newKeyword) => {
       </div>
 
       <n-space>
-        <n-input 
-          v-model:value="searchKeyword"
-          size="small" 
-          placeholder="搜索视频名称"
-          clearable
-        >
+        <n-input v-model:value="searchKeyword" size="small" placeholder="搜索视频名称" clearable>
           <template #prefix>
             <n-icon :component="SearchOutline" />
           </template>
@@ -103,4 +98,3 @@ watch(searchKeyword, (newKeyword) => {
   font-size: 16px;
 }
 </style>
-

@@ -84,7 +84,7 @@ export class BackendService {
     const appDataPath = app.getPath('userData')
     // VIDEO_DATA_PATH 默认等于 APP_DATA_PATH，Python 后端会从配置文件读取实际值
     const videoDataPath = appDataPath
-    
+
     // For both Windows and Mac (flat binary), the bin path is the directory containing the executable
     const binPath = path.dirname(path.dirname(backendPath))
 
@@ -93,7 +93,7 @@ export class BackendService {
     console.log('[Backend Service] Backend bin path:', binPath)
 
     const args = ['--app_data_path', appDataPath, '--bin_path', binPath]
-    
+
     // 始终设置 VIDEO_DATA_PATH 环境变量（可能与 APP_DATA_PATH 相等）
     const env = { ...process.env }
     env.VIDEO_DATA_PATH = videoDataPath

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { CloseOutline, Play, Pause, VolumeHighOutline, VolumeMuteOutline } from '@vicons/ionicons5'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { CloseOutline } from '@vicons/ionicons5'
 import { getMediaUrl } from '../utils/media'
-import { NIcon, NPopselect, NModal } from 'naive-ui'
+import { NIcon, NModal } from 'naive-ui'
 import { getVideosApi, type VideoItem } from '../api/video'
 
 interface SubtitleItem {
@@ -33,18 +33,9 @@ const isMuted = ref(false)
 const progress = ref(0)
 const duration = ref(0)
 const currentTime = ref(0)
-const playbackSpeed = ref(1.0)
 const isDragging = ref(false)
 const subtitles = ref<SubtitleItem[]>([])
 const currentSubtitleIndex = ref<number>(-1)
-
-const speedOptions = [
-  { label: '0.5x', value: 0.5 },
-  { label: '1.0x', value: 1.0 },
-  { label: '1.25x', value: 1.25 },
-  { label: '1.5x', value: 1.5 },
-  { label: '2.0x', value: 2.0 }
-]
 
 const togglePlay = (): void => {
   if (!videoRef.value) return
@@ -55,12 +46,6 @@ const togglePlay = (): void => {
   }
 }
 
-const toggleMute = (): void => {
-  if (!videoRef.value) return
-  isMuted.value = !isMuted.value
-  videoRef.value.muted = isMuted.value
-}
-
 const onTimeUpdate = (): void => {
   if (!videoRef.value) return
   currentTime.value = videoRef.value.currentTime
@@ -68,7 +53,7 @@ const onTimeUpdate = (): void => {
   if (!isDragging.value) {
     progress.value = (videoRef.value.currentTime / videoRef.value.duration) * 100
   }
-  
+
   // Update current subtitle based on playback time
   updateCurrentSubtitle()
 }
@@ -78,14 +63,14 @@ const updateCurrentSubtitle = (): void => {
     currentSubtitleIndex.value = -1
     return
   }
-  
+
   const currentTimeMs = currentTime.value * 1000 // Convert to milliseconds
-  
+
   // Find the subtitle that matches the current time
   const index = subtitles.value.findIndex(
     (sub) => currentTimeMs >= sub.offsets.from && currentTimeMs <= sub.offsets.to
   )
-  
+
   if (index !== currentSubtitleIndex.value) {
     currentSubtitleIndex.value = index
     // Scroll to current subtitle in the panel
@@ -106,16 +91,16 @@ const subtitlePanelRef = ref<HTMLElement | null>(null)
 // Note: Subtitles are only loaded from API responses (JSON format), not from files
 const processSubtitleData = (subtitleData: any): SubtitleItem[] => {
   if (!subtitleData) return []
-  
+
   // Handle array format from API: [{"text": "...", "offsets": {"from": 0, "to": 1000}}, ...]
-  const subtitleArray = Array.isArray(subtitleData) 
-    ? subtitleData 
-    : (subtitleData?.transcription && Array.isArray(subtitleData.transcription))
+  const subtitleArray = Array.isArray(subtitleData)
+    ? subtitleData
+    : subtitleData?.transcription && Array.isArray(subtitleData.transcription)
       ? subtitleData.transcription
       : []
-  
+
   if (subtitleArray.length === 0) return []
-  
+
   // Process subtitle items
   return subtitleArray
     .filter((item: any) => {
@@ -144,18 +129,18 @@ const loadSubtitles = async (): Promise<void> => {
     subtitles.value = []
     return
   }
-  
+
   // If subtitle data is passed directly (from props), use it
   if (props.subtitleData) {
     subtitles.value = processSubtitleData(props.subtitleData)
     return
   }
-  
+
   try {
     // Load from video list API
     const videos = await getVideosApi()
     let video: VideoItem | undefined = undefined
-    
+
     // Find video by ID (preferred) or path
     if (props.videoId) {
       video = videos.find((v) => v.id === props.videoId)
@@ -171,40 +156,50 @@ const loadSubtitles = async (): Promise<void> => {
       const targetPath = normalizePath(props.path)
       video = videos.find((v) => {
         const videoPath = normalizePath(v.path)
-        return videoPath === targetPath || videoPath.includes(targetPath) || targetPath.includes(videoPath)
+        return (
+          videoPath === targetPath ||
+          videoPath.includes(targetPath) ||
+          targetPath.includes(videoPath)
+        )
       })
     }
-    
+
     if (!video || !video.subtitle) {
       subtitles.value = []
       return
     }
-    
+
     // Process subtitle from video API response (JSON data)
     subtitles.value = processSubtitleData(video.subtitle)
-  } catch (error) {
+  } catch {
     subtitles.value = []
   }
 }
 
 // Watch for visibility changes to load subtitles
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    setTimeout(() => {
-      loadSubtitles()
-    }, 100)
-  } else {
-    subtitles.value = []
-    currentSubtitleIndex.value = -1
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (newVal) {
+      setTimeout(() => {
+        loadSubtitles()
+      }, 100)
+    } else {
+      subtitles.value = []
+      currentSubtitleIndex.value = -1
+    }
   }
-})
+)
 
 // Watch for subtitleData changes
-watch(() => props.subtitleData, () => {
-  if (props.visible) {
-    loadSubtitles()
+watch(
+  () => props.subtitleData,
+  () => {
+    if (props.visible) {
+      loadSubtitles()
+    }
   }
-})
+)
 
 // Also load on mount if already visible
 onMounted(() => {
@@ -215,28 +210,19 @@ onMounted(() => {
   }
 })
 
-const currentSubtitle = computed(() => {
-  if (currentSubtitleIndex.value >= 0 && currentSubtitleIndex.value < subtitles.value.length) {
-    return subtitles.value[currentSubtitleIndex.value]
-  }
-  return null
-})
-
 const seekToSubtitle = (index: number): void => {
   if (!videoRef.value || index < 0 || index >= subtitles.value.length) return
-  
+
   const subtitle = subtitles.value[index]
   const targetTime = subtitle.offsets.from / 1000 // Convert to seconds
   videoRef.value.currentTime = targetTime
-  
+
   // Update current subtitle index immediately
   currentSubtitleIndex.value = index
-  
+
   // Scroll to the subtitle
   if (subtitlePanelRef.value) {
-    const subtitleElement = subtitlePanelRef.value.querySelector(
-      `[data-subtitle-index="${index}"]`
-    )
+    const subtitleElement = subtitlePanelRef.value.querySelector(`[data-subtitle-index="${index}"]`)
     if (subtitleElement) {
       subtitleElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
@@ -246,32 +232,6 @@ const seekToSubtitle = (index: number): void => {
 const onLoadedMetadata = (): void => {
   if (!videoRef.value) return
   duration.value = videoRef.value.duration
-}
-
-const onSeek = (e: Event): void => {
-  const val = Number((e.target as HTMLInputElement).value)
-  progress.value = val // Update progress visually immediately
-
-  if (!videoRef.value) return
-  const time = (val / 100) * videoRef.value.duration
-  if (!isNaN(time)) {
-    videoRef.value.currentTime = time
-  }
-}
-
-const onSeekStart = (): void => {
-  isDragging.value = true
-}
-
-const onSeekEnd = (): void => {
-  isDragging.value = false
-}
-
-const handleSpeedChange = (value: number): void => {
-  playbackSpeed.value = value
-  if (videoRef.value) {
-    videoRef.value.playbackRate = value
-  }
 }
 
 const formatTime = (seconds: number): string => {
@@ -286,7 +246,7 @@ const formatSubtitleTime = (subtitle: SubtitleItem): string => {
   if (subtitle.timestamps) {
     const fromTime = subtitle.timestamps.from.replace(',', '.').split(':')
     const toTime = subtitle.timestamps.to.replace(',', '.').split(':')
-    
+
     // Convert to MM:SS format (skip hours if 00)
     const formatTimestamp = (timeParts: string[]): string => {
       if (timeParts.length >= 3) {
@@ -294,7 +254,7 @@ const formatSubtitleTime = (subtitle: SubtitleItem): string => {
         const minutes = parseInt(timeParts[1]) || 0
         const seconds = parseFloat(timeParts[2]) || 0
         const sec = Math.floor(seconds)
-        
+
         if (hours > 0) {
           return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
         } else {
@@ -303,10 +263,10 @@ const formatSubtitleTime = (subtitle: SubtitleItem): string => {
       }
       return timeParts.join(':')
     }
-    
+
     return `${formatTimestamp(fromTime)} - ${formatTimestamp(toTime)}`
   }
-  
+
   // Otherwise, calculate from offsets
   return `${formatTime(subtitle.offsets.from / 1000)} - ${formatTime(subtitle.offsets.to / 1000)}`
 }

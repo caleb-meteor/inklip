@@ -25,10 +25,13 @@ const emit = defineEmits<{
     @update:show="emit('update:show', $event)"
     @positive-click="emit('confirm')"
   >
-    <div style="padding: 16px 0;">
-      <p>确定要删除视频 <strong>{{ props.videoName }}</strong> 吗？</p>
-      <p style="color: #888; font-size: 12px; margin-top: 8px;">此操作不可恢复，将同时删除视频文件及相关资源。</p>
+    <div style="padding: 16px 0">
+      <p>
+        确定要删除视频 <strong>{{ props.videoName }}</strong> 吗？
+      </p>
+      <p style="color: #888; font-size: 12px; margin-top: 8px">
+        此操作不可恢复，将同时删除视频文件及相关资源。
+      </p>
     </div>
   </n-modal>
 </template>
-

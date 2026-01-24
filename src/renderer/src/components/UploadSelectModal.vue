@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { NModal, NButton, NSpace, NIcon } from 'naive-ui'
 import { CloudUploadOutline, FolderOutline } from '@vicons/ionicons5'
 
 interface Props {
-  show: boolean
+  show?: boolean
   uploading?: boolean
 }
 
@@ -38,18 +37,16 @@ const handleClose = (): void => {
 
 <template>
   <n-modal
-    v-model:show="props.show"
     :mask-closable="!props.uploading"
     :closable="!props.uploading"
     preset="card"
     title="选择导入方式"
     style="width: 500px"
+    @update:show="(val) => emit('update:show', val)"
     @close="handleClose"
   >
     <div class="upload-select-content">
-      <div class="upload-select-hint">
-        请选择导入方式：
-      </div>
+      <div class="upload-select-hint">请选择导入方式：</div>
       <n-space vertical :size="16">
         <n-button
           :disabled="props.uploading"
@@ -83,9 +80,7 @@ const handleClose = (): void => {
           </div>
         </div>
       </n-space>
-      <div v-if="props.uploading" class="uploading-hint">
-        正在上传中，请稍候...
-      </div>
+      <div v-if="props.uploading" class="uploading-hint">正在上传中，请稍候...</div>
     </div>
   </n-modal>
 </template>
