@@ -46,7 +46,7 @@ const config: ForgeConfig = {
       // name: 'Inklip', // Squirrel defaults to packagerConfig.name
       setupIcon: './resources/icon.ico',
       exe: 'inklip.exe'
-    })
+    }, ['win32'])
   ],
   hooks: {
     postPackage: async (forgeConfig, options) => {
