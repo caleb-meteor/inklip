@@ -12,6 +12,7 @@ import { useWebsocketStore } from './stores/websocket'
 import { setBaseUrl } from './utils/request'
 import Footer from './components/Footer.vue'
 
+
 const themeOverrides: GlobalThemeOverrides = {
   common: {
     primaryColor: '#3b82f6',

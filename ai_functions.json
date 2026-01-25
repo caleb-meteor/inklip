@@ -1,0 +1,118 @@
+[
+  {
+    "name": "get_video_list",
+    "description": "Retrieve a list of all videos available in the library to find video IDs, paths, and metadata.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "upload_videos",
+    "description": "Upload multiple local video files by providing their absolute file paths.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "video_paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "An array of absolute local file paths for the video files."
+        },
+        "category_ids": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Optional list of category/group IDs to assign to these videos."
+        }
+      },
+      "required": ["video_paths"]
+    }
+  },
+  {
+    "name": "upload_folder",
+    "description": "Import all supported video files from a specified local directory.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "folder_path": {
+          "type": "string",
+          "description": "The absolute local path of the directory containing videos to import."
+        },
+        "category_ids": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Optional list of category/group IDs to assign to the imported videos."
+        }
+      },
+      "required": ["folder_path"]
+    }
+  },
+  {
+    "name": "get_categories",
+    "description": "List existing categories or groups by their type.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["video_group", "video_anchor", "video_product"],
+          "description": "The type of categories to retrieve."
+        }
+      },
+      "required": ["type"]
+    }
+  },
+  {
+    "name": "create_category",
+    "description": "Create a new category, anchor, or product group.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the new category."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["video_group", "video_anchor", "video_product"],
+          "description": "The type of category to create."
+        }
+      },
+      "required": ["name", "type"]
+    }
+  },
+  {
+    "name": "start_smart_cut",
+    "description": "Initiate an AI smart editing task for selected videos based on instructions.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "video_ids": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "List of video IDs to process."
+        },
+        "prompt_id":{
+          "type": "number",
+          "description": "Prompt ID to use for editing."
+        },
+        "prompt_text": {
+          "type": "string",
+          "description": "Editing instructions or creative ideas for the AI."
+        },
+        "product_name": {
+          "type": "string",
+          "description": "Optional product name for context."
+        },
+        "min_duration": {
+          "type": "number",
+          "description": "Desired minimum output duration in seconds."
+        },
+        "max_duration": {
+          "type": "number",
+          "description": "Desired maximum output duration in seconds."
+        }
+      },
+      "required": ["video_ids"]
+    }
+  }
+]

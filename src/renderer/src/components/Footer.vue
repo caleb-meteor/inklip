@@ -20,11 +20,13 @@ const wsStore = useWebsocketStore()
 .footer-status-bar {
   position: fixed;
   bottom: 0;
-  left: 0;
+  right: 0;
   width: 100%;
   pointer-events: none;
   padding: 12px;
   z-index: 9999;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .ws-status-indicator {
