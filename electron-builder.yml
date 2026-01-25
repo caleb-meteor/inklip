@@ -1,0 +1,74 @@
+appId: com.inklip.app
+productName: inklip
+directories:
+  buildResources: resources
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # 只保留简体中文语言包（Windows/Linux）
+  - '!**/locales/*.pak'
+  - '**/locales/zh-CN.pak'
+  # 只保留简体中文语言包（macOS）
+  - '!**/Resources/locales/*'
+  - '**/Resources/locales/zh-CN*'
+asarUnpack:
+  - 'resources/**/*'
+asar: true
+win:
+  executableName: inklip
+  extraResources:
+    - from: resources/win32-x64
+      to: win32-x64
+      filter:
+        - '**/*'
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    icon: resources/icon.icns
+  # entitlementsInherit: resources/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    - CFBundleLocalizations: ['zh_CN', 'zh-Hans']
+    - CFBundleDevelopmentRegion: zh_CN
+  notarize: false
+  extraResources:
+    - from: resources/darwin-arm64
+      to: darwin-arm64
+      filter:
+        - '**/*'
+    - from: resources/darwin-x64
+      to: darwin-x64
+      filter:
+        - '**/*'
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: electronjs.org
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+publish:
+  provider: generic
+  url: https://example.com/auto-updates
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

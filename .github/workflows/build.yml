@@ -1,0 +1,248 @@
+name: Build/Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win32
+            arch: x64
+          - os: macos-latest # ARM64
+            platform: darwin
+            arch: arm64
+          - os: macos-15-intel # Intel x64 (macos-15-intel 可能不存在)
+            platform: darwin
+            arch: x64
+
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+
+      - name: Checkout inklip-base-go
+        uses: actions/checkout@v4
+        with:
+          repository: caleb-meteor/inklip-base-go
+          token: ${{ secrets.GH_PAT }}
+          path: inklip-base-go
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Download Go dependencies
+        shell: bash
+        run: |
+          cd inklip-base-go
+          go mod download
+
+      - name: Build inklip-base-go
+        shell: bash
+        run: |
+          cd inklip-base-go
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            echo "🔨 构建 Windows 版本..."
+            mkdir -p dist/win32-x64
+            GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o dist/win32-x64/inklip-base.exe .
+          elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "x64" ]; then
+            echo "🔨 构建 Mac Intel 版本..."
+            mkdir -p dist/darwin-x64
+            GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o dist/darwin-x64/inklip-base .
+          elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            echo "🔨 构建 Mac ARM 版本..."
+            mkdir -p dist/darwin-arm64
+            GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o dist/darwin-arm64/inklip-base .
+          fi
+
+      - name: Download and extract platform resources
+        shell: bash
+        run: |
+          mkdir -p resources/${{ matrix.platform }}-${{ matrix.arch }}
+          curl -L https://oss-inklip.caleb.center/resources/${{ matrix.platform }}-${{ matrix.arch }}.zip -o resources.zip
+          unzip -o resources.zip -d resources/
+          rm resources.zip
+
+      - name: Copy inklip-base to resources
+        shell: bash
+        run: |
+          mkdir -p resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            if [ ! -f "inklip-base-go/dist/win32-x64/inklip-base.exe" ]; then
+              echo "::error::inklip-base.exe not found!"
+              exit 1
+            fi
+            cp inklip-base-go/dist/win32-x64/inklip-base.exe resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/
+            echo "✅ inklip-base.exe 已复制到 resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/"
+          elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "x64" ]; then
+            if [ ! -f "inklip-base-go/dist/darwin-x64/inklip-base" ]; then
+              echo "::error::inklip-base (darwin-x64) not found!"
+              exit 1
+            fi
+            cp inklip-base-go/dist/darwin-x64/inklip-base resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/
+            chmod +x resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/inklip-base
+            echo "✅ inklip-base (darwin-x64) 已复制到 resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/"
+          elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            if [ ! -f "inklip-base-go/dist/darwin-arm64/inklip-base" ]; then
+              echo "::error::inklip-base (darwin-arm64) not found!"
+              exit 1
+            fi
+            cp inklip-base-go/dist/darwin-arm64/inklip-base resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/
+            chmod +x resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/inklip-base
+            echo "✅ inklip-base (darwin-arm64) 已复制到 resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/"
+          fi
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Electron App
+        shell: bash
+        run: |
+          export TARGET_ARCH=${{ matrix.arch }}
+          pnpm build
+          npx electron-forge make --arch ${{ matrix.arch }}
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+
+      - name: List build output (debug)
+        shell: bash
+        run: |
+          echo "=== Build output structure ==="
+          find out -type f -name "*.zip" || echo "No artifacts found"
+          echo "=== Complete out/ directory ==="
+          ls -R out/ || echo "out/ directory is empty"
+
+      - name: Collect Build Artifacts
+        shell: bash
+        run: |
+          mkdir -p collected-artifacts
+          
+          # 查找所有构建产物
+          if [ "${{ matrix.platform }}" = "darwin" ]; then
+            # macOS: 查找 ZIP 文件 (Electron Forge MakerZIP 输出)
+            find out/make -type f -name "*.zip" -exec cp {} collected-artifacts/ \;
+          elif [ "${{ matrix.platform }}" = "win32" ]; then
+            # Windows: 查找 ZIP, MSI 和 EXE 文件
+            find out/make -type f \( -name "*.zip" -o -name "*.msi" -o -name "*.exe" \) -exec cp {} collected-artifacts/ \;
+          fi
+          
+          # 验证是否收集到文件
+          if [ ! "$(ls -A collected-artifacts 2>/dev/null)" ]; then
+            echo "::error::No build artifacts collected!"
+            echo "Expected artifacts in out/make directory"
+            ls -R out/
+            exit 1
+          fi
+          
+          echo "=== Collected artifacts ==="
+          ls -lh collected-artifacts/
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}-${{ matrix.arch }}
+          path: collected-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded artifacts (debug)
+        run: |
+          echo "=== Downloaded artifacts ==="
+          ls -R artifacts/
+
+      - name: Prepare Release Files
+        run: |
+          mkdir -p release-files
+          VERSION=${GITHUB_REF#refs/tags/v}
+          
+          # 遍历所有下载的 artifact 目录
+          for artifact_dir in artifacts/*/; do
+            if [ -d "$artifact_dir" ]; then
+              # 从目录名提取平台和架构信息
+              # 例如: build-darwin-arm64 -> darwin-arm64
+              platform_arch=$(basename "$artifact_dir" | sed 's/^build-//')
+              
+              # 复制所有 ZIP 文件并重命名
+              for file in "$artifact_dir"*.zip; do
+                if [ -f "$file" ]; then
+                  new_filename="Inklip-${VERSION}-${platform_arch}.zip"
+                  cp "$file" "release-files/$new_filename"
+                  echo "Prepared: $new_filename"
+                fi
+              done
+              
+              # 复制所有 MSI 文件并重命名 (Windows 平台)
+              for file in "$artifact_dir"*.msi; do
+                if [ -f "$file" ]; then
+                  new_filename="Inklip-${VERSION}-${platform_arch}.msi"
+                  cp "$file" "release-files/$new_filename"
+                  echo "Prepared: $new_filename"
+                fi
+              done
+
+              # 复制所有 EXE 文件并重命名 (Windows 平台)
+              for file in "$artifact_dir"*.exe; do
+                if [ -f "$file" ]; then
+                  # EXE 文件通常是 setup.exe，但也可能是 "Inklip Setup.exe"
+                  # 我们统一命名为 Inklip-{version}-{arch}.exe
+                  # 或者保留原来的名字，这里选择统一格式以保持一致性
+                  new_filename="Inklip-${VERSION}-${platform_arch}.exe"
+                  cp "$file" "release-files/$new_filename"
+                  echo "Prepared: $new_filename"
+                fi
+              done
+            fi
+          done
+          
+          # 验证是否有文件准备上传
+          if [ -z "$(ls -A release-files 2>/dev/null)" ]; then
+            echo "::error::No release files prepared!"
+            exit 1
+          fi
+          
+          echo "=== Release files ==="
+          ls -lh release-files/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-files/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

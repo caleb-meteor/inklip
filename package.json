@@ -1,0 +1,65 @@
+{
+  "name": "inklip",
+  "productName": "影氪",
+  "version": "1.0.0",
+  "description": "智能视频剪辑工具",
+  "main": "./dist/main/index.js",
+  "author": "caleb",
+  "homepage": "https://electron-vite.org",
+  "scripts": {
+    "start": "electron-forge start",
+    "dev": "electron-vite dev --outDir=dist",
+    "debug": "cross-env DEBUG_MODE=true DEBUG_PORT=12698 electron-vite dev --outDir=dist",
+    "build": "electron-vite build --outDir=dist",
+    "package": "pnpm build && electron-forge package",
+    "make": "pnpm build && electron-forge make",
+    "make:win": "pnpm build && electron-forge make --platform win32 --arch x64"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@vicons/ionicons5": "^0.13.0",
+    "axios": "^1.13.2",
+    "electron-updater": "^6.7.3",
+    "naive-ui": "^2.43.2",
+    "pinia": "^3.0.4",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
+    "@electron-forge/plugin-fuses": "^7.11.1",
+    "@electron-toolkit/eslint-config-prettier": "3.0.0",
+    "@electron-toolkit/eslint-config-ts": "^3.1.0",
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@electron/fuses": "^2.0.0",
+    "@types/node": "^22.19.7",
+    "@vitejs/plugin-vue": "^6.0.3",
+    "axios-mock-adapter": "^2.1.0",
+    "cross-env": "^10.1.0",
+    "electron": "^39.3.0",
+    "electron-vite": "^5.0.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-vue": "^10.7.0",
+    "prettier": "^3.8.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vue": "^3.5.27",
+    "vue-eslint-parser": "^10.2.0",
+    "vue-tsc": "^3.2.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "macos-alias",
+      "fs-xattr",
+      "electron-winstaller"
+    ],
+    "patchedDependencies": {
+      "cross-zip@4.0.1": "patches/cross-zip@4.0.1.patch"
+    }
+  }
+}
