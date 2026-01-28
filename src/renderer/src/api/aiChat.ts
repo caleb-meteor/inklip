@@ -7,18 +7,20 @@ export interface AiChatTopic {
   updated_at: string
 }
 
-export interface AddAiChatMessagePayload {
-  ai_chat_id: number
-  user_input: string
-  system_output: string
-}
-
 export interface AiChatMessage {
   id: number
   ai_chat_id: number
-  user_input: string
-  system_output: string
+  role: 'user' | 'assistant'
+  content: string
+  payload?: any
   created_at: string
+}
+
+export interface AddAiChatMessageInput {
+  ai_chat_id: number
+  role: 'user' | 'assistant'
+  content: string
+  payload?: any
 }
 
 export function getAiChatListApi(limit = 20): Promise<AiChatTopic[]> {
@@ -37,9 +39,9 @@ export function createAiChatApi(topic: string): Promise<AiChatTopic> {
   })
 }
 
-export function addAiChatMessageApi(data: AddAiChatMessagePayload): Promise<void> {
+export function addAiChatMessageApi(data: AddAiChatMessageInput): Promise<void> {
   return request({
-    url: '/api/ai_chat_message/detail',
+    url: '/api/ai_chat/message',
     method: 'post',
     data
   })
@@ -47,7 +49,7 @@ export function addAiChatMessageApi(data: AddAiChatMessagePayload): Promise<void
 
 export function getAiChatMessagesApi(aiChatId: number): Promise<AiChatMessage[]> {
   return request({
-    url: `/api/ai_chat/topic/${aiChatId}/messages`,
+    url: `/api/ai_chat/${aiChatId}/messages`,
     method: 'get'
   })
 }

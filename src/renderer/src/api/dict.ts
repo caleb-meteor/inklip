@@ -42,6 +42,19 @@ export function getDictsByTypeApi(type: string): Promise<DictItem[]> {
 }
 
 /**
+ * Get dict items from sentence (matches dict names in the sentence)
+ * @param sentence Input sentence to analyze
+ * @returns Promise with list of matched dict items
+ */
+export function getDictsFromSentenceApi(sentence: string): Promise<DictItem[]> {
+  return request({
+    url: '/api/dict/sentence',
+    method: 'post',
+    data: { sentence }
+  })
+}
+
+/**
  * Update dict item
  * @param id Dict id
  * @param name Optional new name
