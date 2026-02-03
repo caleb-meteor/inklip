@@ -11,7 +11,11 @@ export interface MessageHandlers {
   }) => void
   onVideoCompleted?: (videoId: number) => void
   onVideoFailed?: (videoId: number, error: string) => void
-  onSmartCutUpdated?: (data: { status?: number; ai_gen_video_id?: number }) => void
+  onSmartCutUpdated?: (data: { 
+    task_status?: number; 
+    ai_gen_video_status?: number; 
+    ai_gen_video_id?: number 
+  }) => void
   onVideoUploaded?: () => void
   onVideoStatus?: (data: {
     video_id: number | string
@@ -82,7 +86,8 @@ export class WebSocketMessageHandler {
   private handleSmartCut(data: any): void {
     console.log('Smart cut status updated:', data)
     this.handlers.onSmartCutUpdated?.({
-      status: data.status,
+      task_status: data.task_status,
+      ai_gen_video_status: data.ai_gen_video_status,
       ai_gen_video_id: data.ai_gen_video_id
     })
   }

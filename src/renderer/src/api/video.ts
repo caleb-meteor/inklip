@@ -40,13 +40,15 @@ export interface VideoUploadResponse {
 }
 
 /**
- * Get all videos
+ * Get all videos or filter by IDs
+ * @param ids Optional array of video IDs to retrieve
  * @returns Promise with list of videos
  */
-export function getVideosApi(): Promise<VideoItem[]> {
+export function getVideosApi(ids?: number[]): Promise<VideoItem[]> {
   return request({
     url: '/api/videos',
-    method: 'get'
+    method: 'get',
+    params: ids && ids.length > 0 ? { ids } : undefined
   })
 }
 
@@ -77,9 +79,10 @@ export function uploadVideosBatchApi(
 }
 
 export interface SmartCutResponse {
-  task_id: number
-  status: string
-  message: string
+  id: number // ai_gen_video 的 ID
+  task_id?: number
+  status?: string
+  message?: string
 }
 
 /**
@@ -151,6 +154,18 @@ export function getSmartCutsApi(page: number, pageSize: number): Promise<SmartCu
       page,
       page_size: pageSize
     }
+  })
+}
+
+/**
+ * Get single smart cut status by ID
+ * @param id Smart cut ID
+ * @returns Promise with smart cut item
+ */
+export function getSmartCutApi(id: number): Promise<any> {
+  return request({
+    url: `/api/smart-cut/${id}`,
+    method: 'get'
   })
 }
 

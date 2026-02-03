@@ -39,7 +39,7 @@ export function createAiChatApi(topic: string): Promise<AiChatTopic> {
   })
 }
 
-export function addAiChatMessageApi(data: AddAiChatMessageInput): Promise<void> {
+export function addAiChatMessageApi(data: AddAiChatMessageInput): Promise<AiChatMessage> {
   return request({
     url: '/api/ai_chat/message',
     method: 'post',
@@ -51,5 +51,18 @@ export function getAiChatMessagesApi(aiChatId: number): Promise<AiChatMessage[]>
   return request({
     url: `/api/ai_chat/${aiChatId}/messages`,
     method: 'get'
+  })
+}
+
+export interface UpdateAiChatMessageInput {
+  content?: string
+  payload?: any
+}
+
+export function updateAiChatMessageApi(messageId: number, data: UpdateAiChatMessageInput): Promise<void> {
+  return request({
+    url: `/api/ai_chat/message/${messageId}`,
+    method: 'put',
+    data
   })
 }

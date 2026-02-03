@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { CloseOutline } from '@vicons/ionicons5'
 import { getMediaUrl } from '../utils/media'
 import { NIcon, NModal } from 'naive-ui'
-import { getVideosApi, type VideoItem } from '../api/video'
+import { getVideosApi, getSmartCutApi, type VideoItem } from '../api/video'
 
 interface SubtitleItem {
   text: string
@@ -23,6 +23,7 @@ const props = defineProps<{
   name: string
   videoId?: number // Optional video ID for direct matching
   subtitleData?: any // Optional subtitle data (array) passed directly
+  videoType?: 'material' | 'edited' // Distinction between source materials and AI generated videos
 }>()
 
 const emit = defineEmits(['close'])
@@ -132,46 +133,66 @@ const loadSubtitles = async (): Promise<void> => {
 
   // If subtitle data is passed directly (from props), use it
   if (props.subtitleData) {
-    subtitles.value = processSubtitleData(props.subtitleData)
-    return
+    const processed = processSubtitleData(props.subtitleData)
+    if (processed.length > 0) {
+      subtitles.value = processed
+      return
+    }
   }
 
   try {
-    // Load from video list API
-    const videos = await getVideosApi()
-    let video: VideoItem | undefined = undefined
+    let videoSubtitle: any = null
 
-    // Find video by ID (preferred) or path
-    if (props.videoId) {
-      video = videos.find((v) => v.id === props.videoId)
-    } else if (props.path) {
-      const normalizePath = (path: string): string => {
-        if (!path) return ''
-        return path
-          .replace(/^media:\/\//, '')
-          .replace(/^file:\/\//, '')
-          .replace(/\\/g, '/')
-          .toLowerCase()
+    if (props.videoType === 'edited' && props.videoId) {
+      // Handle AI Generated / Edited Videos (剪辑视频)
+      console.log('[GlobalFullscreenPlayer] Fetching latest smart cut data for subtitles:', props.videoId)
+      const smartCut = await getSmartCutApi(props.videoId)
+      if (smartCut && smartCut.subtitle) {
+        videoSubtitle = smartCut.subtitle
       }
-      const targetPath = normalizePath(props.path)
-      video = videos.find((v) => {
-        const videoPath = normalizePath(v.path)
-        return (
-          videoPath === targetPath ||
-          videoPath.includes(targetPath) ||
-          targetPath.includes(videoPath)
-        )
-      })
+    } else {
+      // Handle Source Materials (素材视频) - fallback or explicit 'material' type
+      console.log('[GlobalFullscreenPlayer] Fetching latest material video data for subtitles')
+      const videos = await getVideosApi()
+      let video: VideoItem | undefined = undefined
+
+      // Find video by ID (preferred) or path
+      if (props.videoId) {
+        video = videos.find((v) => v.id === props.videoId)
+      } else if (props.path) {
+        const normalizePath = (p: string): string => {
+          if (!p) return ''
+          return p
+            .replace(/^media:\/\//, '')
+            .replace(/^file:\/\//, '')
+            .replace(/\\/g, '/')
+            .toLowerCase()
+        }
+        const targetPath = normalizePath(props.path)
+        video = videos.find((v) => {
+          const videoPath = normalizePath(v.path)
+          return (
+            videoPath === targetPath ||
+            videoPath.includes(targetPath) ||
+            targetPath.includes(videoPath)
+          )
+        })
+      }
+
+      if (video && video.subtitle) {
+        videoSubtitle = video.subtitle
+      }
     }
 
-    if (!video || !video.subtitle) {
+    if (!videoSubtitle) {
       subtitles.value = []
       return
     }
 
-    // Process subtitle from video API response (JSON data)
-    subtitles.value = processSubtitleData(video.subtitle)
-  } catch {
+    // Process subtitle from API response (JSON data)
+    subtitles.value = processSubtitleData(videoSubtitle)
+  } catch (error) {
+    console.error('[GlobalFullscreenPlayer] Failed to load subtitles:', error)
     subtitles.value = []
   }
 }

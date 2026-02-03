@@ -14,6 +14,7 @@ const props = defineProps<{
   disabled?: boolean
   videoId?: number // Optional video ID for subtitle matching
   subtitleData?: any // Optional subtitle data (array) passed directly
+  videoType?: 'material' | 'edited' // Distinction for backend subtitle fetching
 }>()
 
 const emit = defineEmits<{
@@ -163,6 +164,7 @@ onBeforeUnmount(() => {
       :name="'视频播放'"
       :video-id="videoId"
       :subtitle-data="subtitleData"
+      :video-type="videoType"
       @close="showFullscreen = false"
     />
   </div>

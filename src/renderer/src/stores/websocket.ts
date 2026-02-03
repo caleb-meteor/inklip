@@ -198,11 +198,12 @@ export const useWebsocketStore = defineStore('websocket', () => {
       onSmartCutUpdated: (data) => {
         smartCutUpdated.value = Date.now()
         // 只在任务完成时显示系统提醒
-        // status: 0=待执行, 1=执行中, 2=已完成, 3=失败, 4=已取消
-        if (data.status === 2) {
+        // task_status: 0=待执行, 1=执行中, 2=已完成, 3=失败
+        // ai_gen_video_status: 0=待处理, 1=已完成, 2=处理中, 3=AI异常, 4=视频异常, 5=AI剪辑中
+        if (data.task_status === 2 || data.ai_gen_video_status === 1) {
           // 任务完成
           window.api.showNotification('智能剪辑完成', '点击查看最新剪辑结果', '/smart-editor')
-        } else if (data.status === 3) {
+        } else if (data.task_status === 3 || data.ai_gen_video_status === 3 || data.ai_gen_video_status === 4) {
           // 任务失败
           window.api.showNotification('智能剪辑失败', '请检查任务详情', '/smart-editor')
         }

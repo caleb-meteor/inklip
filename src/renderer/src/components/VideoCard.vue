@@ -16,10 +16,12 @@ interface Props {
   aspectRatio: string
   videoStatus: 'processing' | 'completed' | 'failed' | 'pending' | undefined
   videoProgress?: VideoParseProgress
+  videoType?: 'material' | 'edited'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  selected: false
+  selected: false,
+  videoType: 'material'
 })
 
 const emit = defineEmits<{
@@ -46,6 +48,7 @@ const emit = defineEmits<{
           :aspect-ratio="props.aspectRatio"
           :disabled="props.videoStatus !== 'completed'"
           :video-id="props.file.id"
+          :video-type="props.videoType"
           @dblclick="emit('open', props.file)"
         />
         <VideoStatusOverlay

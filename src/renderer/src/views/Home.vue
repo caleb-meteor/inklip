@@ -1,20 +1,154 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
 import { FlashOutline, SparklesOutline, FilmOutline } from '@vicons/ionicons5'
 import HomeSidebar from '../components/home/HomeSidebar.vue'
 import HomeChatMessages from '../components/home/HomeChatMessages.vue'
 import ChatInput from '../components/ChatInput.vue'
-import { getVideosApi, smartCutApi, getSmartCutsApi } from '../api/video'
-import { createAiChatApi, getAiChatListApi, addAiChatMessageApi, getAiChatMessagesApi, type AiChatTopic, type AiChatMessage } from '../api/aiChat'
-import { getDictsFromSentenceApi, type DictItem } from '../api/dict'
-import type { Message } from '../types/chat'
+import VideoUploadChatModal from '../components/home/VideoUploadChatModal.vue'
+import { smartCutAiService, type AiChatTopic } from '../services/smartCutAiService'
+import { aiChatStore } from '../services/aiChatStore'
+import { useWebsocketStore } from '../stores/websocket'
+import { getSmartCutApi, getVideosApi } from '../api/video'
+import { updateAiChatMessageApi, addAiChatMessageApi } from '../api/aiChat'
 
 const router = useRouter()
+const wsStore = useWebsocketStore()
 const currentYear = computed(() => new Date().getFullYear())
+const showUploadModal = ref(false)
+
+// 获取共享的 AI 对话存储
+const messages = computed(() => unref(aiChatStore.getMessages()))
+const aiChats = computed(() => unref(aiChatStore.getAiChats()))
+
+// 检查是否有任务正在进行中
+const isTaskRunning = computed(() => {
+  const state = smartCutAiService.getState()
+  return unref(state.isProcessing) || unref(state.isAwaitingConfirmation)
+})
 
 onMounted(() => {
-  loadAiChats()
+  aiChatStore.loadAiChats()
+  // 首次加载时清空消息，准备新对话
+  aiChatStore.newChat()
+})
+
+// 监听 WebSocket 的 videoUploaded 消息
+watch(() => wsStore.videoUploaded, async (newValue) => {
+  if (!newValue) return
+  
+  // 查找需要更新的视频上传消息
+  const currentMessages = unref(messages)
+  const videoUploadMessages = currentMessages.filter(msg => 
+    msg.payload?.type === 'video_upload' && 
+    msg.payload?.videos && 
+    msg.payload.videos.length > 0
+  )
+  
+  if (videoUploadMessages.length === 0) return
+  
+  try {
+    // 收集所有需要查询的视频 ID
+    const allVideoIds = new Set<number>()
+    videoUploadMessages.forEach(msg => {
+      msg.payload.videos.forEach(v => allVideoIds.add(v.id))
+    })
+    
+    if (allVideoIds.size === 0) return
+
+    // 批量查询最新状态
+    const latestVideos = await getVideosApi(Array.from(allVideoIds))
+    const videoMap = new Map(latestVideos.map(v => [v.id, v]))
+    
+    for (const msg of videoUploadMessages) {
+      let hasUpdates = false
+      const updatedVideos = msg.payload.videos.map(v => {
+        const latestInfo = videoMap.get(v.id)
+        if (latestInfo) {
+          // 检查关键信息是否有变化（如封面、时长）
+          if (latestInfo.cover !== v.cover || latestInfo.duration !== v.duration) {
+            hasUpdates = true
+            return {
+              ...v,
+              cover: latestInfo.cover,
+              duration: latestInfo.duration,
+              status: latestInfo.status
+            }
+          }
+        }
+        return v
+      })
+      
+      if (hasUpdates) {
+        const updatedPayload = { ...msg.payload, videos: updatedVideos }
+        
+        // 更新内存
+        aiChatStore.updateMessage(msg.id, { payload: updatedPayload })
+        
+        // 更新数据库
+        try {
+          // 如果是临时ID，可能还没入库，这里尝试转换
+          const msgIdNum = Number(msg.id)
+          if (!isNaN(msgIdNum)) {
+            await updateAiChatMessageApi(msgIdNum, { payload: updatedPayload })
+          }
+        } catch (error) {
+          console.error('[WebSocket] Failed to update video upload message in DB:', error)
+        }
+        
+        console.log(`[WebSocket] Updated video info for message ${msg.id}`)
+      }
+    }
+  } catch (error) {
+    console.error('[WebSocket] Failed to process video update:', error)
+  }
+})
+
+// 监听 WebSocket 的 smart_cut 消息更新
+watch(() => wsStore.smartCutUpdated, async (newValue) => {
+  if (!newValue) return
+
+  // 遍历当前聊天的所有消息，找到包含 aiGenVideoId 的消息
+  const currentMessages = unref(messages)
+  for (const msg of currentMessages) {
+    if (msg.payload?.smartCutTask?.aiGenVideoId) {
+      const aiGenVideoId = msg.payload.smartCutTask.aiGenVideoId
+      
+      try {
+        // 调用 API 获取最新状态
+        const latestData = await getSmartCutApi(aiGenVideoId)
+        
+        // 更新消息的 payload
+        const updatedPayload = {
+          ...msg.payload,
+          smartCutTask: {
+            ...msg.payload.smartCutTask,
+            status: latestData.status,
+            // 可以根据需要添加更多字段
+            fileUrl: latestData.file_url,
+            duration: latestData.duration
+          }
+        }
+        
+        // 更新内存中的消息
+        aiChatStore.updateMessage(msg.id, { payload: updatedPayload })
+        
+        // 更新数据库中的消息
+        try {
+          await updateAiChatMessageApi(Number(msg.id), {
+            payload: updatedPayload
+          })
+        } catch (error) {
+          console.error('[WebSocket] Failed to update message in database:', error)
+        }
+        
+        console.log(`[WebSocket] Updated AI gen video ${aiGenVideoId} status to ${latestData.status}`)
+      } catch (error) {
+        console.error(`[WebSocket] Failed to update AI gen video ${aiGenVideoId}:`, error)
+      }
+    }
+  }
 })
 
 const navigateTo = (path: string): void => {
@@ -22,287 +156,272 @@ const navigateTo = (path: string): void => {
 }
 
 const suggestions = [
-  { text: '如何开始剪辑视频？', icon: SparklesOutline },
-  { text: '帮我整理本地素材', icon: FilmOutline },
-  { text: '有什么快捷键？', icon: FlashOutline }
+  { 
+    text: '🎬 开始AI智能剪辑',
+    description: '上传视频 → 选择<strong>【主播】</strong>和<strong>【产品】</strong> → 自动生成精彩片段',
+    icon: SparklesOutline,
+    action: 'upload'
+  },
+  { 
+    text: '📤 导入本地视频素材',
+    description: '支持批量导入，为剪辑做准备',
+    icon: FilmOutline,
+    isUpload: true
+  },
+  { 
+    text: '💡 查看示例',
+    description: '基于<strong>【主播】</strong>和<strong>【产品】</strong>自动匹配相关内容',
+    icon: FlashOutline,
+    action: 'example'
+  }
 ]
 
-const messages = ref<Message[]>([])
-const isProcessingChat = ref(false)
-const aiChats = ref<AiChatTopic[]>([])
-const currentAiChatId = ref<number | null>(null)
-const chatSteps = ref([
-  { label: '正在分析主播与产品', state: 'wait' },
-  { label: '正在挑选符合条件的视频', state: 'wait' },
-  { label: '正在分析视频', state: 'wait' },
-  { label: '视频已分析，正在剪辑视频', state: 'wait' },
-  { label: '视频', state: 'wait' }
-])
-
-const loadAiChats = async (): Promise<void> => {
-  try {
-    aiChats.value = await getAiChatListApi(20)
-  } catch (error) {
-    console.error('加载 AI 对话失败:', error)
-  }
-}
-
-const loadAiChatMessages = async (aiChatId: number): Promise<void> => {
-  try {
-    const list: AiChatMessage[] = await getAiChatMessagesApi(aiChatId)
-    messages.value = list.map(item => ({
-      id: item.id.toString(),
-      role: item.role,
-      content: item.content,
-      payload: item.payload ? (typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload) : undefined,
-      timestamp: new Date(item.created_at)
-    }))
-  } catch (error) {
-    console.error('加载对话详情失败:', error)
-  }
-}
-
-const filterVideosByDicts = (videos: any[], dicts: DictItem[]): any[] => {
-  const dictNames = dicts.map(d => d.name)
-  return videos.filter(video =>
-    dictNames.some(name =>
-      video.title?.includes(name) || video.description?.includes(name)
-    )
-  )
-}
-
-const startAiFlow = async (prompt: string): Promise<void> => {
-  if (isProcessingChat.value) return
-
-  messages.value = []
-  isProcessingChat.value = true
-  chatSteps.value.forEach(s => { s.state = 'wait' })
-
-  try {
-    const sanitizedPrompt = prompt.trim()
-    const aiTopic = await createAiChatApi(sanitizedPrompt || '新建对话')
-    aiChats.value = [aiTopic, ...aiChats.value]
-    currentAiChatId.value = aiTopic.id
-
-    messages.value.push({
-      id: Date.now().toString(),
-      role: 'user',
-      content: sanitizedPrompt,
-      timestamp: new Date()
-    })
-
-    const analyzingMsgId = (Date.now() + 1).toString()
-    messages.value.push({
-      id: analyzingMsgId,
-      role: 'assistant',
-      content: '正在分析...',
-      isAnalyzing: true,
-      timestamp: new Date()
-    })
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    chatSteps.value[0].state = 'process'
-    const matchedDicts = await getDictsFromSentenceApi(sanitizedPrompt)
-
-    const analyzingMsg = messages.value.find(m => m.id === analyzingMsgId)
-    if (analyzingMsg) {
-      analyzingMsg.isAnalyzing = false
-      analyzingMsg.content = matchedDicts.length > 0
-        ? `解析成功，找到${matchedDicts.length}个相关词典：${matchedDicts.map(d => d.name).join('、')}`
-        : '未找到相关词典'
-      analyzingMsg.dicts = matchedDicts
-    }
-    chatSteps.value[0].state = 'finish'
-
-    const assistantMsgId = (Date.now() + 2).toString()
-    messages.value.push({
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      steps: chatSteps.value.slice(1),
-      timestamp: new Date()
-    })
-
-    chatSteps.value[1].state = 'process'
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    chatSteps.value[1].state = 'finish'
-
-    chatSteps.value[2].state = 'process'
-    const videos = await getVideosApi()
-    const filteredVideos = filterVideosByDicts(videos, matchedDicts)
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    chatSteps.value[2].state = 'finish'
-
-    chatSteps.value[3].state = 'process'
-    const targetVideoIds = filteredVideos.map(v => v.id)
-    if (targetVideoIds.length === 0) {
-      throw new Error('未找到符合条件的视频')
-    }
-
-    const res = await smartCutApi(targetVideoIds, sanitizedPrompt, 30, 60)
-    const taskId = res.task_id
-    const systemOutput = `\n字典解析: ${matchedDicts.length > 0 ? matchedDicts.map(d => d.name).join('、') : '未找到相关词典'}\n智能剪辑任务已创建，任务ID: ${taskId}`
-
-    let completed = false
-    let attempts = 0
-    while (!completed && attempts < 20) {
-      const history = await getSmartCutsApi(1, 10)
-      const task = history.list.find(t => t.id === taskId)
-      if (task && task.status === 1) {
-        completed = true
-      } else if (task && (task.status === 3 || task.status === 4)) {
-        throw new Error('视频处理失败')
-      }
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      attempts++
-    }
-
-    chatSteps.value[3].state = 'finish'
-    chatSteps.value[4].state = 'process'
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    chatSteps.value[4].state = 'finish'
-
-    if (currentAiChatId.value) {
-      await addAiChatMessageApi({
-        ai_chat_id: currentAiChatId.value,
-        role: 'assistant',
-        content: systemOutput
-      })
-    }
-
-    const assistantMsg = messages.value.find(m => m.role === 'assistant' && !m.content)
-    if (assistantMsg) assistantMsg.content = systemOutput
-    await loadAiChatMessages(currentAiChatId.value!)
-
-  } catch (error) {
-    console.error('AI Flow failed:', error)
-    const errStep = chatSteps.value.find(s => s.state === 'process')
-    if (errStep) errStep.state = 'error'
-
-    if (currentAiChatId.value) {
-      await addAiChatMessageApi({
-        ai_chat_id: currentAiChatId.value,
-        role: 'assistant',
-        content: `流程失败: ${error instanceof Error ? error.message : String(error)}`
-      }).catch(err => console.error('记录对话失败:', err))
-      await loadAiChatMessages(currentAiChatId.value)
-    }
-  } finally {
-    isProcessingChat.value = false
-  }
-}
+const examplePrompts = [
+  '李佳琪推荐的口红',
+  '薇娅介绍的连衣裙',
+  '辛巴讲解的iPhone手机'
+]
 
 const handleSend = (val: string): void => {
   if (!val.trim()) return
-  startAiFlow(val)
+  smartCutAiService.startSmartCut(val, {
+    minDuration: 30,
+    maxDuration: 60,
+    maxRetries: 20,
+    retryInterval: 3000
+  })
 }
 
-const handleSuggestionClick = (suggestion: string): void => {
-  handleSend(suggestion)
+const handleSuggestionClick = (suggestion: any): void => {
+  if (suggestion.isUpload) {
+    handleOpenUploadModal()
+  } else if (suggestion.action === 'upload') {
+    handleOpenUploadModal()
+  } else if (suggestion.action === 'example') {
+    // 随机选择一个示例提示词
+    const randomPrompt = examplePrompts[Math.floor(Math.random() * examplePrompts.length)]
+    handleSend(randomPrompt)
+  } else {
+    handleSend(suggestion.text || suggestion)
+  }
 }
 
 const handleSelectChat = async (chat: AiChatTopic): Promise<void> => {
-  currentAiChatId.value = chat.id
-  isProcessingChat.value = false
-  chatSteps.value.forEach(s => { s.state = 'wait' })
-  await loadAiChatMessages(chat.id)
+  await aiChatStore.selectChat(chat)
 }
 
 const handleNewChat = (): void => {
-  currentAiChatId.value = null
-  isProcessingChat.value = false
-  messages.value = []
-  chatSteps.value.forEach(s => { s.state = 'wait' })
+  aiChatStore.newChat()
+}
+
+const handleOpenUploadModal = (): void => {
+  showUploadModal.value = true
+}
+
+const handleUploadSuccess = async (uploadedVideos: any[], metadata?: { anchor?: string, product?: string }): Promise<void> => {
+  if (!uploadedVideos || uploadedVideos.length === 0) return
+
+  try {
+    // 1. 确保有会话，如果没有则创建
+    let chatId = aiChatStore.getCurrentAiChatId().value
+    if (!chatId) {
+      let topic = `导入 ${uploadedVideos.length} 个视频`
+      // 如果有元数据，构造更具体的主题
+      if (metadata?.anchor && metadata?.product) {
+        topic = `导入「${metadata.anchor}」的「${metadata.product}」${uploadedVideos.length}个视频`
+      }
+      
+      const newChat = await aiChatStore.createAiChat(topic)
+      chatId = newChat.id
+    }
+
+    // 2. 添加用户消息
+    let userContent = `导入了 ${uploadedVideos.length} 个本地视频`
+    if (metadata?.anchor && metadata?.product) {
+      userContent = `导入了「${metadata.anchor}」的「${metadata.product}」共 ${uploadedVideos.length} 个本地视频`
+    }
+    
+    // 保存到数据库
+    const userMsg = await addAiChatMessageApi({
+      ai_chat_id: chatId,
+      role: 'user',
+      content: userContent
+    })
+    
+    // 添加到本地显示 (使用真实ID)
+    aiChatStore.addMessage({
+      id: userMsg.id.toString(),
+      role: 'user',
+      content: userContent,
+      timestamp: new Date()
+    })
+
+    // 3. 添加助手消息（带视频卡片）
+    // 过滤出有效的视频信息用于展示
+    const displayVideos = uploadedVideos.map(v => ({
+      id: v.id,
+      name: v.name || v.filename,
+      path: v.path,
+      cover: v.cover,
+      duration: v.duration,
+      status: v.status // 确保保存状态
+    }))
+
+    const assistantContent = '视频导入成功，已添加到素材库。'
+    const payload = {
+      type: 'video_upload',
+      videos: displayVideos,
+      isInteractive: false, // 纯展示模式
+      awaitingConfirmation: false
+    }
+
+    // 保存到数据库
+    const assistantMsg = await addAiChatMessageApi({
+      ai_chat_id: chatId,
+      role: 'assistant',
+      content: assistantContent,
+      payload
+    })
+
+    // 添加到本地显示 (使用真实ID)
+    aiChatStore.addMessage({
+      id: assistantMsg.id.toString(),
+      role: 'assistant',
+      content: assistantContent,
+      timestamp: new Date(),
+      payload
+    })
+
+    // 滚动到底部
+    // HomeChatMessages组件会监听messages变化自动滚动
+
+  } catch (error) {
+    console.error('Failed to update chat with uploaded videos', error)
+  }
 }
 </script>
 
 <template>
-  <div class="home-container">
-    <div class="main-layout">
+  <n-layout has-sider class="home-layout">
+    <n-layout-sider 
+      width="260" 
+      collapse-mode="width" 
+      :show="true" 
+      class="home-sider"
+    >
       <HomeSidebar
         :ai-chats="aiChats"
         @navigate="navigateTo"
         @new-chat="handleNewChat"
         @select-chat="handleSelectChat"
       />
+    </n-layout-sider>
 
-      <HomeChatMessages
-        :messages="messages"
-        :suggestions="suggestions"
-        @suggestionClick="handleSuggestionClick"
-      >
-        <template #footer>
-          <div class="bottom-input-container">
-            <div class="input-wrapper">
-              <ChatInput @send="handleSend" />
-              <div class="input-disclaimer">© {{ currentYear }} 影氪. All rights reserved.</div>
-            </div>
-          </div>
-        </template>
-      </HomeChatMessages>
-    </div>
-  </div>
+    <n-layout-content class="home-content">
+      <div class="messages-container">
+        <HomeChatMessages
+          :messages="messages"
+          :suggestions="suggestions"
+          @suggestionClick="handleSuggestionClick"
+        />
+      </div>
+      
+      <div class="input-area-wrapper">
+        <div class="input-area-container">
+          <ChatInput 
+            :disabled="isTaskRunning" 
+            @send="handleSend" 
+            @open-upload-modal="handleOpenUploadModal"
+          />
+          <div class="footer-copyright">© {{ currentYear }} 影氪. All rights reserved.</div>
+        </div>
+      </div>
+      
+      <VideoUploadChatModal
+        v-model:show="showUploadModal"
+        @success="handleUploadSuccess"
+      />
+    </n-layout-content>
+  </n-layout>
 </template>
 
 <style scoped>
-.home-container {
-  background: #0f0f0f;
-  color: #fff;
-  min-height: 100vh;
-}
-
-.main-layout {
-  display: flex;
+.home-layout {
   height: 100vh;
-  width: 100%;
-  overflow: hidden;
+  background: #0f0f0f; /* Fallback */
 }
 
-.bottom-input-container {
-  padding: 16px 0 16px;
-  display: flex;
-  justify-content: center;
-  background: linear-gradient(to top, #1a1a1a 70%, transparent);
+.home-sider {
+  background: #09090b; /* Very dark, almost black */
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.input-wrapper {
-  max-width: 800px;
-  width: 90%;
+.home-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  background: #0f0f0f;
+  background: radial-gradient(circle at 50% 10%, #1a1a1a 0%, #0f0f0f 60%);
+  height: 100%;
+  position: relative;
 }
 
-.input-disclaimer {
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 140px; /* Make space for fixed input */
+}
+
+.input-area-wrapper {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  padding-bottom: 24px;
+  background: linear-gradient(to top, #0f0f0f 80%, transparent 100%); /* Fade out background */
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+}
+
+.input-area-container {
+  max-width: 800px;
+  width: 100%;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.footer-copyright {
   font-size: 11px;
   color: #444;
   text-align: center;
+  margin-top: 12px;
 }
 
-/* 自定义滚动条样式 */
+/* Custom Scrollbars */
 :deep(*::-webkit-scrollbar) {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 :deep(*::-webkit-scrollbar-track) {
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 4px;
+  background: transparent;
 }
 
 :deep(*::-webkit-scrollbar-thumb) {
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  transition: background 0.2s ease;
+  border-radius: 3px;
 }
 
 :deep(*::-webkit-scrollbar-thumb:hover) {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Firefox 滚动条样式 */
-:deep(*) {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) rgba(255, 255, 255, 0.02);
+/* Hide sider scrollbar */
+:deep(.n-layout-sider .n-scrollbar-rail) {
+  display: none;
 }
 </style>
