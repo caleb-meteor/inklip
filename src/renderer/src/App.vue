@@ -10,7 +10,6 @@ import { RouterView, useRouter, useRoute } from 'vue-router'
 import { onMounted } from 'vue'
 import { useWebsocketStore } from './stores/websocket'
 import { setBaseUrl } from './utils/request'
-import Footer from './components/Footer.vue'
 
 
 const themeOverrides: GlobalThemeOverrides = {
@@ -71,7 +70,6 @@ onMounted(async () => {
       <n-dialog-provider>
         <div class="app-wrapper">
           <RouterView />
-          <Footer v-if="route.name !== 'Splash'" />
         </div>
       </n-dialog-provider>
     </n-message-provider>

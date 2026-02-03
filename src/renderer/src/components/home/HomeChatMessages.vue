@@ -140,117 +140,88 @@ const formatDurationSeconds = (seconds: number): string => {
 </script>
 
 <template>
-  <div class="chat-container custom-scrollbar" ref="scrollContainer">
-    <div v-if="messageList.length === 0" class="empty-state">
-      <div class="greeting-container">
-        <h1 class="greeting-text">
-          <span class="gradient-text">你好，创作者</span>
-        </h1>
-        <p class="greeting-sub">基于【主播】+【产品】智能剪辑您的视频</p>
-      </div>
-      
-      <div class="suggestions-grid">
-        <div
-          v-for="s in suggestionList"
-          :key="s.text"
-          class="suggestion-card"
-          @click="handleSuggestionClick(s)"
-        >
-          <div class="suggestion-icon-wrapper">
-            <n-icon :component="s.icon" size="20" />
-          </div>
-          <div class="suggestion-content">
-            <div class="suggestion-text">{{ s.text }}</div>
-            <div v-if="s.description" class="suggestion-description">
-              <span v-html="s.description"></span>
-            </div>
+  <div class="chat-container">
+    <!-- Session Header (Matched from UI Draft) -->
+    <div class="session-header" v-if="messageList.length > 0">
+      <div class="session-info">
+        <div class="session-icon">✨</div>
+        <div class="session-details">
+          <h2 class="session-title">Kinetic Subtitles Edit Session</h2>
+          <div class="session-status">
+            Active now • Using GPT-4o-Vertical Model
           </div>
         </div>
       </div>
+      <button class="logs-btn">
+        <span class="icon">📄</span> View Session Logs
+      </button>
     </div>
 
-    <div v-else class="messages-list">
-      <div
-        v-for="msg in messageList"
-        :key="msg.id"
-        :class="['message-row', msg.role]"
-      >
-        <div class="message-content-wrapper">
-          <div class="message-bubble">
-            <div class="message-text">
-              <div v-if="msg.content && !msg.payload?.taskCard" class="text-content" v-html="getMessageContent(msg)"></div>
-              <div v-if="msg.isAnalyzing" class="analyzing-card">
-                <div class="analyzing-icon">
-                  <div class="pulse-ring"></div>
-                  <n-icon size="20"><SparklesOutline /></n-icon>
-                </div>
-                <div class="analyzing-info">
-                  <div class="analyzing-text">正在解析关键信息...</div>
-                  <div class="analyzing-sub">AI 正在理解您的剪辑需求</div>
-                </div>
-              </div>
-              
-              <ThinkingStepsMessage v-if="msg.role === 'assistant' && msg.payload?.steps" :steps="msg.payload.steps" />
-              
-              <div v-if="(msg.dicts && msg.dicts.length > 0) || (msg.payload?.dicts && msg.payload.dicts.length > 0)" class="timeline-segment">
-                <div class="segment-label">检测到的关键词</div>
-                <div class="dict-tags">
-                  <div v-for="dict in (msg.dicts || msg.payload?.dicts)" :key="dict.id" class="dict-tag">
-                    <span class="dict-name">{{ dict.name }}</span>
-                    <span class="dict-type-badge">{{ dict.type }}</span>
-                  </div>
-                </div>
-              </div>
+    <div class="messages-viewport" ref="scrollContainer">
+      <div v-if="messageList.length === 0" class="empty-state">
+        <div class="greeting-container">
+          <h1 class="greeting-text">
+            <span class="gradient-text">你好，创作者</span>
+          </h1>
+        </div>
+      </div>
 
-              <div v-if="msg.videos && msg.videos.length > 0 && !msg.payload?.videos" class="timeline-segment">
-                <div class="segment-label">
-                  📹 匹配到 {{ msg.videos.length }} 个片段
+      <div v-else class="messages-list">
+        <div
+          v-for="msg in messageList"
+          :key="msg.id"
+          :class="['message-row', msg.role]"
+        >
+          <!-- Avatar/Icon per role -->
+          <div class="avatar-cell">
+            <div class="role-avatar shadow-glow" v-if="msg.role === 'assistant'">🤖</div>
+            <div class="role-avatar user-avatar shadow-glow" v-else>👤</div>
+          </div>
+
+          <div class="message-body">
+            <div class="message-meta" v-if="msg.role === 'assistant'">
+              AI ASSISTANT • 10:15 AM
+            </div>
+            <div class="message-meta" v-else>
+              YOU • 10:16 AM
+            </div>
+
+            <div class="message-bubble">
+              <div class="message-text">
+                <div v-if="msg.content && !msg.payload?.taskCard" class="text-content" v-html="getMessageContent(msg)"></div>
+                
+                <!-- Thinking steps or other interactive elements here -->
+                <ThinkingStepsMessage v-if="msg.role === 'assistant' && msg.payload?.steps" :steps="msg.payload.steps" />
+                
+                <!-- ... existing interactive components ... -->
+                <VideoUploadMessage
+                  v-if="msg.payload?.type === 'video_upload' && msg.payload?.videos"
+                  :videos="msg.payload.videos"
+                />
+
+                <VideoSelectionMessage
+                  v-if="msg.payload?.videos && msg.payload.videos.length > 0 && msg.payload?.type !== 'video_upload'"
+                  :message-id="msg.id"
+                  :videos="msg.payload.videos"
+                  :hide-title="!!msg.payload?.taskCard"
+                  :awaiting-confirmation="msg.payload?.awaitingConfirmation || false"
+                  :is-interactive="msg.payload?.isInteractive !== false"
+                  :cancelled="msg.payload?.cancelled || false"
+                  @confirm="(videoIds, minTime, maxTime) => handleConfirmVideos(msg.id, videoIds, minTime, maxTime)"
+                  @cancel="() => handleCancelVideos(msg.id)"
+                />
+
+                <SmartCutResultMessage v-if="msg.payload?.aiGenVideoId" :msg-id="msg.id" :task="msg.payload" />
+                
+                <!-- Match APPLIED CHANGES UI from screenshot -->
+                <div v-if="msg.role === 'assistant' && msg.payload?.smartCutTask" class="applied-changes-card">
+                  <div class="changes-header">APPLIED CHANGES</div>
+                  <ul class="changes-list">
+                    <li><span class="check">✓</span> Jump cut @ 00:40.5</li>
+                    <li><span class="check">✓</span> Word-level sync</li>
+                  </ul>
+                  <button class="apply-variation-btn">APPLY VARIATION 1</button>
                 </div>
-                <div class="videos-grid">
-                  <div v-for="video in msg.videos" :key="video.id" class="video-card">
-                    <VideoPreviewPlayer
-                      :path="video.path"
-                      :cover="video.cover"
-                      :duration="video.duration"
-                      aspect-ratio="9/16"
-                      :video-id="video.id"
-                      video-type="material"
-                    />
-                    <div class="video-info">
-                      <div class="video-name">{{ video.filename || video.name }}</div>
-                      <div v-if="video.duration" class="video-duration">{{ formatDurationSeconds(video.duration) }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <TaskCardMessage
-                v-if="msg.payload?.taskCard && !msg.payload?.aiGenVideoId"
-                :steps="msg.payload.taskCard.steps"
-              />
-
-              <VideoUploadMessage
-                v-if="msg.payload?.type === 'video_upload' && msg.payload?.videos"
-                :videos="msg.payload.videos"
-              />
-
-              <VideoSelectionMessage
-                v-if="msg.payload?.videos && msg.payload.videos.length > 0 && msg.payload?.type !== 'video_upload'"
-                :message-id="msg.id"
-                :videos="msg.payload.videos"
-                :hide-title="!!msg.payload?.taskCard"
-                :awaiting-confirmation="msg.payload?.awaitingConfirmation || false"
-                :is-interactive="msg.payload?.isInteractive !== false"
-                :cancelled="msg.payload?.cancelled || false"
-                @confirm="(videoIds, minTime, maxTime) => handleConfirmVideos(msg.id, videoIds, minTime, maxTime)"
-                @cancel="() => handleCancelVideos(msg.id)"
-              />
-
-              <SmartCutResultMessage v-if="msg.payload?.aiGenVideoId" :msg-id="msg.id" :task="msg.payload" />
-
-              <div v-if="msg.payload?.error" class="error-block">
-                <n-icon color="#ef4444" size="18"><AlertCircleOutline /></n-icon>
-                <span>{{ msg.payload.error.message }}</span>
               </div>
             </div>
           </div>
@@ -264,48 +235,238 @@ const formatDurationSeconds = (seconds: number): string => {
 .chat-container {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  width: 100%;
   height: 100%;
+  background: #0a0b10;
+  color: #e0e0e0;
+}
+
+.session-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.session-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-icon {
+  width: 36px;
+  height: 36px;
+  background: rgba(26, 115, 232, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.session-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.session-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+}
+
+.session-status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+}
+
+.logs-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.messages-viewport {
+  flex: 1;
   overflow-y: auto;
-  padding: 20px 0;
-  box-sizing: border-box;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.message-row {
+  display: flex;
+  gap: 16px;
+  max-width: 85%;
+}
+
+.message-row.user {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+}
+
+.avatar-cell {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.role-avatar {
+  width: 32px;
+  height: 32px;
+  background: #1a73e8;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.user-avatar {
+  background: #202124;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.message-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.message-meta {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.message-row.user .message-meta {
+  text-align: right;
+  margin-right: 4px;
+}
+
+.message-bubble {
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.message-row.user .message-bubble {
+  background: #1a3a63;
+  border-radius: 12px 0 12px 12px;
+}
+
+.applied-changes-card {
+  margin-top: 16px;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  border: 1px solid rgba(26, 115, 232, 0.2);
+}
+
+.changes-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.changes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.changes-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #10b981;
+}
+
+.changes-list li .check {
+  width: 16px;
+  height: 16px;
+  background: rgba(16, 185, 129, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+.apply-variation-btn {
+  width: 100%;
+  background: rgba(26, 115, 232, 0.1);
+  border: 1px solid rgba(26, 115, 232, 0.3);
+  color: #1a73e8;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.apply-variation-btn:hover {
+  background: rgba(26, 115, 232, 0.2);
 }
 
 .empty-state {
-  margin-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 48px;
-  width: 100%;
-  max-width: 800px;
-  padding: 0 24px;
-}
-
-.greeting-container {
+  margin-top: 15vh;
   text-align: center;
 }
 
-.greeting-text {
-  font-size: 56px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  margin-bottom: 25px;
+.shadow-glow {
+  box-shadow: 0 0 15px rgba(26, 115, 232, 0.2);
 }
 
 .gradient-text {
   background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-clip: text;
+}
+
+.messages-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.greeting-text {
+  font-size: 56px;
+  font-weight: 700;
 }
 
 .greeting-sub {
   font-size: 24px;
-  color: #71717a;
-  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .suggestions-grid {

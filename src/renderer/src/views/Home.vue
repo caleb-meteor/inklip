@@ -2,8 +2,9 @@
 import { ref, onMounted, computed, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
-import { FlashOutline, SparklesOutline, FilmOutline } from '@vicons/ionicons5'
+import { FlashOutline, SparklesOutline, FilmOutline, SettingsOutline, ServerOutline } from '@vicons/ionicons5'
 import HomeSidebar from '../components/home/HomeSidebar.vue'
+import HomeRightSidebar from '../components/home/HomeRightSidebar.vue'
 import HomeChatMessages from '../components/home/HomeChatMessages.vue'
 import ChatInput from '../components/ChatInput.vue'
 import VideoUploadChatModal from '../components/home/VideoUploadChatModal.vue'
@@ -302,58 +303,156 @@ const handleUploadSuccess = async (uploadedVideos: any[], metadata?: { anchor?: 
 </script>
 
 <template>
-  <n-layout has-sider class="home-layout">
-    <n-layout-sider 
-      width="260" 
-      collapse-mode="width" 
-      :show="true" 
-      class="home-sider"
-    >
-      <HomeSidebar
-        :ai-chats="aiChats"
-        @navigate="navigateTo"
-        @new-chat="handleNewChat"
-        @select-chat="handleSelectChat"
-      />
-    </n-layout-sider>
-
-    <n-layout-content class="home-content">
-      <div class="messages-container">
-        <HomeChatMessages
-          :messages="messages"
-          :suggestions="suggestions"
-          @suggestionClick="handleSuggestionClick"
-        />
-      </div>
-      
-      <div class="input-area-wrapper">
-        <div class="input-area-container">
-          <ChatInput 
-            :disabled="isTaskRunning" 
-            @send="handleSend" 
-            @open-upload-modal="handleOpenUploadModal"
+  <div class="app-container">
+    <div class="main-layout-wrapper">
+      <n-layout has-sider class="home-layout">
+        <n-layout-sider 
+          width="320" 
+          collapse-mode="width" 
+          :show="true" 
+          class="home-sider"
+        >
+          <HomeSidebar
+            @navigate="navigateTo"
           />
-          <div class="footer-copyright">© {{ currentYear }} 影氪. All rights reserved.</div>
-        </div>
+        </n-layout-sider>
+
+        <n-layout-content class="home-content">
+          <div class="messages-container">
+            <HomeChatMessages
+              :messages="messages"
+              :suggestions="suggestions"
+              @suggestionClick="handleSuggestionClick"
+            />
+          </div>
+          
+          <div class="input-area-wrapper">
+            <div class="input-area-container">
+              <ChatInput 
+                :disabled="isTaskRunning" 
+                @send="handleSend" 
+                @open-upload-modal="handleOpenUploadModal"
+              />
+            </div>
+          </div>
+          
+          <VideoUploadChatModal
+            v-model:show="showUploadModal"
+            @success="handleUploadSuccess"
+          />
+        </n-layout-content>
+        
+        <n-layout-sider 
+          width="280" 
+          collapse-mode="width" 
+          :collapsed-width="0"
+          show-trigger="arrow-circle"
+          class="home-right-sider"
+          bordered
+        >
+          <HomeRightSidebar
+            :ai-chats="aiChats"
+            @select-chat="handleSelectChat"
+            @new-chat="handleNewChat"
+          />
+        </n-layout-sider>
+      </n-layout>
+    </div>
+    
+    <div class="app-status-bar">
+      <div class="status-item clickable" @click="navigateTo('/settings')">
+        <n-icon size="14"><SettingsOutline /></n-icon>
+        <span>设置</span>
       </div>
       
-      <VideoUploadChatModal
-        v-model:show="showUploadModal"
-        @success="handleUploadSuccess"
-      />
-    </n-layout-content>
-  </n-layout>
+      <div class="status-spacer"></div>
+      
+      <div class="status-item">
+        <span>© {{ currentYear }} 影氪</span>
+      </div>
+      
+      <div class="status-spacer"></div>
+      
+      <div class="status-item" :class="{ 'status-online': wsStore.connected, 'status-offline': !wsStore.connected }">
+        <n-icon size="14"><ServerOutline /></n-icon>
+        <span>{{ wsStore.connected ? '服务正常' : '服务离线' }}</span>
+      </div>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.home-layout {
+.app-container {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: #09090b;
+}
+
+.main-layout-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-status-bar {
+  height: 36px;
+  background: #09090b;
+  border-top: 1px solid rgba(255, 255, 255, 0.08); /* Stronger border for separation */
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  font-size: 11px;
+  color: #71717a;
+  user-select: none;
+  z-index: 1000; /* Ensure it stays on top */
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.3s ease;
+}
+
+.status-item.status-online {
+  color: #10b981; /* Green-500 */
+}
+
+.status-item.status-offline {
+  color: #ef4444; /* Red-500 */
+}
+
+.status-item.clickable {
+  cursor: pointer;
+  color: #71717a; /* Reset color for non-status items, or use specific class */
+}
+
+.status-item.clickable:hover {
+  color: #e5e5e5;
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.home-layout {
+  height: 100%; /* Fill parent */
   background: #0f0f0f; /* Fallback */
 }
 
 .home-sider {
   background: #09090b; /* Very dark, almost black */
   border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.home-right-sider {
+  background: #09090b;
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .home-content {
