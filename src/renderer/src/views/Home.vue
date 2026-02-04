@@ -1,23 +1,26 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, unref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
-import { FlashOutline, SparklesOutline, FilmOutline, SettingsOutline, ServerOutline } from '@vicons/ionicons5'
+import { NLayout, NLayoutSider, NLayoutContent, NIcon, NButton } from 'naive-ui'
+import { FlashOutline, SparklesOutline, FilmOutline, SettingsOutline, ServerOutline, ListOutline, CloseOutline } from '@vicons/ionicons5'
 import HomeSidebar from '../components/home/HomeSidebar.vue'
 import HomeRightSidebar from '../components/home/HomeRightSidebar.vue'
 import HomeChatMessages from '../components/home/HomeChatMessages.vue'
 import ChatInput from '../components/ChatInput.vue'
 import VideoUploadChatModal from '../components/home/VideoUploadChatModal.vue'
+import VideoPlayer from '../components/VideoPlayer.vue'
 import { smartCutAiService, type AiChatTopic } from '../services/smartCutAiService'
 import { aiChatStore } from '../services/aiChatStore'
 import { useWebsocketStore } from '../stores/websocket'
-import { getSmartCutApi, getVideosApi } from '../api/video'
+import { getSmartCutApi, getVideosApi, type VideoItem, type SmartCutItem } from '../api/video'
 import { updateAiChatMessageApi, addAiChatMessageApi } from '../api/aiChat'
 
 const router = useRouter()
 const wsStore = useWebsocketStore()
 const currentYear = computed(() => new Date().getFullYear())
 const showUploadModal = ref(false)
+const leftSidebarCollapsed = ref(false)
+const rightSidebarCollapsed = ref(true)
 
 // 获取共享的 AI 对话存储
 const messages = computed(() => unref(aiChatStore.getMessages()))
@@ -28,6 +31,39 @@ const isTaskRunning = computed(() => {
   const state = smartCutAiService.getState()
   return unref(state.isProcessing) || unref(state.isAwaitingConfirmation)
 })
+
+const currentPlayingVideo = ref<VideoItem | null>(null)
+const currentSelectedAnchor = ref<any>(null)
+
+const handlePlayVideo = (video: VideoItem) => {
+  currentPlayingVideo.value = video
+}
+
+const handlePlaySmartCut = (item: SmartCutItem) => {
+  // Convert SmartCutItem to VideoItem format for player
+  currentPlayingVideo.value = {
+    ...item,
+    id: item.id,
+    name: item.name,
+    path: item.path,
+    cover: item.cover || '',
+    duration: item.duration || 0,
+    subtitle: item.subtitle,
+    // Fill required VideoItem fields with defaults if missing
+    size: item.size || 0,
+    audio: '',
+    silent: '',
+    task_id: 0,
+    sha256: '',
+    status: item.status,
+    created_at: item.created_at,
+    updated_at: item.updated_at
+  } as VideoItem
+}
+
+const handleClosePlayer = () => {
+  currentPlayingVideo.value = null
+}
 
 onMounted(() => {
   aiChatStore.loadAiChats()
@@ -309,29 +345,54 @@ const handleUploadSuccess = async (uploadedVideos: any[], metadata?: { anchor?: 
         <n-layout-sider 
           width="320" 
           collapse-mode="width" 
-          :show="true" 
+          :collapsed-width="48"
+          :collapsed="leftSidebarCollapsed"
+          bordered
           class="home-sider"
         >
           <HomeSidebar
+            :collapsed="leftSidebarCollapsed"
             @navigate="navigateTo"
+            @toggle-left-collapse="leftSidebarCollapsed = !leftSidebarCollapsed"
+            @play-video="handlePlayVideo"
+            @update:selected-anchor="currentSelectedAnchor = $event"
           />
         </n-layout-sider>
 
         <n-layout-content class="home-content">
-          <div class="messages-container">
-            <HomeChatMessages
-              :messages="messages"
-              :suggestions="suggestions"
-              @suggestionClick="handleSuggestionClick"
-            />
-          </div>
-          
-          <div class="input-area-wrapper">
-            <div class="input-area-container">
-              <ChatInput 
-                :disabled="isTaskRunning" 
-                @send="handleSend" 
-                @open-upload-modal="handleOpenUploadModal"
+          <template v-if="!currentPlayingVideo">
+            <div class="messages-container">
+              <HomeChatMessages
+                :messages="messages"
+                :suggestions="suggestions"
+                @suggestionClick="handleSuggestionClick"
+              />
+            </div>
+            
+            <div class="input-area-wrapper">
+              <div class="input-area-container">
+                <ChatInput 
+                  :disabled="isTaskRunning" 
+                  @send="handleSend" 
+                  @open-upload-modal="handleOpenUploadModal"
+                />
+              </div>
+            </div>
+          </template>
+
+          <div v-else class="video-player-container">
+            <div class="player-header">
+              <h2 class="video-title">{{ currentPlayingVideo.name }}</h2>
+              <n-button quaternary circle @click="handleClosePlayer" class="close-btn">
+                <n-icon size="24"><CloseOutline /></n-icon>
+              </n-button>
+            </div>
+            <div class="player-content">
+              <VideoPlayer 
+                :path="currentPlayingVideo.path" 
+                :video-id="currentPlayingVideo.id"
+                :subtitle-data="currentPlayingVideo.subtitle"
+                autoplay
               />
             </div>
           </div>
@@ -345,15 +406,18 @@ const handleUploadSuccess = async (uploadedVideos: any[], metadata?: { anchor?: 
         <n-layout-sider 
           width="280" 
           collapse-mode="width" 
-          :collapsed-width="0"
-          show-trigger="arrow-circle"
+          :collapsed-width="48"
+          :collapsed="rightSidebarCollapsed"
           class="home-right-sider"
           bordered
         >
           <HomeRightSidebar
             :ai-chats="aiChats"
+            :collapsed="rightSidebarCollapsed"
+            :current-anchor="currentSelectedAnchor"
             @select-chat="handleSelectChat"
             @new-chat="handleNewChat"
+            @toggle="rightSidebarCollapsed = !rightSidebarCollapsed"
           />
         </n-layout-sider>
       </n-layout>
@@ -522,5 +586,36 @@ const handleUploadSuccess = async (uploadedVideos: any[], metadata?: { anchor?: 
 /* Hide sider scrollbar */
 :deep(.n-layout-sider .n-scrollbar-rail) {
   display: none;
+}
+
+.video-player-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.video-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #e4e4e7;
+}
+
+.player-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background: black;
+  border-radius: 8px;
 }
 </style>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, h } from 'vue'
-import { NIcon, NAvatar, NPopconfirm, NInput, NButton, NUpload, NDropdown, NModal, useMessage, useDialog, type UploadFileInfo } from 'naive-ui'
+import { ref, onMounted, computed, nextTick, h, watch } from 'vue'
+import { NIcon, NAvatar, NPopconfirm, NInput, NButton, NUpload, NDropdown, NModal, NTooltip, useMessage, useDialog, type UploadFileInfo } from 'naive-ui'
 import {
   VideocamOutline,
   CutOutline,
@@ -14,23 +14,39 @@ import {
   PlanetOutline,
   PersonOutline,
   PencilOutline,
-  TrashOutline
+  TrashOutline,
+  MenuOutline,
+  ChevronBackOutline,
+  PeopleOutline,
+  LibraryOutline,
+  CloudUploadOutline,
+  AddCircleOutline
 } from '@vicons/ionicons5'
 import type { AiChatTopic } from '../../api/aiChat'
+import { getVideosApi, uploadVideosBatchApi, deleteVideoApi, renameVideoApi, type VideoItem } from '../../api/video'
 import { getAnchorsApi, createAnchorApi, updateAnchorApi, deleteAnchorApi, type Anchor } from '../../api/anchor'
 import { getProductsApi, createProductApi, updateProductApi, deleteProductApi, type Product } from '../../api/product'
+import VideoUploadChatModal from './VideoUploadChatModal.vue'
+import RenameModal from '../RenameModal.vue'
+import DeleteModal from '../DeleteModal.vue'
+import { getMediaUrl } from '../../utils/media'
 
 defineProps<{
+  collapsed: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'navigate', path: string): void
+  (e: 'toggle-left-collapse'): void
+  (e: 'play-video', video: VideoItem): void
+  (e: 'update:selected-anchor', anchor: Anchor | null): void
 }>()
 
 const message = useMessage()
 const dialog = useDialog()
 const anchors = ref<Anchor[]>([])
 const products = ref<Product[]>([])
+const videos = ref<VideoItem[]>([])
 const selectedAnchorId = ref<number | null>(null)
 const expandedProductIds = ref<number[]>([])
 
@@ -45,6 +61,8 @@ const newProductCover = ref<string>('')
 const productFileList = ref<UploadFileInfo[]>([])
 
 const loading = ref(false)
+const showUploadModal = ref(false)
+const currentUploadProduct = ref<Product | null>(null)
 
 // Context Menu State
 const showDropdown = ref(false)
@@ -52,12 +70,18 @@ const dropdownX = ref(0)
 const dropdownY = ref(0)
 const contextMenuAnchor = ref<Anchor | null>(null)
 const contextMenuProduct = ref<Product | null>(null)
-const contextMenuType = ref<'anchor' | 'product'>('anchor')
+const contextMenuVideo = ref<VideoItem | null>(null)
+const contextMenuType = ref<'anchor' | 'product' | 'video'>('anchor')
 
 const dropdownOptions = [
   { label: '编辑', key: 'edit', icon: () => h(NIcon, null, { default: () => h(PencilOutline) }) },
   { label: '删除', key: 'delete', icon: () => h(NIcon, null, { default: () => h(TrashOutline) }) }
 ]
+
+// Video Action State
+const showRenameModal = ref(false)
+const showDeleteModal = ref(false)
+const currentVideoForAction = ref<VideoItem | null>(null)
 
 // Edit Anchor State
 const editAnchorId = ref<number | null>(null)
@@ -73,6 +97,10 @@ const editProductFileList = ref<UploadFileInfo[]>([])
 
 const currentAnchor = computed(() => anchors.value.find(a => a.id === selectedAnchorId.value))
 
+watch(currentAnchor, (newVal) => {
+  emit('update:selected-anchor', newVal || null)
+}, { immediate: true })
+
 const currentAnchorProducts = computed(() => {
   if (!selectedAnchorId.value) return []
   return products.value.filter(p => p.anchor_id === selectedAnchorId.value)
@@ -86,6 +114,13 @@ onMounted(async () => {
     ])
     anchors.value = anchorsRes.list
     products.value = productsRes.list
+    
+    // Load all videos
+    try {
+      videos.value = await getVideosApi()
+    } catch (e) {
+      console.error('Failed to load videos', e)
+    }
 
     // 默认选择第一个主播
     if (anchors.value.length > 0) {
@@ -117,8 +152,36 @@ const toggleProduct = (id: number): void => {
   }
 }
 
+const getProductVideos = (productId: number) => {
+  return videos.value.filter(v => v.product_id === productId)
+}
+
+const formatDuration = (seconds?: number) => {
+  if (!seconds) return '00:00'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
+const openUploadModal = (product: Product) => {
+  currentUploadProduct.value = product
+  showUploadModal.value = true
+}
+
+const handleUploadSuccess = async () => {
+    // Re-fetch all videos
+    try {
+        videos.value = await getVideosApi()
+    } catch(e) {
+        console.error('Failed to refresh videos', e)
+    }
+}
+
 const getAvatarColor = (name: string): string => {
-  const colors = ['#f56a00', '#7265e6', '#ffbf00', '#00a2ae', '#1890ff', '#52c41a', '#eb2f96']
+  const colors = [
+    '#f56a00', '#7265e6', '#ffbf00', '#00a2ae', '#1890ff', '#52c41a', '#eb2f96',
+    '#e11d48', '#0891b2', '#4f46e5', '#d97706', '#059669', '#7c3aed', '#db2777'
+  ]
   let hash = 0
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash)
@@ -176,7 +239,7 @@ const handleAddAnchor = async () => {
     newAnchorAvatar.value = ''
     fileList.value = []
     
-    message.success('添加主播成功')
+    // message.success('添加主播成功')
     return true
   } catch (error) {
     console.error('Failed to add anchor:', error)
@@ -209,7 +272,7 @@ const handleAddProduct = async () => {
     newProductCover.value = ''
     productFileList.value = []
     
-    message.success('添加产品成功')
+    // message.success('添加产品成功')
     return true
   } catch (error) {
     console.error('Failed to add product:', error)
@@ -220,7 +283,7 @@ const handleAddProduct = async () => {
   }
 }
 
-const handleContextMenu = (e: MouseEvent, item: Anchor | Product, type: 'anchor' | 'product') => {
+const handleContextMenu = (e: MouseEvent, item: Anchor | Product | VideoItem, type: 'anchor' | 'product' | 'video') => {
   e.preventDefault()
   showDropdown.value = false
   contextMenuType.value = type
@@ -228,9 +291,15 @@ const handleContextMenu = (e: MouseEvent, item: Anchor | Product, type: 'anchor'
   if (type === 'anchor') {
     contextMenuAnchor.value = item as Anchor
     contextMenuProduct.value = null
-  } else {
+    contextMenuVideo.value = null
+  } else if (type === 'product') {
     contextMenuProduct.value = item as Product
     contextMenuAnchor.value = null
+    contextMenuVideo.value = null
+  } else {
+    contextMenuVideo.value = item as VideoItem
+    contextMenuAnchor.value = null
+    contextMenuProduct.value = null
   }
 
   nextTick().then(() => {
@@ -252,13 +321,69 @@ const handleSelectDropdown = (key: string) => {
       startEdit(contextMenuAnchor.value)
     } else if (contextMenuType.value === 'product' && contextMenuProduct.value) {
       startEditProduct(contextMenuProduct.value)
+    } else if (contextMenuType.value === 'video' && contextMenuVideo.value) {
+      currentVideoForAction.value = contextMenuVideo.value
+      showRenameModal.value = true
     }
   } else if (key === 'delete') {
     if (contextMenuType.value === 'anchor' && contextMenuAnchor.value) {
       confirmDeleteAnchor(contextMenuAnchor.value)
     } else if (contextMenuType.value === 'product' && contextMenuProduct.value) {
       confirmDeleteProduct(contextMenuProduct.value)
+    } else if (contextMenuType.value === 'video' && contextMenuVideo.value) {
+      currentVideoForAction.value = contextMenuVideo.value
+      showDeleteModal.value = true
     }
+  }
+}
+
+const handleRenameVideoConfirm = async (newName: string) => {
+  if (!currentVideoForAction.value || !newName.trim()) return
+
+  // Preserve extension if implementation requires, but usually renameVideoApi might handle just name or require full name.
+  // Assuming the user types the new name without extension in the RenameModal,
+  // we might need to append the original extension.
+  let finalName = newName.trim()
+  const originalName = currentVideoForAction.value.name
+  const lastDotIndex = originalName.lastIndexOf('.')
+  const ext = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : ''
+  
+  // Checking if newName already has the extension (user might have typed it)
+  if (ext && !finalName.endsWith(ext)) {
+     finalName += ext
+  }
+  
+  try {
+    const updatedVideo = await renameVideoApi(currentVideoForAction.value.id, finalName)
+    
+    // Update local list
+    const index = videos.value.findIndex(v => v.id === updatedVideo.id)
+    if (index !== -1) {
+      videos.value[index] = updatedVideo
+    }
+    
+    // message.success('重命名成功')
+    showRenameModal.value = false
+  } catch (error) {
+    console.error('Failed to rename video:', error)
+    message.error('重命名失败')
+  }
+}
+
+const handleDeleteVideoConfirm = async () => {
+  if (!currentVideoForAction.value) return
+
+  try {
+    await deleteVideoApi(currentVideoForAction.value.id)
+    
+    // Remove from local list
+    videos.value = videos.value.filter(v => v.id !== currentVideoForAction.value!.id)
+    
+    // message.success('删除视频成功')
+    showDeleteModal.value = false
+  } catch (error) {
+    console.error('Failed to delete video:', error)
+    message.error('删除视频失败')
   }
 }
 
@@ -344,7 +469,7 @@ const handleUpdateAnchor = async () => {
        // computed `currentAnchor` will automatically update
     }
 
-    message.success('更新成功')
+    // message.success('更新成功')
     editAnchorId.value = null // Close popconfirm
   } catch (error) {
     message.error('更新失败')
@@ -371,7 +496,7 @@ const handleUpdateProduct = async () => {
       products.value[index] = updated
     }
 
-    message.success('更新成功')
+    // message.success('更新成功')
     editProductId.value = null
   } catch (error) {
     message.error('更新失败')
@@ -394,7 +519,7 @@ const confirmDeleteAnchor = (anchor: Anchor) => {
         if (selectedAnchorId.value === anchor.id) {
           selectedAnchorId.value = null
         }
-        message.success('删除成功')
+        // message.success('删除成功')
       } catch (error) {
         message.error('删除失败')
         console.error(error)
@@ -420,7 +545,7 @@ const confirmDeleteProduct = (product: Product) => {
            expandedProductIds.value.splice(expandIndex, 1)
         }
         
-        message.success('删除成功')
+        // message.success('删除成功')
       } catch (error) {
         message.error('删除失败')
         console.error(error)
@@ -431,25 +556,84 @@ const confirmDeleteProduct = (product: Product) => {
 </script>
 
 <template>
-  <div class="chat-sidebar">
+  <div class="chat-sidebar" :class="{ 'sidebar-collapsed': collapsed }">
     <div class="sidebar-content">
       <!-- 全局素材区域 -->
       <div class="sidebar-group">
-        <div class="section-title">全局素材</div>
-        <div class="nav-item disabled">
+        <div class="section-title-wrapper">
+          <div class="section-title" v-show="!collapsed" style="color: #fbbf24;">全局素材</div>
+          <div class="sidebar-toggle-btn" @click="emit('toggle-left-collapse')" :title="collapsed ? '展开' : '折叠'">
+            <n-icon size="16">
+              <MenuOutline v-if="collapsed" />
+              <ChevronBackOutline v-else />
+            </n-icon>
+          </div>
+        </div>
+        
+        <div class="nav-item disabled" v-show="!collapsed">
           <n-icon size="14" class="arrow-icon"><ChevronForwardOutline /></n-icon>
           <n-icon size="18" color="#eab308"><PlanetOutline /></n-icon>
           <span>全局素材库</span>
           <span class="pending-tag">待开发</span>
         </div>
+
+        <!-- Collapsed Icons Display -->
+        <div v-if="collapsed" class="collapsed-icons-list" @click="emit('toggle-left-collapse')">
+          <n-tooltip placement="right">
+            <template #trigger>
+              <div class="collapsed-icon-item">
+                <n-icon size="20"><PlanetOutline /></n-icon>
+              </div>
+            </template>
+            全局素材
+          </n-tooltip>
+
+          <div class="collapsed-divider"></div>
+
+          <n-tooltip placement="right">
+            <template #trigger>
+              <div class="collapsed-icon-item" :class="{ active: !selectedAnchorId }">
+                <n-avatar 
+                  v-if="currentAnchor"
+                  round 
+                  :size="24"
+                  :src="currentAnchor.avatar || undefined"
+                  :style="{ backgroundColor: getAvatarColor(currentAnchor.name), color: '#fff', fontSize: '10px' }"
+                >
+                  <template v-if="!currentAnchor.avatar">{{ currentAnchor.name.charAt(0) }}</template>
+                </n-avatar>
+                <n-icon v-else size="20" color="#3b82f6"><PeopleOutline /></n-icon>
+              </div>
+            </template>
+            {{ currentAnchor ? currentAnchor.name : '主播列表' }}
+          </n-tooltip>
+
+          <n-tooltip placement="right" v-if="selectedAnchorId">
+            <template #trigger>
+              <div class="collapsed-icon-item">
+                <n-icon size="20"><LibraryOutline /></n-icon>
+              </div>
+            </template>
+            主播公共素材
+          </n-tooltip>
+
+          <n-tooltip placement="right" v-if="selectedAnchorId">
+            <template #trigger>
+              <div class="collapsed-icon-item">
+                <n-icon size="20" color="#10b981"><CubeOutline /></n-icon>
+              </div>
+            </template>
+            产品列表
+          </n-tooltip>
+        </div>
       </div>
 
-      <div class="divider"></div>
+      <div class="divider" v-show="!collapsed"></div>
 
       <!-- 主播选择区域 -->
-      <div class="anchors-section">
+      <div class="anchors-section" v-show="!collapsed">
         <div class="section-header">
-          <div class="section-title" style="margin-bottom: 0;">主播选择</div>
+          <div class="section-title" style="margin-bottom: 0; color: #3b82f6;">主播选择</div>
           <n-popconfirm
             @positive-click="handleAddAnchor"
             :show-icon="false"
@@ -519,10 +703,10 @@ const confirmDeleteProduct = (product: Product) => {
                 <div class="avatar-wrapper">
                   <n-avatar
                     round
-                    :size="40"
+                    :size="32"
                     class="anchor-avatar"
                     :src="anchor.avatar || undefined"
-                    :style="{ backgroundColor: getAvatarColor(anchor.name), color: '#fff', fontSize: '16px' }"
+                    :style="{ backgroundColor: getAvatarColor(anchor.name), color: '#fff', fontSize: '14px' }"
                   >
                     <template v-if="!anchor.avatar">
                       {{ anchor.name.charAt(0) }}
@@ -572,20 +756,20 @@ const confirmDeleteProduct = (product: Product) => {
       <div class="divider"></div>
 
       <!-- 主播专属素材区域 -->
-      <div class="anchor-details-section" v-if="selectedAnchorId && currentAnchor">
-        <div class="section-title">主播专属素材</div>
+      <div class="anchor-details-section" v-if="selectedAnchorId && currentAnchor && !collapsed">
+        <div class="section-title" style="color: #a855f7;">主播专属素材</div>
         
         <!-- 公共素材 (静态) -->
         <div class="nav-item disabled">
           <n-icon size="14" class="arrow-icon"><ChevronForwardOutline /></n-icon>
-          <n-icon size="18" color="#a855f7"><PersonOutline /></n-icon>
+          <n-icon size="18" color="#a855f7"><LibraryOutline /></n-icon>
           <span>公共素材库</span>
           <span class="pending-tag">待开发</span>
         </div>
 
         <!-- 产品管理 Header -->
         <div class="section-header" style="margin-top: 6px; margin-bottom: 4px;">
-          <div class="section-title" style="margin-bottom: 0;">产品列表</div>
+          <div class="section-title" style="margin-bottom: 0; color: #10b981;">产品列表</div>
           <n-popconfirm
             @positive-click="handleAddProduct"
             :show-icon="false"
@@ -647,8 +831,8 @@ const confirmDeleteProduct = (product: Product) => {
             @clickoutside="cancelEditProduct"
           >
             <template #trigger>
-              <div class="product-item" @contextmenu="handleContextMenu($event, product, 'product')">
-                <div class="nav-item" @click="toggleProduct(product.id)">
+              <div class="product-item">
+                <div class="nav-item" @click="toggleProduct(product.id)" @contextmenu="handleContextMenu($event, product, 'product')">
                   <n-icon size="14" class="arrow-icon">
                     <ChevronDownOutline v-if="expandedProductIds.includes(product.id)" />
                     <ChevronForwardOutline v-else />
@@ -657,18 +841,38 @@ const confirmDeleteProduct = (product: Product) => {
                   <div v-if="product.cover" style="width: 18px; height: 18px; border-radius: 2px; overflow: hidden; margin-right: 2px; display: flex; flex-shrink: 0;">
                      <img :src="product.cover" style="width: 100%; height: 100%; object-fit: cover;" />
                   </div>
-                  <n-icon v-else size="18" color="#3b82f6"><FolderOpenOutline /></n-icon>
+                  <n-icon v-else size="18" :color="getAvatarColor(product.name)"><FolderOpenOutline /></n-icon>
                   <span>{{ product.name }}</span>
                 </div>
                 
-                <!-- 视频列表 (模拟) -->
+                <!-- 视频列表 -->
                 <div v-show="expandedProductIds.includes(product.id)" class="videos-list">
-                   <!-- 预览图卡片 -->
-                  <div class="video-preview-card">
-                     <div class="preview-placeholder">
-                        <n-icon size="24" color="#fff"><VideocamOutline /></n-icon>
+                   <!-- Upload Buttons -->
+                   <div 
+                     v-if="getProductVideos(product.id).length < 6" 
+                     class="video-preview-card upload-card" 
+                     @click="openUploadModal(product)"
+                   >
+                     <div class="preview-placeholder upload-placeholder">
+                        <n-icon size="24" color="#a1a1aa"><AddCircleOutline /></n-icon>
+                        <span style="font-size: 10px; margin-top: 4px; color: #a1a1aa;">上传视频</span>
                      </div>
-                     <div class="preview-name">开箱评测_V.mp4</div>
+                   </div>
+
+                   <!-- Videos -->
+                  <div 
+                    class="video-preview-card" 
+                    v-for="video in getProductVideos(product.id)" 
+                    :key="video.id"
+                    @dblclick="emit('play-video', video)"
+                    @contextmenu="handleContextMenu($event, video, 'video')"
+                  >
+                     <div class="preview-placeholder">
+                        <img v-if="video.cover" :src="getMediaUrl(video.cover)" class="video-cover-img" />
+                        <n-icon v-else size="24" color="#fff"><VideocamOutline /></n-icon>
+                        <div class="video-duration">{{ formatDuration(video.duration) }}</div>
+                     </div>
+                     <div class="preview-name" :title="video.name">{{ video.name }}</div>
                   </div>
                 </div>
               </div>
@@ -710,7 +914,7 @@ const confirmDeleteProduct = (product: Product) => {
         </div>
       </div>
       
-      <div class="anchor-details-section empty-area" v-else-if="anchors.length > 0">
+      <div class="anchor-details-section empty-area" v-else-if="anchors.length > 0 && !collapsed">
         <div class="empty-text">请选择一个主播查看资源</div>
       </div>
     </div>
@@ -728,6 +932,27 @@ const confirmDeleteProduct = (product: Product) => {
     />
 
     <!-- Edit Modal Removed -->
+    
+    <VideoUploadChatModal
+      v-model:show="showUploadModal"
+      :pre-selected-anchor="currentAnchor ? {id: currentAnchor.id, name: currentAnchor.name} : undefined"
+      :pre-selected-product="currentUploadProduct ? {id: currentUploadProduct.id, name: currentUploadProduct.name} : undefined"
+      @success="handleUploadSuccess"
+    />
+
+    <RenameModal
+      v-if="currentVideoForAction"
+      v-model:show="showRenameModal"
+      :video-name="currentVideoForAction.name"
+      @confirm="handleRenameVideoConfirm"
+    />
+
+    <DeleteModal
+      v-if="currentVideoForAction"
+      v-model:show="showDeleteModal"
+      :video-name="currentVideoForAction.name"
+      @confirm="handleDeleteVideoConfirm"
+    />
   </div>
 </template>
 
@@ -740,7 +965,18 @@ const confirmDeleteProduct = (product: Product) => {
   box-sizing: border-box;
   color: #e5e5e5;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  overflow-y: auto;
+  overflow: hidden;
+}
+
+/* Hide scrollbar for Chrome/Safari/Opera */
+.anchor-details-section::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.chat-sidebar.sidebar-collapsed {
+  padding: 16px 0;
 }
 
 .sidebar-content {
@@ -748,22 +984,121 @@ const confirmDeleteProduct = (product: Product) => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow: hidden; /* Ensure content doesn't overflow parent */
+}
+
+.sidebar-collapsed .sidebar-content {
+  align-items: center;
+}
+
+.sidebar-group {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.section-title-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+  height: 24px;
+}
+
+.sidebar-collapsed .section-title-wrapper {
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 0;
 }
 
 .section-title {
   font-size: 11px;
   font-weight: 600;
   color: #71717a;
-  margin-bottom: 6px;
   text-transform: capitalize;
   letter-spacing: 0.05em;
+  margin-bottom: 0;
+}
+
+.sidebar-toggle-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #71717a;
+  transition: all 0.2s;
+  background: transparent;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e4e4e7;
+}
+
+.sidebar-collapsed .sidebar-toggle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.collapsed-icons-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  width: 100%;
+}
+
+.collapsed-icon-item {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #71717a;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.collapsed-icon-item:hover, .collapsed-icon-item.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e4e4e7;
+}
+
+.collapsed-icon-item.active-indicator {
+  position: relative;
+}
+
+.collapsed-icon-item.active-indicator::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 16px;
+  background: #eab308;
+  border-radius: 1px;
+}
+
+.collapsed-divider {
+  width: 24px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 6px 4px;
+  padding: 4px 4px;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -801,14 +1136,15 @@ const confirmDeleteProduct = (product: Product) => {
 .anchors-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .add-anchor-btn {
@@ -836,18 +1172,19 @@ const confirmDeleteProduct = (product: Product) => {
 }
 
 .anchors-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px 6px;
-  padding: 4px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 2px 0;
 }
 
 .anchor-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   cursor: pointer;
+  width: 48px;
 }
 
 .avatar-wrapper {
@@ -884,6 +1221,10 @@ const confirmDeleteProduct = (product: Product) => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: none; /* Firefox */
 }
 
 .products-list {
@@ -893,7 +1234,7 @@ const confirmDeleteProduct = (product: Product) => {
 }
 
 .videos-list {
-  padding-left: 28px; /* Slightly less indentation to give more space */
+  padding-left: 0px;
   padding-top: 8px;
   padding-bottom: 8px;
   display: grid;
@@ -917,10 +1258,43 @@ const confirmDeleteProduct = (product: Product) => {
   background: linear-gradient(180deg, #475569 0%, #334155 100%);
   border-radius: 6px;
   display: flex;
+  flex-direction: column; /* Changed for consistent layout */
   align-items: center;
   justify-content: center;
   margin-bottom: 4px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  position: relative;
+  overflow: hidden; /* Ensure image fits */
+}
+
+.upload-placeholder {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  background: transparent;
+  box-shadow: none;
+  transition: all 0.2s;
+}
+
+.upload-card:hover .upload-placeholder {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.video-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.video-duration {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 8px;
+  padding: 1px 3px;
+  border-radius: 2px;
 }
 
 .preview-name {

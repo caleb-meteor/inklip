@@ -16,6 +16,8 @@ import { uploadVideosBatchApi } from '../../api/video'
 
 interface Props {
   show: boolean
+  preSelectedAnchor?: { id: number; name: string }
+  preSelectedProduct?: { id: number; name: string }
 }
 
 const props = defineProps<Props>()
@@ -155,13 +157,6 @@ const getDictId = async (name: string, type: 'anchor' | 'product'): Promise<numb
 }
 
 const handleConfirm = async (): Promise<void> => {
-  // Validate form
-  try {
-    await formRef.value?.validate()
-  } catch {
-    return
-  }
-
   if (videoPaths.value.length === 0) {
     message.warning('请先选择视频文件或文件夹')
     return
@@ -171,13 +166,23 @@ const handleConfirm = async (): Promise<void> => {
     isUploading.value = true
     
     // Get IDs
-    const anchorId = await getDictId(formValue.value.anchor!, 'anchor')
-    const productId = await getDictId(formValue.value.product!, 'product')
-    
-    const categoryIds = [anchorId, productId]
+    let anchorId: number = 0
+    let productId: number = 0
+
+    if (props.preSelectedAnchor) {
+      anchorId = props.preSelectedAnchor.id
+    } else if (formValue.value.anchor) {
+      anchorId = await getDictId(formValue.value.anchor, 'anchor')
+    }
+
+    if (props.preSelectedProduct) {
+      productId = props.preSelectedProduct.id
+    } else if (formValue.value.product) {
+       productId = await getDictId(formValue.value.product, 'product')
+    }
     
     // Upload
-    const res = await uploadVideosBatchApi(videoPaths.value, categoryIds, subtitleFiles.value)
+    const res = await uploadVideosBatchApi(videoPaths.value, subtitleFiles.value, anchorId, productId)
     
     // Normalize result
     let uploadedVideos: any[] = []
@@ -187,10 +192,10 @@ const handleConfirm = async (): Promise<void> => {
       uploadedVideos = res.videos
     }
 
-    message.success(`成功上传 ${videoPaths.value.length} 个视频`)
+    // message.success(`成功上传 ${videoPaths.value.length} 个视频`)
     emit('success', uploadedVideos, {
-      anchor: formValue.value.anchor,
-      product: formValue.value.product
+      anchor: props.preSelectedAnchor ? props.preSelectedAnchor.name : formValue.value.anchor,
+      product: props.preSelectedProduct ? props.preSelectedProduct.name : formValue.value.product
     })
     emit('update:show', false)
     
@@ -236,8 +241,9 @@ const handleClose = (): void => {
         :rules="rules"
         label-placement="left"
         label-width="80"
+        v-if="false"
       >
-        <n-form-item label="主播" path="anchor">
+        <n-form-item label="主播" path="anchor" v-if="!props.preSelectedAnchor">
           <n-select
             v-model:value="formValue.anchor"
             filterable
@@ -247,7 +253,7 @@ const handleClose = (): void => {
           />
         </n-form-item>
         
-        <n-form-item label="产品" path="product">
+        <n-form-item label="产品" path="product" v-if="!props.preSelectedProduct">
           <n-select
             v-model:value="formValue.product"
             filterable

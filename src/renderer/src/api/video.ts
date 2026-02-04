@@ -20,6 +20,8 @@ export interface VideoItem {
   parse_percentage?: number
   group_id?: number
   categories?: Array<{ id: number; name: string; type: string }>
+  anchor_id?: number
+  product_id?: number
   created_at: string
   updated_at: string
 }
@@ -35,6 +37,8 @@ export interface VideoUploadResponse {
   height?: number
   status?: number
   parse_percentage?: number
+  anchor_id?: number
+  product_id?: number
   created_at?: string
   updated_at: string
 }
@@ -61,8 +65,9 @@ export function getVideosApi(ids?: number[]): Promise<VideoItem[]> {
  */
 export function uploadVideosBatchApi(
   paths: string[],
-  categoryIds?: number[],
-  subtitleFiles?: Record<string, string>
+  subtitleFiles?: Record<string, string>,
+  anchorId?: number,
+  productId?: number
 ): Promise<
   VideoUploadResponse[] | { videos: VideoUploadResponse[]; task_ids?: string[]; status?: string }
 > {
@@ -71,8 +76,9 @@ export function uploadVideosBatchApi(
     method: 'post',
     data: {
       video_paths: paths,
-      category_ids: categoryIds,
-      subtitle_files: subtitleFiles
+      subtitle_files: subtitleFiles,
+      anchor_id: anchorId,
+      product_id: productId
     },
     timeout: 10 * 60 * 1000 // 10 minutes in milliseconds
   })
@@ -144,15 +150,24 @@ export interface SmartCutsResponse {
  * Get smart cut history with pagination
  * @param page Page number
  * @param pageSize Items per page
+ * @param anchorId Filter by anchor
+ * @param productId Filter by product
  * @returns Promise with paginated smart cut items
  */
-export function getSmartCutsApi(page: number, pageSize: number): Promise<SmartCutsResponse> {
+export function getSmartCutsApi(
+  page: number,
+  pageSize: number,
+  anchorId?: number,
+  productId?: number
+): Promise<SmartCutsResponse> {
   return request({
     url: '/api/smart-cuts',
     method: 'get',
     params: {
       page,
-      page_size: pageSize
+      page_size: pageSize,
+      anchor_id: anchorId,
+      product_id: productId
     }
   })
 }
