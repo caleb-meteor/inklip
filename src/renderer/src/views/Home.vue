@@ -549,9 +549,8 @@ const handleUploadSuccess = async (uploadedVideos: any[], metadata?: { anchor?: 
 }
 
 .input-area-container {
-  max-width: 800px;
   width: 100%;
-  padding: 0 16px;
+  padding: 0 24px;
   display: flex;
   flex-direction: column;
   align-items: center;

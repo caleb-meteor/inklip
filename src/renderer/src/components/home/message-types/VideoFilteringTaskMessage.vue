@@ -4,7 +4,7 @@ import { computed, type PropType } from 'vue'
 export interface TaskStep {
   label: string
   status: 'pending' | 'processing' | 'completed' | 'error'
-  detail?: string // 例如：匹配到的字典名称
+  detail?: string
 }
 
 const props = defineProps({
@@ -14,7 +14,7 @@ const props = defineProps({
   },
   title: {
     type: String,
-    default: '视频剪辑任务'
+    default: '视频筛选分析'
   }
 })
 
@@ -24,9 +24,9 @@ const allCompleted = computed(() => {
 </script>
 
 <template>
-  <div class="task-card" :class="{ completed: allCompleted }">
+  <div class="filter-task-card" :class="{ completed: allCompleted }">
     <div class="card-header">
-      <div class="header-icon">🎬</div>
+      <div class="header-icon">🔍</div>
       <div class="header-title">{{ title }}</div>
     </div>
     
@@ -57,7 +57,7 @@ const allCompleted = computed(() => {
 </template>
 
 <style scoped>
-.task-card {
+.filter-task-card {
   margin-top: 12px;
   padding: 16px;
   background: rgba(32, 32, 35, 0.6);
@@ -67,7 +67,7 @@ const allCompleted = computed(() => {
   transition: all 0.3s ease;
 }
 
-.task-card.completed {
+.filter-task-card.completed {
   border-color: rgba(79, 172, 254, 0.3);
   background: rgba(24, 24, 27, 0.8);
 }

@@ -1,5 +1,7 @@
 import { ref, type Ref } from 'vue'
 import { getVideosApi, smartCutApi } from '../api/video'
+import { getAnchorsApi } from '../api/anchor'
+import { getProductsApi } from '../api/product'
 import { addAiChatMessageApi, updateAiChatMessageApi } from '../api/aiChat'
 import { getDictsFromSentenceApi, type DictItem } from '../api/dict'
 import type { Message } from '../types/chat'
@@ -24,6 +26,9 @@ export interface SmartCutAiServiceState {
     videos: any[]
     options: SmartCutOptions
     prompt: string
+    anchorId?: number
+    productId?: number
+    productName?: string
   } | null>
 }
 
@@ -212,7 +217,10 @@ export class SmartCutAiService {
             maxRetries: msg.payload.maxRetries || 20,
             retryInterval: msg.payload.retryInterval || 3000
           },
-          prompt: msg.payload.prompt || ''
+          prompt: msg.payload.prompt || '',
+          anchorId: msg.payload.anchorId,
+          productId: msg.payload.productId,
+          productName: msg.payload.productName
         }
         console.log('[confirmAndProceed] 从 payload 恢复数据成功')
       } else {
@@ -321,7 +329,15 @@ export class SmartCutAiService {
         throw new Error('未找到符合条件的视频')
       }
 
-      const res = await smartCutApi(targetVideoIds, '', minDuration, maxDuration)
+      const res = await smartCutApi(
+        targetVideoIds,
+        data.anchorId!,
+        data.productId!,
+        data.productName!,
+        minDuration,
+        maxDuration,
+        ''
+      )
       const aiGenVideoId = res.id // WebSocket 会用这个 ID 来通知剪辑状态
 
       // Step 5: 更新任务卡片 - 步骤1完成（请求已发送），步骤2开始（等待AI结果）
@@ -513,15 +529,14 @@ export class SmartCutAiService {
         }
       }
 
-      // Step 1: 创建任务卡片消息，显示两个步骤
-      const taskCardPayload = {
-        type: 'task_card',
-        taskCard: {
-          steps: [
-            { label: '正在解析关键信息', status: 'processing' as const },
-            { label: '正在获取视频', status: 'pending' as const }
-          ]
-        }
+      // Step 1: 创建筛选任务卡片消息
+      const filterTaskPayload = {
+        type: 'video_filter_task',
+        steps: [
+          { label: '正在匹配主播', status: 'processing' as const },
+          { label: '正在匹配主播产品', status: 'pending' as const },
+          { label: '正在查询产品视频', status: 'pending' as const }
+        ]
       }
 
       // 先保存到数据库获取真实 ID
@@ -533,7 +548,7 @@ export class SmartCutAiService {
         ai_chat_id: currentAiChatId,
         role: 'assistant',
         content: '',
-        payload: taskCardPayload
+        payload: filterTaskPayload
       })
       const taskCardMsgId = savedMessage.id.toString()
 
@@ -543,234 +558,192 @@ export class SmartCutAiService {
         role: 'assistant',
         content: '',
         timestamp: new Date(),
-        payload: taskCardPayload
+        payload: filterTaskPayload
       })
 
-      // Step 2: 分析提示词获取字典
-      this.state.chatSteps.value[0].state = 'process'
+      // ==========================================
+      // 流程一：主播 -> 产品 -> 视频
+      // ==========================================
       
-      let matchedDicts: DictItem[] = []
       try {
-        matchedDicts = await getDictsFromSentenceApi(sanitizedPrompt)
-      } catch (error) {
-        console.error('获取字典失败:', error)
+        // 1. 匹配主播
+        this.state.chatSteps.value[0].state = 'process'
+        const anchorRes = await getAnchorsApi({ all: true })
+        const matchedAnchor = anchorRes.list.find(a => sanitizedPrompt.includes(a.name))
         
-        // 更新任务卡片为错误状态
-        const errorPayload = {
-          type: 'task_card',
-          taskCard: {
-            steps: [
-              { label: '正在解析关键信息', status: 'error' as const, detail: '解析失败，请检查输入' }
-            ]
-          }
+        if (!matchedAnchor) {
+          throw new Error('未找到提及的主播信息')
         }
 
-        aiChatStore.updateMessage(taskCardMsgId, { payload: errorPayload })
-
-        // 更新数据库
-        if (currentAiChatId) {
-          try {
-            await updateAiChatMessageApi(Number(taskCardMsgId), {
-              payload: errorPayload
-            })
-          } catch (err) {
-            console.error('更新任务卡片到数据库失败:', err)
-          }
-        }
-
-        this.state.chatSteps.value[0].state = 'error'
-        throw error
-      }
-
-      this.state.chatSteps.value[0].state = 'finish'
-
-      // 检查是否找到相关字典，如果没有则终止流程
-      if (matchedDicts.length === 0) {
-        await this.handleNoDictsFound(sanitizedPrompt)
-        return
-      }
-
-      // Step 3: 更新任务卡片 - 第一步完成，第二步开始处理
-      const dictNames = matchedDicts.map(d => d.name).join('、')
-      const updatedStep1Payload = {
-        type: 'task_card',
-        taskCard: {
+        // 更新状态：主播已匹配
+        const updatedPayload1 = {
+          type: 'video_filter_task',
           steps: [
-            { label: '正在解析关键信息', status: 'completed' as const, detail: `找到 ${matchedDicts.length} 个关键词：${dictNames}` },
-            { label: `正在获取 ${dictNames} 的视频`, status: 'processing' as const }
+            { label: '正在匹配主播', status: 'completed' as const, detail: `已匹配主播：${matchedAnchor.name}` },
+            { label: '正在匹配主播产品', status: 'processing' as const },
+            { label: '正在查询产品视频', status: 'pending' as const }
           ]
         }
-      }
+        aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload1 })
+        await updateAiChatMessageApi(Number(taskCardMsgId), { payload: updatedPayload1 })
+        this.state.chatSteps.value[0].state = 'finish'
+        await new Promise(resolve => setTimeout(resolve, 300))
 
-      aiChatStore.updateMessage(taskCardMsgId, { payload: updatedStep1Payload })
+        // 2. 匹配产品
+        this.state.chatSteps.value[1].state = 'process'
+        const productRes = await getProductsApi({ all: true, anchor_id: matchedAnchor.id })
+        const matchedProduct = productRes.list.find(p => sanitizedPrompt.includes(p.name))
 
-      // 更新数据库（现在 taskCardMsgId 已经是真实 ID）
-      if (currentAiChatId) {
-        try {
-          await updateAiChatMessageApi(Number(taskCardMsgId), {
-            payload: updatedStep1Payload
-          })
-        } catch (error) {
-          console.error('更新任务卡片失败:', error)
-        }
-      }
-
-      // Step 4: 过滤视频
-      await new Promise(resolve => setTimeout(resolve, 500))
-      this.state.chatSteps.value[1].state = 'process'
-      
-      let videos: any[] = []
-      let filteredVideos: any[] = []
-      try {
-        videos = await getVideosApi()
-        filteredVideos = this.filterVideosByDicts(videos, matchedDicts)
-      } catch (error) {
-        console.error('获取或过滤视频失败:', error)
-        
-        // 更新任务卡片为错误状态
-        const errorPayload = {
-          type: 'task_card',
-          taskCard: {
-            steps: [
-              { label: '正在解析关键信息', status: 'completed' as const, detail: `找到 ${matchedDicts.length} 个关键词：${dictNames}` },
-              { label: `正在获取 ${dictNames} 的视频`, status: 'error' as const, detail: '获取视频失败' }
-            ]
-          }
+        if (!matchedProduct) {
+          throw new Error(`在主播 ${matchedAnchor.name} 下未找到对应的产品`)
         }
 
-        aiChatStore.updateMessage(taskCardMsgId, { payload: errorPayload })
-
-        // 更新数据库
-        if (currentAiChatId) {
-          try {
-            await updateAiChatMessageApi(Number(taskCardMsgId), {
-              payload: errorPayload
-            })
-          } catch (err) {
-            console.error('更新任务卡片到数据库失败:', err)
-          }
-        }
-
-        this.state.chatSteps.value[1].state = 'error'
-        throw error
-      }
-      
-      this.state.chatSteps.value[1].state = 'finish'
-
-      // Step 5: 更新任务卡片 - 第二步完成
-      const updatedStep2Payload = {
-        type: 'task_card',
-        taskCard: {
+        // 更新状态：产品已匹配
+        const updatedPayload2 = {
+          type: 'video_filter_task',
           steps: [
-            { label: '正在解析关键信息', status: 'completed' as const, detail: `找到 ${matchedDicts.length} 个关键词：${dictNames}` },
-            { label: `正在获取 ${dictNames} 的视频`, status: 'completed' as const, detail: `找到 ${filteredVideos.length} 个符合条件的视频` }
+            { label: '正在匹配主播', status: 'completed' as const, detail: `已匹配主播：${matchedAnchor.name}` },
+            { label: '正在匹配主播产品', status: 'completed' as const, detail: `已匹配产品：${matchedProduct.name}` },
+            { label: '正在查询产品视频', status: 'processing' as const }
           ]
         }
-      }
+        aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload2 })
+        await updateAiChatMessageApi(Number(taskCardMsgId), { payload: updatedPayload2 })
+        this.state.chatSteps.value[1].state = 'finish'
+        await new Promise(resolve => setTimeout(resolve, 300))
 
-      aiChatStore.updateMessage(taskCardMsgId, { payload: updatedStep2Payload })
-
-      // 更新数据库
-      if (currentAiChatId) {
-        try {
-          await updateAiChatMessageApi(Number(taskCardMsgId), {
-            payload: updatedStep2Payload
-          })
-        } catch (error) {
-          console.error('更新任务卡片失败:', error)
+        // 3. 查询视频
+        this.state.chatSteps.value[2].state = 'process'
+        const videos = await getVideosApi({ product_id: matchedProduct.id })
+        
+        if (!videos || videos.length === 0) {
+          throw new Error(`未找到 "${matchedProduct.name}" 相关的素材视频`)
         }
-      }
 
-      // Step 6: 显示过滤出来的视频卡片或提示
-      if (filteredVideos.length > 0) {
-        const confirmPayload = {
+        // 更新状态：视频已找到
+        const updatedPayload3 = {
+          type: 'video_filter_task',
+          steps: [
+            { label: '正在匹配主播', status: 'completed' as const, detail: `已匹配主播：${matchedAnchor.name}` },
+            { label: '正在匹配主播产品', status: 'completed' as const, detail: `已匹配产品：${matchedProduct.name}` },
+            { label: '正在查询产品视频', status: 'completed' as const, detail: `找到 ${videos.length} 个相关素材` }
+          ]
+        }
+        aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload3 })
+        await updateAiChatMessageApi(Number(taskCardMsgId), { payload: updatedPayload3 })
+        this.state.chatSteps.value[2].state = 'finish'
+
+        // 4. 显示视频选择卡片
+        await new Promise(resolve => setTimeout(resolve, 400))
+        
+        const selectionPayload = {
           type: 'video_selection',
-          videos: filteredVideos,
-          // dicts 已经在前一条消息中显示，这里不再包含避免重复
+          videos,
           awaitingConfirmation: true,
-          // 不再显示思考过程步骤
-          // 保存确认所需的参数
-          minDuration,
-          maxDuration,
-          maxRetries,
-          retryInterval,
-          prompt: sanitizedPrompt
+          isInteractive: true,
+          options: {
+            minDuration,
+            maxDuration,
+            maxRetries,
+            retryInterval
+          },
+          prompt: sanitizedPrompt,
+          anchorId: matchedAnchor.id,
+          productId: matchedProduct.id,
+          productName: matchedProduct.name
         }
 
-        // 先保存到数据库获取真实 ID
-        if (!currentAiChatId) {
-          throw new Error('当前没有活跃的对话，无法创建视频确认消息')
-        }
-
-        const savedVideoMessage = await addAiChatMessageApi({
+        const selectionMessage = await addAiChatMessageApi({
           ai_chat_id: currentAiChatId,
           role: 'assistant',
-          content: `📹 找到 ${filteredVideos.length} 个符合条件的视频`,
-          payload: confirmPayload
+          content: `<span style="font-size: 12px; color: #a1a1aa;">已为您筛选出主播 <strong>${matchedAnchor.name}</strong> 的 <strong>${matchedProduct.name}</strong> 相关素材，请勾选：</span>`,
+          payload: selectionPayload
         })
-        const videosMessageId = savedVideoMessage.id.toString()
 
-        // 然后添加到本地存储（使用真实 ID）
+        const selectionMessageId = selectionMessage.id.toString()
         aiChatStore.addMessage({
-          id: videosMessageId,
+          id: selectionMessageId,
           role: 'assistant',
-          content: '', // VideoSelectionMessage 组件会显示标题，这里不需要 content
+          content: selectionMessage.content,
           timestamp: new Date(),
-          payload: confirmPayload
+          payload: selectionPayload
         })
 
         // 暂停流程，等待用户确认
         this.state.isAwaitingConfirmation.value = true
         this.state.pendingConfirmationData.value = {
-          msgId: videosMessageId,
-          dicts: matchedDicts,
-          videos: filteredVideos,
+          msgId: selectionMessageId,
+          dicts: [], // 流程一暂时不用传统字典匹配
+          videos: videos,
           options: { minDuration, maxDuration, maxRetries, retryInterval },
-          prompt: sanitizedPrompt
+          prompt: sanitizedPrompt,
+          anchorId: matchedAnchor.id,
+          productId: matchedProduct.id,
+          productName: matchedProduct.name
         }
 
-        // 重置处理标志，但不完全退出
         this.state.isProcessing.value = false
         return
-      } else {
-        aiChatStore.addMessage({
-          id: `new_message_${Date.now() + 1.5}`,
-          role: 'assistant',
-          content: '❌ 没有找到符合条件的视频',
-          timestamp: new Date()
-        })
-        // 立即保存到数据库
-        if (currentAiChatId) {
-          try {
-            await addAiChatMessageApi({
-              ai_chat_id: currentAiChatId,
-              role: 'assistant',
-              content: '❌ 没有找到符合条件的视频'
-            })
-          } catch (error) {
-            console.error('保存无视频消息失败:', error)
+
+      } catch (error: any) {
+        console.error('视频筛选流程失败:', error)
+        
+        // 更新任务卡片为错误/未找到状态
+        const baseSteps = [
+          { label: '正在匹配主播', status: 'pending' as const },
+          { label: '正在匹配主播产品', status: 'pending' as const },
+          { label: '正在查询产品视频', status: 'pending' as const }
+        ]
+        
+        // 根据当前思考步骤状态来确定哪个步骤失败了
+        const failedStepIndex = this.state.chatSteps.value.findIndex(s => s.state === 'process')
+        if (failedStepIndex !== -1) {
+          // 将失败前的步骤标记为完成
+          for (let i = 0; i < failedStepIndex; i++) {
+            baseSteps[i].status = 'completed'
           }
+          // 标记失败的步骤
+          baseSteps[failedStepIndex].status = 'error'
+          baseSteps[failedStepIndex].detail = error.message
+        } else {
+          // 如果找不到失败的步骤，标记第一个为错误
+          baseSteps[0].status = 'error'
+          baseSteps[0].detail = error.message
         }
-        this.state.isProcessing.value = false
-        return
-      }
 
-    } catch (error) {
-      console.error('智能剪辑流程失败:', error)
-      const errStep = this.state.chatSteps.value.find(s => s.state === 'process')
-      if (errStep) errStep.state = 'error'
+        const errorPayload = {
+          type: 'video_filter_task',
+          steps: baseSteps
+        }
 
-      const currentAiChatId = aiChatStore.getCurrentAiChatId().value
-      if (currentAiChatId) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        const formattedError = `⚠️ 流程出错\n\n错误信息: ${errorMessage}\n\n请检查日志或重新尝试。`
-
-        await addAiChatMessageApi({
+        aiChatStore.updateMessage(taskCardMsgId, { payload: errorPayload })
+        
+        // 更新思考步骤
+        const errStep = this.state.chatSteps.value.find(s => s.state === 'process')
+        if (errStep) errStep.state = 'error'
+        
+        // 发送一条友好的未找到提示
+        const errorContent = `抱歉，${error.message || '未找到对应的视频'}。请确认输入的信息是否正确。`
+        const errorMsg = await addAiChatMessageApi({
           ai_chat_id: currentAiChatId,
           role: 'assistant',
-          content: formattedError
-        }).catch(err => console.error('记录对话失败:', err))
+          content: errorContent
+        })
+
+        aiChatStore.addMessage({
+          id: errorMsg.id.toString(),
+          role: 'assistant',
+          content: errorContent,
+          timestamp: new Date()
+        })
+
+        // 更新数据库
+        await updateAiChatMessageApi(Number(taskCardMsgId), {
+          payload: errorPayload
+        })
       }
+    } catch (outerError: any) {
+      console.error('Smart Cut Error:', outerError)
     } finally {
       this.state.isProcessing.value = false
     }

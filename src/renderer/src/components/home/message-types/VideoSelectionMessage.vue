@@ -146,7 +146,6 @@ const handleCancel = (): void => {
         />
         <div class="compact-card-info">
           <div class="compact-name">{{ video.filename || video.name }}</div>
-          <div class="compact-duration" v-if="video.duration">🕒 {{ formatDurationSeconds(video.duration) }}</div>
         </div>
       </div>
     </div>
@@ -216,17 +215,17 @@ const handleCancel = (): void => {
 
 .videos-list-compact {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 12px;
 }
 
 .compact-video-card {
   position: relative;
   cursor: pointer;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid transparent;
+  border: 1px solid transparent;
   background: #000;
 }
 
@@ -246,14 +245,14 @@ const handleCancel = (): void => {
 
 .video-selection-badge {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 6px;
+  right: 6px;
   z-index: 10;
 }
 
 .checkbox {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
@@ -261,7 +260,7 @@ const handleCancel = (): void => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 10px;
   color: #fff;
   transition: all 0.2s ease;
 }
@@ -273,15 +272,15 @@ const handleCancel = (): void => {
 }
 
 .compact-card-info {
-  padding: 10px;
+  padding: 8px 6px;
   background: #18181b;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .compact-name {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   color: #efeff1;
   white-space: nowrap;
@@ -290,7 +289,7 @@ const handleCancel = (): void => {
 }
 
 .compact-duration {
-  font-size: 11px;
+  font-size: 9px;
   color: #71717a;
   font-weight: 500;
 }

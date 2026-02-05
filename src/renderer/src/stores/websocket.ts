@@ -124,11 +124,11 @@ export const useWebsocketStore = defineStore('websocket', () => {
         updateVideoProgress(data)
       },
       onVideoCompleted: () => {
-        window.api.showNotification('视频解析完成', '字幕已成功提取', '/video-manager')
+        window.api.showNotification('视频解析完成', '字幕已成功提取', '/home')
         videoUploaded.value = Date.now()
       },
       onVideoFailed: (videoId, error) => {
-        window.api.showNotification('视频解析失败', error, '/video-manager')
+        window.api.showNotification('视频解析失败', error, '/home')
       },
       onVideoStatus: (data) => {
         // 更新视频状态
@@ -184,13 +184,13 @@ export const useWebsocketStore = defineStore('websocket', () => {
           window.api.showNotification(
             '批量上传完成',
             `成功: ${data.success_count}, 失败: ${data.error_count}`,
-            '/video-manager'
+            '/home'
           )
         } else {
           window.api.showNotification(
             '批量上传完成',
             `成功上传 ${data.success_count} 个视频`,
-            '/video-manager'
+            '/home'
           )
         }
         videoUploaded.value = Date.now()

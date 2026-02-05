@@ -8,6 +8,7 @@ import VideoUploadMessage from './message-types/VideoUploadMessage.vue'
 import SmartCutResultMessage from './message-types/SmartCutResultMessage.vue'
 import ThinkingStepsMessage from './message-types/ThinkingStepsMessage.vue'
 import TaskCardMessage from './message-types/TaskCardMessage.vue'
+import VideoFilteringTaskMessage from './message-types/VideoFilteringTaskMessage.vue'
 import type { Message } from '../../types/chat'
 import { smartCutAiService } from '../../services/smartCutAiService'
 
@@ -141,28 +142,33 @@ const formatDurationSeconds = (seconds: number): string => {
 
 <template>
   <div class="chat-container">
-    <!-- Session Header (Matched from UI Draft) -->
-    <div class="session-header" v-if="messageList.length > 0">
-      <div class="session-info">
-        <div class="session-icon">✨</div>
-        <div class="session-details">
-          <h2 class="session-title">Kinetic Subtitles Edit Session</h2>
-          <div class="session-status">
-            Active now • Using GPT-4o-Vertical Model
-          </div>
-        </div>
-      </div>
-      <button class="logs-btn">
-        <span class="icon">📄</span> View Session Logs
-      </button>
-    </div>
-
     <div class="messages-viewport" ref="scrollContainer">
       <div v-if="messageList.length === 0" class="empty-state">
         <div class="greeting-container">
           <h1 class="greeting-text">
             <span class="gradient-text">你好，创作者</span>
           </h1>
+          <p class="greeting-sub">
+            把繁琐交给 <span class="highlight-text">影氪</span>，剪辑从未如此 <span class="highlight-text">快乐</span>
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-card" @click="$emit('suggestionClick', '导入视频')">
+            <div class="feature-icon">🗂️</div>
+            <div class="feature-content">
+              <h3>智能素材管理</h3>
+              <p>秒级定位素材，让管理井井有条。</p>
+            </div>
+          </div>
+
+          <div class="feature-card" @click="$emit('suggestionClick', '帮我剪辑一个关于科技感的视频')">
+            <div class="feature-icon">⚡️</div>
+            <div class="feature-content">
+              <h3>极速智能剪辑</h3>
+              <p>你只管表达创意，繁琐的筛选与粗剪交给 影氪。一键提取精华片段并自动成片，剪辑从未如此高效。</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -172,27 +178,25 @@ const formatDurationSeconds = (seconds: number): string => {
           :key="msg.id"
           :class="['message-row', msg.role]"
         >
-          <!-- Avatar/Icon per role -->
-          <div class="avatar-cell">
-            <div class="role-avatar shadow-glow" v-if="msg.role === 'assistant'">🤖</div>
-            <div class="role-avatar user-avatar shadow-glow" v-else>👤</div>
-          </div>
-
           <div class="message-body">
-            <div class="message-meta" v-if="msg.role === 'assistant'">
-              AI ASSISTANT • 10:15 AM
-            </div>
-            <div class="message-meta" v-else>
-              YOU • 10:16 AM
-            </div>
-
             <div class="message-bubble">
               <div class="message-text">
                 <div v-if="msg.content && !msg.payload?.taskCard" class="text-content" v-html="getMessageContent(msg)"></div>
                 
                 <!-- Thinking steps or other interactive elements here -->
-                <ThinkingStepsMessage v-if="msg.role === 'assistant' && msg.payload?.steps" :steps="msg.payload.steps" />
+                <ThinkingStepsMessage v-if="msg.role === 'assistant' && msg.payload?.steps && !msg.payload?.type" :steps="msg.payload.steps" />
                 
+                <VideoFilteringTaskMessage
+                  v-if="msg.payload?.type === 'video_filter_task' && msg.payload?.steps"
+                  :steps="msg.payload.steps"
+                />
+
+                <!-- TaskCardMessage is already rendered inside SmartCutResultMessage if aiGenVideoId exists -->
+                <TaskCardMessage
+                  v-if="msg.payload?.type === 'task_card' && msg.payload?.taskCard?.steps && !msg.payload?.aiGenVideoId"
+                  :steps="msg.payload.taskCard.steps"
+                />
+
                 <!-- ... existing interactive components ... -->
                 <VideoUploadMessage
                   v-if="msg.payload?.type === 'video_upload' && msg.payload?.videos"
@@ -301,7 +305,7 @@ const formatDurationSeconds = (seconds: number): string => {
 .messages-viewport {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 24px 0; /* Vertical padding only */
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -310,12 +314,13 @@ const formatDurationSeconds = (seconds: number): string => {
 .message-row {
   display: flex;
   gap: 16px;
-  max-width: 85%;
+  width: 100%;
 }
 
 .message-row.user {
   flex-direction: row-reverse;
   align-self: flex-end;
+  /* User messages can be constrained if desired, but let's leave it 100% container and constrain content */
 }
 
 .avatar-cell {
@@ -344,6 +349,18 @@ const formatDurationSeconds = (seconds: number): string => {
   flex-direction: column;
   gap: 8px;
   flex: 1;
+  min-width: 0; /* Important for text truncation inside flex items */
+}
+
+/* Assistant: Full width body, items stretch */
+.message-row.assistant .message-body {
+  width: 100%;
+  align-items: stretch;
+}
+
+/* User: Adaptive width, items align to end */
+.message-row.user .message-body {
+  align-items: flex-end;
 }
 
 .message-meta {
@@ -450,6 +467,15 @@ const formatDurationSeconds = (seconds: number): string => {
   -webkit-text-fill-color: transparent;
 }
 
+.highlight-text {
+  font-weight: 700;
+  padding: 0 4px;
+  background: linear-gradient(to right, #6a11cb 0%, #2575fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 .messages-viewport::-webkit-scrollbar {
   width: 6px;
 }
@@ -475,7 +501,6 @@ const formatDurationSeconds = (seconds: number): string => {
   justify-content: center;
   gap: 16px;
   width: 100%;
-  max-width: 700px;
 }
 
 .suggestion-card {
@@ -542,7 +567,6 @@ const formatDurationSeconds = (seconds: number): string => {
 
 .messages-list {
   width: 100%;
-  max-width: 800px;
   display: flex;
   flex-direction: column;
   padding: 0 16px;
@@ -568,12 +592,11 @@ const formatDurationSeconds = (seconds: number): string => {
 
 .message-row.user .message-content-wrapper {
   width: auto;
-  max-width: 80%;
+  max-width: 80%; /* Limit user message width for readability */
 }
 
 .message-row.assistant .message-content-wrapper {
   width: 100%;
-  max-width: 100%;
 }
 
 /* User Message Bubble - Gradient border or solid theme color */
@@ -786,6 +809,79 @@ const formatDurationSeconds = (seconds: number): string => {
   50% { transform: scale(1.2); opacity: 1; }
   100% { transform: scale(0.8); opacity: 0.5; }
 }
+
+/* Features Grid in Empty State */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 900px;
+  margin: 40px auto 0;
+  padding: 0 16px;
+}
+
+.feature-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.feature-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-4px);
+  border-color: rgba(79, 172, 254, 0.3);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+}
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(79, 172, 254, 0.1) 0%, rgba(0, 242, 254, 0.1) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  border: 1px solid rgba(79, 172, 254, 0.1);
+}
+
+.feature-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feature-content h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.feature-content p {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.5;
+}
+
+/* Update greeting container for better spacing with cards */
+.greeting-container {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
 
 /* Scrollbar hidden for cleanest look, but functional */
 .custom-scrollbar::-webkit-scrollbar {

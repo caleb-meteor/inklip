@@ -44,15 +44,19 @@ export interface VideoUploadResponse {
 }
 
 /**
- * Get all videos or filter by IDs
- * @param ids Optional array of video IDs to retrieve
+ * Get all videos or filter by IDs, anchor, or product
+ * @param params Optional filters
  * @returns Promise with list of videos
  */
-export function getVideosApi(ids?: number[]): Promise<VideoItem[]> {
+export function getVideosApi(params?: { 
+  ids?: number[], 
+  anchor_id?: number, 
+  product_id?: number 
+}): Promise<VideoItem[]> {
   return request({
     url: '/api/videos',
     method: 'get',
-    params: ids && ids.length > 0 ? { ids } : undefined
+    params: params
   })
 }
 
@@ -94,19 +98,23 @@ export interface SmartCutResponse {
 /**
  * Start smart cut processing for selected videos
  * @param videoIds Array of video IDs to process
- * @param prompt Optional editing ideas or instructions
+ * @param anchorId Anchor ID (required)
+ * @param productId Product ID (required)
+ * @param productName Product name (required)
  * @param minDuration Optional minimum duration of the output video in seconds
  * @param maxDuration Optional maximum duration of the output video in seconds
- * @param productName Optional product name
+ * @param prompt Optional editing ideas or instructions
  * @param promptBuiltId Optional built-in prompt ID (0 for custom prompt)
  * @returns Promise with smart cut task response
  */
 export function smartCutApi(
   videoIds: number[],
-  prompt?: string,
+  anchorId: number,
+  productId: number,
+  productName: string,
   minDuration?: number,
   maxDuration?: number,
-  productName?: string,
+  prompt?: string,
   promptBuiltId?: number
 ): Promise<SmartCutResponse> {
   return request({
@@ -114,11 +122,13 @@ export function smartCutApi(
     method: 'post',
     data: {
       video_ids: videoIds,
-      prompt_text: prompt,
-      prompt_built_id: promptBuiltId,
+      anchor_id: anchorId,
+      product_id: productId,
+      product_name: productName,
       min_duration: minDuration,
       max_duration: maxDuration,
-      product_name: productName
+      prompt_text: prompt,
+      prompt_built_id: promptBuiltId
     },
     timeout: 20 * 60 * 1000 // 20 minutes in milliseconds
   })

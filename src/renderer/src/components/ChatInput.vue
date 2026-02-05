@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { NInput, NButton, NIcon } from 'naive-ui'
+import { NInput, NButton, NIcon, NTooltip } from 'naive-ui'
 import {
   Send,
   Attach,
   Expand,
-  Contract
+  Contract,
+  StopCircleOutline
 } from '@vicons/ionicons5'
 
 const props = defineProps({
@@ -20,6 +21,7 @@ const emit = defineEmits(['send', 'open-upload-modal'])
 const text = ref('')
 const inputRef = ref<any>(null)
 const isExpanded = ref(false)
+const isFocused = ref(false)
 
 const placeholderText = computed(() => {
   return props.disabled ? 'AI 正在处理任务...' : '描述你想剪辑的内容...'
@@ -27,6 +29,14 @@ const placeholderText = computed(() => {
 
 const toggleExpand = (): void => {
   isExpanded.value = !isExpanded.value
+}
+
+const handleFocus = () => {
+  isFocused.value = true
+}
+
+const handleBlur = () => {
+  isFocused.value = false
 }
 
 const handleSend = (): void => {
@@ -55,18 +65,23 @@ onMounted(() => {
 
 <template>
   <div class="chat-input-container">
-    <div :class="['input-wrapper', { 'is-expanded': isExpanded, 'is-focused': inputRef?.focused }]">
+    <div :class="['input-wrapper', { 'is-expanded': isExpanded, 'is-focused': isFocused }]">
       <div class="input-inner">
-        <n-button 
-          quaternary 
-          circle 
-          class="action-btn attach-btn"
-          @click="emit('open-upload-modal')"
-        >
-          <template #icon>
-            <n-icon size="20"><Attach /></n-icon>
+        <n-tooltip trigger="hover">
+          <template #trigger>
+            <n-button 
+              quaternary 
+              circle 
+              class="action-btn attach-btn"
+              @click="emit('open-upload-modal')"
+            >
+              <template #icon>
+                <n-icon size="20"><Attach /></n-icon>
+              </template>
+            </n-button>
           </template>
-        </n-button>
+          上传素材
+        </n-tooltip>
         
         <n-input
           ref="inputRef"
@@ -77,11 +92,13 @@ onMounted(() => {
           :disabled="disabled"
           class="custom-input"
           @keydown="handleKeyDown"
+          @focus="handleFocus"
+          @blur="handleBlur"
         />
 
         <div class="right-actions">
            <n-button 
-            v-if="text.length > 50"
+            v-if="text.length > 50 || isExpanded"
             quaternary 
             circle 
             class="action-btn expand-btn"
@@ -96,17 +113,38 @@ onMounted(() => {
           </n-button>
 
           <n-button 
+            v-if="!disabled"
             type="primary" 
             circle 
             class="send-btn"
-            :disabled="disabled || !text.trim()"
+            :disabled="!text.trim()"
             @click="handleSend"
           >
             <template #icon>
               <n-icon size="18"><Send /></n-icon>
             </template>
           </n-button>
+          
+          <div v-else class="loading-container">
+            <div class="pulse-ring"></div>
+            <n-button 
+              circle 
+              secondary
+              class="stop-btn"
+              disabled
+            >
+              <template #icon>
+                <n-icon size="20"><StopCircleOutline /></n-icon>
+              </template>
+            </n-button>
+          </div>
         </div>
+      </div>
+      
+      <div v-if="!disabled && text.trim().length === 0" class="input-hint">
+        <span><b>Enter</b> 发送</span>
+        <span class="hint-divider"></span>
+        <span><b>Shift + Enter</b> 换行</span>
       </div>
     </div>
   </div>
@@ -115,28 +153,28 @@ onMounted(() => {
 <style scoped>
 .chat-input-container {
   width: 100%;
-  max-width: 800px;
   position: relative;
   display: flex;
   justify-content: center;
+  padding: 0 0;
 }
 
 .input-wrapper {
   width: 100%;
-  background: rgba(30, 30, 32, 0.6);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 28px;
-  padding: 10px 14px;
-  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  background: rgba(32, 32, 35, 0.7);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 8px 12px;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
-.input-wrapper.is-focused,
-.input-wrapper:focus-within {
-  background: rgba(39, 39, 42, 0.8);
-  border-color: rgba(79, 172, 254, 0.4);
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(79, 172, 254, 0.3);
+.input-wrapper.is-focused {
+  background: rgba(39, 39, 42, 0.85);
+  border-color: rgba(79, 172, 254, 0.5);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(79, 172, 254, 0.2);
   transform: translateY(-2px);
 }
 
@@ -146,75 +184,128 @@ onMounted(() => {
 
 .input-inner {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: flex-end;
-  min-height: 44px;
+  min-height: 48px;
 }
 
 .action-btn {
-  color: #71717a;
+  color: #a1a1aa;
   margin-bottom: 4px;
   transition: all 0.2s ease;
 }
 
 .action-btn:hover {
   color: #4facfe;
-  background: rgba(79, 172, 254, 0.1);
+  background: rgba(79, 172, 254, 0.15);
 }
 
 .custom-input {
   flex: 1;
-  padding-bottom: 8px;
 }
 
 .custom-input :deep(.n-input) {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
-  font-size: 16px;
+  font-size: 15px;
   padding: 0 !important;
   line-height: 1.6;
 }
 
 .custom-input :deep(.n-input__textarea-el) {
-  color: #ececed;
-  caret-color: #00f2fe;
-  padding-top: 12px;
+  color: #f4f4f5;
+  caret-color: #4facfe;
+  padding: 12px 4px !important;
 }
 
 .custom-input :deep(.n-input__placeholder) {
-  color: #52525b;
+  color: #71717a;
+  padding: 12px 4px !important;
 }
 
 .right-actions {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 .send-btn {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
   border: none !important;
-}
-
-.send-btn:not(:disabled) {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  color: #000;
   box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
 }
 
-.send-btn:not(:disabled):hover {
-  transform: scale(1.1) rotate(-5deg);
-  box-shadow: 0 6px 20px rgba(0, 242, 254, 0.6);
-  filter: brightness(1.1);
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.08) rotate(-5deg);
+  box-shadow: 0 6px 16px rgba(79, 172, 254, 0.5);
 }
 
 .send-btn:disabled {
-  background: #27272a;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #3f3f46;
+  box-shadow: none;
+}
+
+.loading-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+.stop-btn {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: none !important;
+  color: #71717a;
+}
+
+.pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 2px solid #4facfe;
+  border-radius: 50%;
+  animation: pulse 2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.input-hint {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 12px 0;
+  font-size: 11px;
   color: #52525b;
-  opacity: 0.6;
+  opacity: 0.7;
+}
+
+.hint-divider {
+  width: 1px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 8px 0;
+}
+
+.input-hint b {
+  color: #71717a;
+  font-weight: 600;
 }
 </style>

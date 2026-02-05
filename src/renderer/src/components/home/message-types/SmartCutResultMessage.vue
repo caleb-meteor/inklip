@@ -268,7 +268,7 @@ const updateMessageStatus = async (latestData: any) => {
         // 等待AI分析
         updatedPayload.taskCard.steps = [
           { label: '正在请求视频解析', status: 'completed' as const, detail: '请求已接收' },
-          { label: '正在解析视频', status: 'processing' as const, detail: '正在AI分析' },
+          { label: '正在解析视频', status: 'processing' as const, detail: '影氪正在分析' },
           { label: '正在智能剪辑', status: 'pending' as const }
         ]
       }
@@ -374,10 +374,6 @@ onBeforeUnmount(() => {
           
           <div class="task-grid">
             <div class="grid-item">
-              <span class="item-label">视频 ID</span>
-              <span class="item-value">#{{ task.aiGenVideoId }}</span>
-            </div>
-            <div class="grid-item">
               <span class="item-label">素材数量</span>
               <span class="item-value">{{ task.videoCount }} 个</span>
             </div>
@@ -430,6 +426,11 @@ onBeforeUnmount(() => {
     <!-- 完成后的结果 -->
     <div v-else class="result-section">
       <div v-if="completedVideoFileItem" class="result-content">
+        <!-- 即使完成后也保留任务卡片 -->
+        <div v-if="task.taskCard" class="integrated-task-card" style="margin-bottom: 12px;">
+          <TaskCardMessage :steps="task.taskCard.steps" />
+        </div>
+
         <!-- 操作按钮放置在最上边 -->
         <div class="top-action-bar">
           <div class="result-status">
@@ -586,6 +587,15 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(79, 172, 254, 0.1);
   padding: 16px;
+  /* Ensure it looks good in result section too, or overriding specific styles if needed */
+}
+
+/* Ensure clean display in result section */
+.result-content .integrated-task-card :deep(.task-card) {
+   background: transparent;
+   border: none;
+   padding: 0;
+   margin-top: 0;
 }
 
 .tip-card {
@@ -784,7 +794,7 @@ onBeforeUnmount(() => {
 }
 
 .status-text {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
   -webkit-background-clip: text;
@@ -809,7 +819,7 @@ onBeforeUnmount(() => {
 }
 
 .video-card-wrapper {
-  width: 180px;
+  width: 140px;
   flex-shrink: 0;
   transition: all 0.3s ease;
 }
@@ -822,10 +832,11 @@ onBeforeUnmount(() => {
   background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
   border: none;
   font-weight: 600;
-  height: 32px;
-  padding: 0 16px;
+  height: 28px;
+  padding: 0 12px;
   transition: all 0.3s ease;
   color: #000;
+  font-size: 12px;
 }
 
 .export-button:hover {
