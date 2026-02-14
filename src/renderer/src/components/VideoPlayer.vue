@@ -278,23 +278,27 @@ watch(() => props.path, () => {
   display: flex;
   gap: 0;
   overflow: hidden;
-  height: 100%; 
+  height: 100%;
+  justify-content: center;
+  align-items: center;
 }
 
 .video-box {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   background: #000;
   overflow: hidden;
-  min-width: 0;
+  min-width: 300px;
+  max-width: 800px;
+  height: 100%;
 }
 
 .main-video {
   max-width: 100%;
   max-height: 100%;
-  width: 100%;
+  width: auto;
   height: 100%;
   object-fit: contain;
 }

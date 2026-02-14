@@ -56,4 +56,12 @@ export const setBaseUrl = (url: string): void => {
   service.defaults.baseURL = url
 }
 
+/** 获取当前 API 基地址（与 axios 请求同源），保证带 http(s) 协议，如 http://127.0.0.1:12698 */
+export function getApiBaseUrl(): string {
+  const b = (service.defaults.baseURL as string) || ''
+  if (!b) return ''
+  if (/^https?:\/\//i.test(b)) return b.replace(/\/+$/, '')
+  return `http://${b.replace(/^\/+/, '')}`
+}
+
 export default service

@@ -6,6 +6,7 @@ import { addAiChatMessageApi, updateAiChatMessageApi } from '../api/aiChat'
 import { getDictsFromSentenceApi, type DictItem } from '../api/dict'
 import type { Message } from '../types/chat'
 import { aiChatStore } from './aiChatStore'
+import { useWebsocketStore, isUsageAvailable } from '../stores/websocket'
 
 // 导出类型以便在其他地方使用
 export type { AiChatTopic } from '../api/aiChat'
@@ -475,6 +476,26 @@ export class SmartCutAiService {
    */
   async startSmartCut(prompt: string, options: SmartCutOptions = {}): Promise<void> {
     if (this.state.isProcessing.value) return
+
+    // 检查 VIP 是否可用（是 VIP 且未过期）
+    const websocketStore = useWebsocketStore()
+    if (!isUsageAvailable(websocketStore.usageInfo)) {
+      // 非会员，显示临时提示消息（不创建对话，不保存数据库）
+      const assistantMessage = {
+        id: `message_${Date.now()}`,
+        role: 'assistant' as const,
+        content: '非会员暂不支持剪辑服务，请升级会员后再试',
+        timestamp: new Date(),
+        payload: {
+          type: 'vip_upgrade_prompt'
+        }
+      }
+      
+      aiChatStore.addMessage(assistantMessage)
+      // 注意：不创建 ai_chat 记录，不保存到数据库，仅本地显示
+      
+      return
+    }
 
     const {
       minDuration = 80,

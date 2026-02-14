@@ -51,6 +51,7 @@ declare global {
         videoFiles?: string[]
         subtitleFiles?: Record<string, string>
       }>
+      getAppVersion: () => Promise<string>
     }
   }
 }

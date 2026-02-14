@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { WebSocketClient } from '../utils/websocket-client'
 import { WebSocketMessageHandler } from '../utils/websocket-message-handler'
 
@@ -10,12 +10,47 @@ export interface VideoParseProgress {
   error?: string
 }
 
+export interface UsageInfo {
+  usageSeconds: number
+  dailyLimit: number
+  totalSeconds: number
+  remainingSeconds: number
+  isVip: boolean
+  /** 过期日期（云端下发的过期时间） */
+  expiredAt?: string
+}
+
+/** 判断余量是否可用：是 VIP 且未过期（无 expiredAt 或 expiredAt 大于当前时间） */
+export function isUsageAvailable(info: UsageInfo | null | undefined): boolean {
+  if (!info?.isVip) return false
+  if (!info.expiredAt) return true
+  
+  // 确保日期比较准确，将当前日期也设为当天开始（如果 expiredAt 只包含日期）
+  const expireDate = new Date(info.expiredAt)
+  const now = new Date()
+  
+  // 如果 expiredAt 只是日期（没有时间），则比较年、月、日
+  return expireDate > now
+}
+
 export const useWebsocketStore = defineStore('websocket', () => {
   const connected = ref(false)
   const smartCutUpdated = ref(0)
   const videoUploaded = ref(0)
   const baseUrl = ref<string>(import.meta.env.VITE_WS_URL || '')
   const videoParseProgress = reactive<Record<number, VideoParseProgress>>({})
+  // 默认 isVip 为 false，表示不可用
+  const usageInfo = ref<UsageInfo>({
+    usageSeconds: 0,
+    dailyLimit: 0,
+    totalSeconds: 0,
+    remainingSeconds: 0,
+    isVip: false,
+    expiredAt: undefined
+  })
+
+  /** 是否可用：VIP 且未过期 */
+  const isVipAvailable = computed(() => isUsageAvailable(usageInfo.value))
 
   let wsClient: WebSocketClient | null = null
   let messageHandler: WebSocketMessageHandler | null = null
@@ -212,6 +247,10 @@ export const useWebsocketStore = defineStore('websocket', () => {
       onVideoUploaded: () => {
         videoUploaded.value = Date.now()
         // 不显示通知，因为视频刚上传，还在处理中
+      },
+      onUsageInfo: (data) => {
+        console.log('[WebSocket] Received usage info:', data)
+        usageInfo.value = data
       }
     })
 
@@ -240,6 +279,7 @@ export const useWebsocketStore = defineStore('websocket', () => {
         console.error('[WebSocket] Connection error occurred')
       },
       onMessage: (data) => {
+        console.log('[WebSocket] Received RAW message:', JSON.stringify(data, null, 2))
         messageHandler?.handle(data)
       },
       // 禁用 WebSocketClient 的自动重连，由 store 层处理
@@ -310,6 +350,8 @@ export const useWebsocketStore = defineStore('websocket', () => {
     disconnect,
     reauthenticate,
     updateVideoProgress,
+    usageInfo,
+    isVipAvailable,
     clearVideoProgress,
     getVideoProgress,
     buildUrlWithApiKey

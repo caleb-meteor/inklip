@@ -179,9 +179,28 @@ const formatDurationSeconds = (seconds: number): string => {
           :class="['message-row', msg.role]"
         >
           <div class="message-body">
-            <div class="message-bubble">
+            <div class="message-bubble" :class="{ 'vip-upgrade-bubble': msg.payload?.type === 'vip_upgrade_prompt' }">
               <div class="message-text">
-                <div v-if="msg.content && !msg.payload?.taskCard" class="text-content" v-html="getMessageContent(msg)"></div>
+                <!-- VIP 升级提示 -->
+                <div v-if="msg.payload?.type === 'vip_upgrade_prompt'" class="vip-upgrade-message">
+                  <div class="vip-icon-wrapper">
+                    <!-- 使用更专业的钻石图标替代皇冠 -->
+                    <svg class="vip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M6 4h12l4 6-10 10L2 10l4-6z"/>
+                      <path d="M2 10h20M12 20V10"/>
+                    </svg>
+                    <div class="vip-glow-effect"></div>
+                  </div>
+                  <div class="vip-content">
+                    <span class="vip-title">解锁会员权益</span>
+                    <span class="vip-desc">{{ msg.content }}</span>
+                  </div>
+                  <div class="vip-action-arrow">
+                    <n-icon size="16"><sparkles-outline /></n-icon>
+                  </div>
+                </div>
+                
+                <div v-else-if="msg.content && !msg.payload?.taskCard" class="text-content" v-html="getMessageContent(msg)"></div>
                 
                 <!-- Thinking steps or other interactive elements here -->
                 <ThinkingStepsMessage v-if="msg.role === 'assistant' && msg.payload?.steps && !msg.payload?.type" :steps="msg.payload.steps" />
@@ -309,6 +328,8 @@ const formatDurationSeconds = (seconds: number): string => {
   display: flex;
   flex-direction: column;
   gap: 32px;
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
 }
 
 .message-row {
@@ -477,12 +498,7 @@ const formatDurationSeconds = (seconds: number): string => {
 }
 
 .messages-viewport::-webkit-scrollbar {
-  width: 6px;
-}
-
-.messages-viewport::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  display: none;
 }
 
 .greeting-text {
@@ -618,10 +634,130 @@ const formatDurationSeconds = (seconds: number): string => {
 }
 
 .text-content {
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.8;
   white-space: pre-wrap;
   color: #ececed;
+  letter-spacing: 0.3px;
+  word-spacing: 2px;
+}
+
+/* VIP 升级提示样式 */
+.message-bubble.vip-upgrade-bubble {
+  background: linear-gradient(135deg, rgba(40, 30, 60, 0.6) 0%, rgba(20, 20, 30, 0.8) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+  margin-top: 8px;
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.message-bubble.vip-upgrade-bubble::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.5), transparent);
+}
+
+.message-bubble.vip-upgrade-bubble:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(168, 85, 247, 0.25);
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+.vip-upgrade-message {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.05) 0%, rgba(139, 92, 246, 0.01) 100%);
+}
+
+.vip-icon-wrapper {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 160, 0, 0.05));
+  border-radius: 12px;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.vip-icon {
+  width: 24px;
+  height: 24px;
+  color: #FDB931;
+  z-index: 2;
+  animation: gentle-bounce 3s ease-in-out infinite;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.vip-glow-effect {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, transparent 70%);
+  animation: pulse-glow 2s infinite;
+}
+
+.vip-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vip-title {
+  font-size: 14px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #FFD700 0%, #FDB931 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vip-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.4;
+}
+
+.vip-action-arrow {
+  color: #FDB931;
+  opacity: 0.8;
+  transition: transform 0.3s ease;
+  display: flex;
+  align-items: center;
+}
+
+.message-bubble.vip-upgrade-bubble:hover .vip-action-arrow {
+  transform: translateX(4px) rotate(15deg);
+  opacity: 1;
+}
+
+@keyframes gentle-bounce {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.05);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.2); }
 }
 
 .timeline-segment {

@@ -29,6 +29,15 @@ export interface MessageHandlers {
     error_count: number
     errors: Array<{ path: string; error: string }>
   }) => void
+  onUsageInfo?: (data: {
+    usageSeconds: number
+    dailyLimit: number
+    totalSeconds: number
+    remainingSeconds: number
+    isVip: boolean
+    /** 过期日期 */
+    expiredAt?: string
+  }) => void
 }
 
 export class WebSocketMessageHandler {
@@ -60,6 +69,9 @@ export class WebSocketMessageHandler {
         break
       case 'video_upload':
         this.handleVideoUpload()
+        break
+      case 'usage_info':
+        this.handleUsageInfo(data)
         break
       default:
         console.log('Unknown message type:', data.type, data)
@@ -116,5 +128,17 @@ export class WebSocketMessageHandler {
   private handleVideoUploadBatch(data: any): void {
     console.log('Video upload batch completed:', data)
     this.handlers.onVideoUploadBatch?.(data)
+  }
+
+  private handleUsageInfo(data: any): void {
+    console.log('Usage info updated:', data)
+    this.handlers.onUsageInfo?.({
+      usageSeconds: data.usageSeconds,
+      dailyLimit: data.dailyLimit,
+      totalSeconds: data.totalSeconds,
+      remainingSeconds: data.remainingSeconds,
+      isVip: data.isVip,
+      expiredAt: data.expiredAt
+    })
   }
 }

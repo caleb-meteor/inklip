@@ -1224,7 +1224,12 @@ const confirmDeleteProduct = (product: Product) => {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
+}
+
+.anchor-details-section::-webkit-scrollbar {
+  display: none;
 }
 
 .products-list {
@@ -1235,11 +1240,11 @@ const confirmDeleteProduct = (product: Product) => {
 
 .videos-list {
   padding-left: 0px;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 6px;
+  padding-bottom: 6px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 4px;
 }
 
 .video-preview-card {
@@ -1256,13 +1261,13 @@ const confirmDeleteProduct = (product: Product) => {
   width: 100%;
   aspect-ratio: 9/16;
   background: linear-gradient(180deg, #475569 0%, #334155 100%);
-  border-radius: 6px;
+  border-radius: 4px;
   display: flex;
   flex-direction: column; /* Changed for consistent layout */
   align-items: center;
   justify-content: center;
-  margin-bottom: 4px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  margin-bottom: 3px;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.3);
   position: relative;
   overflow: hidden; /* Ensure image fits */
 }
@@ -1283,7 +1288,7 @@ const confirmDeleteProduct = (product: Product) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .video-duration {

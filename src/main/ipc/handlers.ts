@@ -315,6 +315,10 @@ export function registerIpcHandlers(
     return { videoDataDirectory: app.getPath('userData') }
   })
 
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion()
+  })
+
   ipcMain.handle('restart-backend', () => {
     const mainWindow = getMainWindow()
     BackendService.getInstance().restart(mainWindow)
