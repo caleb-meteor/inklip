@@ -95,6 +95,11 @@ const editProductName = ref('')
 const editProductCover = ref('')
 const editProductFileList = ref<UploadFileInfo[]>([])
 
+// 首页左侧数量限制（与后端 consts 保持一致）
+const MAX_ANCHORS = 3
+const MAX_PRODUCTS_PER_ANCHOR = 100
+const MAX_VIDEOS_PER_PRODUCT = 6
+
 const currentAnchor = computed(() => anchors.value.find(a => a.id === selectedAnchorId.value))
 
 watch(currentAnchor, (newVal) => {
@@ -218,6 +223,10 @@ const handleProductUploadChange = (data: { fileList: UploadFileInfo[] }) => {
 }
 
 const handleAddAnchor = async () => {
+  if (anchors.value.length >= MAX_ANCHORS) {
+    message.warning(`主播最多只能添加 ${MAX_ANCHORS} 个`)
+    return false
+  }
   if (!newAnchorName.value.trim()) {
     message.warning('请输入主播名称')
     return false
@@ -252,6 +261,10 @@ const handleAddAnchor = async () => {
 
 const handleAddProduct = async () => {
   if (!selectedAnchorId.value) return false
+  if (currentAnchorProducts.value.length >= MAX_PRODUCTS_PER_ANCHOR) {
+    message.warning(`每个主播下产品最多只能添加 ${MAX_PRODUCTS_PER_ANCHOR} 个`)
+    return false
+  }
   if (!newProductName.value.trim()) {
     message.warning('请输入产品名称')
     return false
@@ -634,7 +647,17 @@ const confirmDeleteProduct = (product: Product) => {
       <div class="anchors-section" v-show="!collapsed">
         <div class="section-header">
           <div class="section-title" style="margin-bottom: 0; color: #3b82f6;">主播选择</div>
+          <n-tooltip v-if="anchors.length >= MAX_ANCHORS" placement="right">
+            <template #trigger>
+              <div class="add-anchor-btn disabled">
+                <n-icon size="14"><PersonAddOutline /></n-icon>
+                <span>添加主播</span>
+              </div>
+            </template>
+            主播最多只能添加 {{ MAX_ANCHORS }} 个
+          </n-tooltip>
           <n-popconfirm
+            v-else
             @positive-click="handleAddAnchor"
             :show-icon="false"
             placement="right"
@@ -770,7 +793,17 @@ const confirmDeleteProduct = (product: Product) => {
         <!-- 产品管理 Header -->
         <div class="section-header" style="margin-top: 6px; margin-bottom: 4px;">
           <div class="section-title" style="margin-bottom: 0; color: #10b981;">产品列表</div>
+          <n-tooltip v-if="selectedAnchorId && currentAnchorProducts.length >= MAX_PRODUCTS_PER_ANCHOR" placement="right">
+            <template #trigger>
+              <div class="add-anchor-btn disabled">
+                <n-icon size="14"><FolderOpenOutline /></n-icon>
+                <span>添加产品</span>
+              </div>
+            </template>
+            每个主播下产品最多只能添加 {{ MAX_PRODUCTS_PER_ANCHOR }} 个
+          </n-tooltip>
           <n-popconfirm
+            v-else-if="selectedAnchorId"
             @positive-click="handleAddProduct"
             :show-icon="false"
             placement="right"
@@ -849,7 +882,7 @@ const confirmDeleteProduct = (product: Product) => {
                 <div v-show="expandedProductIds.includes(product.id)" class="videos-list">
                    <!-- Upload Buttons -->
                    <div 
-                     v-if="getProductVideos(product.id).length < 6" 
+                     v-if="getProductVideos(product.id).length < MAX_VIDEOS_PER_PRODUCT" 
                      class="video-preview-card upload-card" 
                      @click="openUploadModal(product)"
                    >
@@ -857,12 +890,13 @@ const confirmDeleteProduct = (product: Product) => {
                         <n-icon size="24" color="#a1a1aa"><AddCircleOutline /></n-icon>
                         <span style="font-size: 10px; margin-top: 4px; color: #a1a1aa;">上传视频</span>
                      </div>
+                     <div class="preview-name"></div>
                    </div>
 
                    <!-- Videos -->
                   <div 
                     class="video-preview-card" 
-                    v-for="video in getProductVideos(product.id)" 
+                    v-for="video in getProductVideos(product.id).slice(0, getProductVideos(product.id).length < MAX_VIDEOS_PER_PRODUCT ? 5 : 6)" 
                     :key="video.id"
                     @dblclick="emit('play-video', video)"
                     @contextmenu="handleContextMenu($event, video, 'video')"
@@ -937,6 +971,7 @@ const confirmDeleteProduct = (product: Product) => {
       v-model:show="showUploadModal"
       :pre-selected-anchor="currentAnchor ? {id: currentAnchor.id, name: currentAnchor.name} : undefined"
       :pre-selected-product="currentUploadProduct ? {id: currentUploadProduct.id, name: currentUploadProduct.name} : undefined"
+      :pre-selected-product-video-count="currentUploadProduct ? getProductVideos(currentUploadProduct.id).length : undefined"
       @success="handleUploadSuccess"
     />
 
@@ -1165,6 +1200,12 @@ const confirmDeleteProduct = (product: Product) => {
   background: rgba(59, 130, 246, 0.2);
 }
 
+.add-anchor-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.08);
@@ -1239,18 +1280,20 @@ const confirmDeleteProduct = (product: Product) => {
 }
 
 .videos-list {
-  padding-left: 0px;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding: 8px 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .video-preview-card {
   width: 100%;
+  min-width: 0;
   cursor: pointer;
   transition: transform 0.2s;
+  overflow: hidden;
 }
 
 .video-preview-card:hover {
@@ -1263,13 +1306,14 @@ const confirmDeleteProduct = (product: Product) => {
   background: linear-gradient(180deg, #475569 0%, #334155 100%);
   border-radius: 4px;
   display: flex;
-  flex-direction: column; /* Changed for consistent layout */
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
   box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.3);
   position: relative;
-  overflow: hidden; /* Ensure image fits */
+  overflow: hidden;
+  min-height: 0;
 }
 
 .upload-placeholder {
@@ -1289,6 +1333,9 @@ const confirmDeleteProduct = (product: Product) => {
   height: 100%;
   object-fit: cover;
   border-radius: 4px;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 .video-duration {
@@ -1300,6 +1347,7 @@ const confirmDeleteProduct = (product: Product) => {
   font-size: 8px;
   padding: 1px 3px;
   border-radius: 2px;
+  z-index: 1;
 }
 
 .preview-name {
@@ -1309,6 +1357,8 @@ const confirmDeleteProduct = (product: Product) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  height: 14px;
+  line-height: 14px;
 }
 
 .empty-state {

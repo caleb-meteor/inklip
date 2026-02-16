@@ -134,7 +134,7 @@ export class SmartCutAiService {
         type: 'task_card',
         taskCard: {
           steps: [
-            { label: '正在解析关键信息', status: 'error' as const, detail: '未找到相关关键词' }
+            { label: '正在解析关键信息', status: 'error' as const, detail: '未找到相关内容' }
           ]
         }
       }
@@ -155,7 +155,7 @@ export class SmartCutAiService {
 
     // 记录到系统
     if (currentAiChatId) {
-      const failureMessage = `❌ 解析失败\n\n无法找到与 "${prompt}" 相关的视频内容\n\n💡 建议：\n• 检查输入的关键词是否准确\n• 尝试使用不同的描述方式\n• 确保素材库中包含相关内容\n\n请调整后重新尝试。`
+      const failureMessage = `❌ 解析失败\n\n无法找到与 "${prompt}" 相关的视频内容\n\n💡 建议：\n• 尝试使用不同的描述方式\n• 确保素材库中包含内容\n\n请调整后重新尝试。`
 
       // 添加到本地消息
       const msgId = `new_message_${Date.now() + 100}`
@@ -467,6 +467,7 @@ export class SmartCutAiService {
     this.state.pendingConfirmationData.value = null
     this.state.isAwaitingConfirmation.value = false
     this.state.isProcessing.value = false
+    aiChatStore.setCurrentChatProcessing(false)
   }
 
   /**
@@ -505,6 +506,7 @@ export class SmartCutAiService {
     } = options
 
     this.state.isProcessing.value = true
+    aiChatStore.setCurrentChatProcessing(true)
     this.resetChatSteps()
 
     try {
@@ -512,6 +514,7 @@ export class SmartCutAiService {
 
       // 重置对话：开始新剪辑时创建全新对话
       aiChatStore.newChat()
+      aiChatStore.setCurrentChatProcessing(true)
 
       // Step 1: 检查是否有当前对话，如果没有则创建新的
       let currentAiChatId = aiChatStore.getCurrentAiChatId().value
@@ -767,6 +770,7 @@ export class SmartCutAiService {
       console.error('Smart Cut Error:', outerError)
     } finally {
       this.state.isProcessing.value = false
+      aiChatStore.setCurrentChatProcessing(false)
     }
   }
 }

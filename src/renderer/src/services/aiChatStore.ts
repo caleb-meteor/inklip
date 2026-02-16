@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import { getAiChatListApi, getAiChatMessagesApi, createAiChatApi, type AiChatTopic, type AiChatMessage, updateAiChatMessageApi } from '../api/aiChat'
+import { getAiChatListApi, getAiChatMessagesApi, createAiChatApi, type AiChatTopic, type AiChatMessage, updateAiChatMessageApi, deleteAiChatApi } from '../api/aiChat'
 import { getSmartCutApi, getVideosApi } from '../api/video'
 import type { Message } from '../types/chat'
 
@@ -11,11 +11,19 @@ export class AiChatStore {
   private aiChats: Ref<AiChatTopic[]>
   private currentAiChatId: Ref<number | null>
   private messages: Ref<Message[]>
+  private hasMoreAiChats: Ref<boolean>
+  private isLoadingAiChats: Ref<boolean>
+  private isCurrentChatProcessing: Ref<boolean>
+  private aiChatPage: number
 
   constructor() {
     this.aiChats = ref<AiChatTopic[]>([])
     this.currentAiChatId = ref<number | null>(null)
     this.messages = ref<Message[]>([])
+    this.hasMoreAiChats = ref<boolean>(true)
+    this.isLoadingAiChats = ref<boolean>(false)
+    this.isCurrentChatProcessing = ref<boolean>(false)
+    this.aiChatPage = 1
   }
 
   /**
@@ -23,6 +31,20 @@ export class AiChatStore {
    */
   getAiChats(): Ref<AiChatTopic[]> {
     return this.aiChats
+  }
+
+  /**
+   * 是否有更多对话可加载
+   */
+  getHasMoreAiChats(): Ref<boolean> {
+    return this.hasMoreAiChats
+  }
+
+  /**
+   * 是否正在加载对话列表
+   */
+  getIsLoadingAiChats(): Ref<boolean> {
+    return this.isLoadingAiChats
   }
 
   /**
@@ -40,14 +62,61 @@ export class AiChatStore {
   }
 
   /**
+   * 获取当前对话是否正在处理中
+   */
+  getIsCurrentChatProcessing(): Ref<boolean> {
+    return this.isCurrentChatProcessing
+  }
+
+  /**
+   * 设置当前对话处理状态
+   */
+  setCurrentChatProcessing(isProcessing: boolean): void {
+    this.isCurrentChatProcessing.value = isProcessing
+  }
+
+  /**
    * 加载 AI 对话列表
    */
   async loadAiChats(): Promise<void> {
+    if (this.isLoadingAiChats.value) return
+    this.isLoadingAiChats.value = true
+    this.aiChatPage = 1
     try {
-      this.aiChats.value = await getAiChatListApi(20)
+      const res = await getAiChatListApi(1, 20)
+      this.aiChats.value = res.list || []
+      this.hasMoreAiChats.value = this.aiChats.value.length < res.total
+      if (this.hasMoreAiChats.value) {
+        this.aiChatPage = 2
+      }
     } catch (error) {
       console.error('加载 AI 对话失败:', error)
       throw error
+    } finally {
+      this.isLoadingAiChats.value = false
+    }
+  }
+
+  /**
+   * 加载更多 AI 对话
+   */
+  async loadMoreAiChats(): Promise<void> {
+    if (this.isLoadingAiChats.value || !this.hasMoreAiChats.value) return
+    this.isLoadingAiChats.value = true
+    try {
+      const res = await getAiChatListApi(this.aiChatPage, 20)
+      if (res.list.length > 0) {
+        this.aiChats.value = [...this.aiChats.value, ...res.list]
+      }
+      this.hasMoreAiChats.value = this.aiChats.value.length < res.total
+      if (this.hasMoreAiChats.value) {
+        this.aiChatPage++
+      }
+    } catch (error) {
+      console.error('加载更多 AI 对话失败:', error)
+      throw error
+    } finally {
+      this.isLoadingAiChats.value = false
     }
   }
 
@@ -132,6 +201,22 @@ export class AiChatStore {
     const msg = this.messages.value.find(m => m.id === oldId)
     if (msg) {
       msg.id = newId
+    }
+  }
+
+  /**
+   * 删除对话
+   */
+  async deleteAiChat(aiChatId: number): Promise<void> {
+    try {
+      await deleteAiChatApi(aiChatId)
+      this.aiChats.value = this.aiChats.value.filter(chat => chat.id !== aiChatId)
+      if (this.currentAiChatId.value === aiChatId) {
+        this.newChat()
+      }
+    } catch (error) {
+      console.error('删除 AI 对话失败:', error)
+      throw error
     }
   }
 
@@ -335,6 +420,7 @@ export class AiChatStore {
    */
   newChat(): void {
     this.currentAiChatId.value = null
+    this.isCurrentChatProcessing.value = false
     this.clearMessages()
   }
 }

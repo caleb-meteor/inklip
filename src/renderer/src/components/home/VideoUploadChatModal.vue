@@ -14,10 +14,14 @@ import { CloudUploadOutline, FolderOutline, CloseOutline, DocumentTextOutline, V
 import { getDictsByTypeApi, createDictApi, type DictItem } from '../../api/dict'
 import { uploadVideosBatchApi } from '../../api/video'
 
+const MAX_VIDEOS_PER_PRODUCT = 6
+
 interface Props {
   show: boolean
   preSelectedAnchor?: { id: number; name: string }
   preSelectedProduct?: { id: number; name: string }
+  /** 从首页产品入口打开时，该产品当前已有视频数量，用于限制每个产品最多 6 个视频 */
+  preSelectedProductVideoCount?: number
 }
 
 const props = defineProps<Props>()
@@ -159,6 +163,12 @@ const getDictId = async (name: string, type: 'anchor' | 'product'): Promise<numb
 const handleConfirm = async (): Promise<void> => {
   if (videoPaths.value.length === 0) {
     message.warning('请先选择视频文件或文件夹')
+    return
+  }
+
+  const currentCount = props.preSelectedProductVideoCount ?? 0
+  if (props.preSelectedProduct && currentCount + videoPaths.value.length > MAX_VIDEOS_PER_PRODUCT) {
+    message.warning(`每个产品下最多只能添加 ${MAX_VIDEOS_PER_PRODUCT} 个视频，当前已有 ${currentCount} 个`)
     return
   }
 

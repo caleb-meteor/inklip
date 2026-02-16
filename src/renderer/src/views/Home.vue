@@ -12,10 +12,23 @@ import VideoUploadChatModal from '../components/home/VideoUploadChatModal.vue'
 import AppStatusBar from '../components/AppStatusBar.vue'
 import { smartCutAiService, type AiChatTopic } from '../services/smartCutAiService'
 import { aiChatStore } from '../services/aiChatStore'
-import { analyzeIntentStreamApi, addAiChatMessageApi, type AnalyzeIntentResult } from '../api/aiChat'
+import { addAiChatMessageApi } from '../api/aiChat'
+import { recognizeIntentApi, type IntentType } from '../api/intent'
+
+/** 意图：1=搜索 2=剪辑，其余为未支持 */
+const INTENT_SEARCH = 1
+const INTENT_CLIP = 2
+
+const UNSUPPORTED_INTENT_TIP = `当前仅支持「搜索」和「剪辑」：
+
+• **搜索**：用「找、搜、查、内容」等描述想找的视频内容
+• **剪辑**：用「剪、片段」等描述要剪的内容
+
+请重新描述您的需求。`
 import { useWebSocketSync } from '../composables/useWebSocketSync'
 import { useVideoUpload } from '../composables/useVideoUpload'
 import type { VideoItem, SmartCutItem } from '../api/video'
+import { searchVideosApi } from '../api/video'
 
 const router = useRouter()
 const appVersion = ref<string>('1.0.0')
@@ -28,13 +41,13 @@ useWebSocketSync()
 const { handleUploadSuccess } = useVideoUpload()
 
 // 获取共享的 AI 对话存储
-const messages = computed(() => unref(aiChatStore.getMessages()))
-const aiChats = computed(() => unref(aiChatStore.getAiChats()))
+const messages = computed(() => aiChatStore.getMessages().value)
+const aiChats = computed(() => aiChatStore.getAiChats().value)
+const isLoadingAiChats = computed(() => aiChatStore.getIsLoadingAiChats().value)
 
 // 检查是否有任务正在进行中
 const isTaskRunning = computed(() => {
-  const state = smartCutAiService.getState()
-  return unref(state.isProcessing) || unref(state.isAwaitingConfirmation)
+  return aiChatStore.getIsCurrentChatProcessing().value
 })
 
 const currentPlayingVideo = ref<VideoItem | SmartCutItem | null>(null)
@@ -98,82 +111,124 @@ const handleSend = async (val: string): Promise<void> => {
   const trimmed = val.trim()
   if (!trimmed) return
 
-  aiChatStore.newChat()
-  const topic = trimmed.length > 30 ? trimmed.slice(0, 30) + '…' : trimmed
-  await aiChatStore.createAiChat(topic || '新对话')
-  const currentAiChatId = aiChatStore.getCurrentAiChatId().value
+  // 用户输入后先调用 jieba 意图识别
+  let intentPayload: { intent: number; intent_label: string; keywords: string[]; keyword_weights?: { word: string; weight: number }[] } | undefined
+  try {
+    const intentResult = await recognizeIntentApi(trimmed)
+    intentPayload = {
+      intent: intentResult.intent,
+      intent_label: intentResult.intent_label,
+      keywords: intentResult.keywords,
+      keyword_weights: intentResult.keyword_weights
+    }
+  } catch (e) {
+    console.warn('意图识别请求失败:', e)
+  }
+
+  // 识别到剪辑意图后，直接进入智能剪辑流程（会创建对话、添加用户消息并执行剪辑）
+  const intent = intentPayload?.intent as IntentType | undefined
+  if (intent === INTENT_CLIP) {
+    await smartCutAiService.startSmartCut(trimmed)
+    return
+  }
+
+  // 如果没有当前对话，才创建新对话
+  let currentAiChatId = aiChatStore.getCurrentAiChatId().value
+  if (!currentAiChatId) {
+    const topic = trimmed.length > 30 ? trimmed.slice(0, 30) + '…' : trimmed
+    await aiChatStore.createAiChat(topic || '新对话')
+    currentAiChatId = aiChatStore.getCurrentAiChatId().value
+  }
 
   const userMsgId = `new_message_${Date.now()}`
   aiChatStore.addMessage({
     id: userMsgId,
     role: 'user',
     content: trimmed,
-    timestamp: new Date()
+    timestamp: new Date(),
+    payload: intentPayload
   })
   if (currentAiChatId) {
     try {
       await addAiChatMessageApi({
         ai_chat_id: currentAiChatId,
         role: 'user',
-        content: trimmed
+        content: trimmed,
+        payload: intentPayload
       })
     } catch (e) {
       console.error('保存用户消息失败:', e)
     }
   }
 
-  const streamingMsgId = `assistant_stream_${Date.now()}`
-  aiChatStore.addMessage({
-    id: streamingMsgId,
-    role: 'assistant',
-    content: '正在分析您的意思…',
-    timestamp: new Date()
-  })
-
-  let streamContent = ''
-
-  try {
-    await analyzeIntentStreamApi(trimmed, {
-      onDelta(content: string) {
-        streamContent += content
-        // 流式阶段仅显示加载态，不展示原始 JSON
-        aiChatStore.updateMessage(streamingMsgId, { content: '正在分析您的意思…' })
-      },
-      onResult(result: AnalyzeIntentResult) {
-        if (result.intent === 'cut_video') {
-          smartCutAiService.startSmartCut(trimmed, {
-            minDuration: 30,
-            maxDuration: 60,
-            maxRetries: 20,
-            retryInterval: 3000
-          })
-          return
+  // 识别到搜索意图后，进行全文搜索并展示结果（视频 + 匹配字幕时间）
+  if (intent === INTENT_SEARCH) {
+    try {
+      const searchRes = await searchVideosApi(trimmed, 5)
+      const summary = searchRes.results.length > 0
+        ? `共找到 ${searchRes.results.length} 个相关视频`
+        : '未找到匹配的视频，可换个描述词试试'
+      const assistantMsgId = `assistant_${Date.now()}`
+      aiChatStore.addMessage({
+        id: assistantMsgId,
+        role: 'assistant',
+        content: summary,
+        timestamp: new Date(),
+        payload: {
+          type: 'search_result',
+          results: searchRes.results,
+          keywords: searchRes.keywords
         }
-
-        // 只显示 reasoning（AI 用对话口吻对用户说的话）
-        const mainReply = (result.reasoning && result.reasoning.trim()) ? result.reasoning.trim() : '请说明您是想「搜索视频」还是「剪辑视频」，例如：剪某主播某产品的视频。'
-        const tip = result.intent === 'search_video' && result.search_content ? '\n\n→ 可以在侧栏或搜索入口进行视频搜索。' : ''
-        const finalContent = mainReply + tip
-        aiChatStore.updateMessage(streamingMsgId, { content: finalContent })
-        if (currentAiChatId) {
-          addAiChatMessageApi({
-            ai_chat_id: currentAiChatId,
-            role: 'assistant',
-            content: finalContent
-          }).catch(e => console.error('保存助手消息失败:', e))
-        }
-      },
-      onError(err: Error) {
-        aiChatStore.updateMessage(streamingMsgId, {
-          content: `解析失败：${err.message}，请稍后重试。`
-        })
+      })
+      if (currentAiChatId) {
+        addAiChatMessageApi({
+          ai_chat_id: currentAiChatId,
+          role: 'assistant',
+          content: summary,
+          payload: {
+            type: 'search_result',
+            results: searchRes.results,
+            keywords: searchRes.keywords
+          }
+        }).catch(e => console.error('保存搜索结果消息失败:', e))
       }
+    } catch (e) {
+      console.error('全文搜索失败:', e)
+      const errMsgId = `assistant_${Date.now()}`
+      aiChatStore.addMessage({
+        id: errMsgId,
+        role: 'assistant',
+        content: '搜索失败，请稍后重试',
+        timestamp: new Date()
+      })
+      if (currentAiChatId) {
+        addAiChatMessageApi({
+          ai_chat_id: currentAiChatId,
+          role: 'assistant',
+          content: '搜索失败，请稍后重试'
+        }).catch(er => console.error('保存消息失败:', er))
+      }
+    }
+    return
+  }
+
+  // 非搜索/剪辑意图时，提示用户当前仅支持搜索与剪辑
+  const isSupported = intent === INTENT_SEARCH || intent === INTENT_CLIP
+  if (intentPayload != null && !isSupported) {
+    const assistantMsgId = `assistant_${Date.now()}`
+    aiChatStore.addMessage({
+      id: assistantMsgId,
+      role: 'assistant',
+      content: UNSUPPORTED_INTENT_TIP,
+      timestamp: new Date()
     })
-  } catch (err) {
-    console.error('意图分析或发送失败:', err)
-    aiChatStore.updateMessage(streamingMsgId, {
-      content: '网络或服务异常，请稍后重试。'
-    })
+    if (currentAiChatId) {
+      addAiChatMessageApi({
+        ai_chat_id: currentAiChatId,
+        role: 'assistant',
+        content: UNSUPPORTED_INTENT_TIP
+      }).catch(e => console.error('保存助手提示失败:', e))
+    }
   }
 }
 
@@ -271,6 +326,7 @@ const handleOpenUploadModal = (): void => {
         >
           <HomeRightSidebar
             :ai-chats="aiChats"
+            :is-loading-ai-chats="isLoadingAiChats"
             :collapsed="rightSidebarCollapsed"
             :current-anchor="currentSelectedAnchor"
             @select-chat="handleSelectChat"
@@ -319,6 +375,15 @@ const handleOpenUploadModal = (): void => {
 .home-right-sider {
   background: #09090b;
   border-left: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* 右侧栏：禁止 sider 自身滚动，让内部 .tab-content 滚动，这样滚动翻页才能触发 */
+.home-right-sider :deep(.n-layout-sider-scroll-container) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .home-content {

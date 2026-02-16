@@ -275,6 +275,7 @@ watch(() => props.path, () => {
 
 .content-area {
   flex: 1;
+  min-height: 0;
   display: flex;
   gap: 0;
   overflow: hidden;
@@ -307,6 +308,8 @@ watch(() => props.path, () => {
   width: 380px;
   min-width: 300px;
   max-width: 50%;
+  height: 100%;
+  min-height: 0;
   background: #1a1a1a;
   border-left: 1px solid #333;
   display: flex;
@@ -338,21 +341,13 @@ watch(() => props.path, () => {
 
 .subtitle-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px 0;
 }
 
 .subtitle-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.subtitle-list::-webkit-scrollbar-track {
-  background: #1a1a1a;
-}
-
-.subtitle-list::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 3px;
+  display: none;
 }
 
 .subtitle-list-empty {

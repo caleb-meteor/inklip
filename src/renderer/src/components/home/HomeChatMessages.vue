@@ -9,8 +9,10 @@ import SmartCutResultMessage from './message-types/SmartCutResultMessage.vue'
 import ThinkingStepsMessage from './message-types/ThinkingStepsMessage.vue'
 import TaskCardMessage from './message-types/TaskCardMessage.vue'
 import VideoFilteringTaskMessage from './message-types/VideoFilteringTaskMessage.vue'
+import SearchResultMessage from './message-types/SearchResultMessage.vue'
 import type { Message } from '../../types/chat'
 import { smartCutAiService } from '../../services/smartCutAiService'
+import { aiChatStore } from '../../services/aiChatStore'
 
 const props = defineProps({
   messages: {
@@ -102,10 +104,8 @@ const typeMessage = async (msgId: string, fullContent: string, speed: number = 2
 
   const msg = { ...messageList.value[idx] }
   msg.isTyping = true
-  // If content is just internal log, maybe don't show it? 
-  // User said "Only interactive cards or no result is displayed as message, others as thinking".
-  // This implies we might hide the text content if there's a payload like 'thinking_steps' or if it's intermediate.
-  // However, usually 'content' is the visible part.
+  // 开始打字时设置处理状态
+  aiChatStore.setCurrentChatProcessing(true)
   
   msg.displayedContent = ''
   messageList.value.splice(idx, 1, { ...msg })
@@ -124,6 +124,12 @@ const typeMessage = async (msgId: string, fullContent: string, speed: number = 2
   msg.displayedContent = fullContent
   msg.isTyping = false
   messageList.value.splice(idx, 1, { ...msg })
+  
+  // 打字结束时检查是否还有其他正在打字的消息
+  const hasOtherTyping = messageList.value.some(m => m.id !== msgId && m.isTyping)
+  if (!hasOtherTyping) {
+    aiChatStore.setCurrentChatProcessing(false)
+  }
 }
 
 const getMessageContent = (msg: Message): string => {
@@ -154,7 +160,7 @@ const formatDurationSeconds = (seconds: number): string => {
         </div>
 
         <div class="features-grid">
-          <div class="feature-card" @click="$emit('suggestionClick', '导入视频')">
+          <div class="feature-card">
             <div class="feature-icon">🗂️</div>
             <div class="feature-content">
               <h3>智能素材管理</h3>
@@ -162,7 +168,7 @@ const formatDurationSeconds = (seconds: number): string => {
             </div>
           </div>
 
-          <div class="feature-card" @click="$emit('suggestionClick', '帮我剪辑一个关于科技感的视频')">
+          <div class="feature-card">
             <div class="feature-icon">⚡️</div>
             <div class="feature-content">
               <h3>极速智能剪辑</h3>
@@ -220,6 +226,12 @@ const formatDurationSeconds = (seconds: number): string => {
                 <VideoUploadMessage
                   v-if="msg.payload?.type === 'video_upload' && msg.payload?.videos"
                   :videos="msg.payload.videos"
+                />
+
+                <SearchResultMessage
+                  v-if="msg.payload?.type === 'search_result' && msg.payload?.results"
+                  :results="msg.payload.results"
+                  :keywords="msg.payload.keywords || []"
                 />
 
                 <VideoSelectionMessage
@@ -965,15 +977,6 @@ const formatDurationSeconds = (seconds: number): string => {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.feature-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  transform: translateY(-4px);
-  border-color: rgba(79, 172, 254, 0.3);
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }
 
 .feature-icon {

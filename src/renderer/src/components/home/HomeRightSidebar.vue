@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NIcon, NTooltip, NTabs, NTabPane, NSkeleton, NEllipsis, NProgress } from 'naive-ui'
-import { ChatbubbleOutline, AddOutline, ListOutline, ChevronForward, FilmOutline, VideocamOutline } from '@vicons/ionicons5'
+import { NIcon, NTooltip, NTabs, NTabPane, NSkeleton, NEllipsis, NProgress, useDialog, useMessage } from 'naive-ui'
+import { ChatbubbleOutline, AddOutline, ListOutline, ChevronForward, FilmOutline, VideocamOutline, TrashOutline } from '@vicons/ionicons5'
 import type { AiChatTopic } from '../../api/aiChat'
-import { getSmartCutsApi, type SmartCutItem } from '../../api/video'
+import { getSmartCutsApi, deleteSmartCutApi, type SmartCutItem } from '../../api/video'
 import VideoPreviewPlayer from '../VideoPreviewPlayer.vue'
 import { useWebsocketStore } from '../../stores/websocket'
+import { aiChatStore } from '../../services/aiChatStore'
+
+const dialog = useDialog()
+const message = useMessage()
 
 const props = defineProps<{
   aiChats: AiChatTopic[]
+  isLoadingAiChats?: boolean
   collapsed?: boolean
   currentAnchor?: { id: number; name: string } | null
 }>()
@@ -35,8 +40,42 @@ const handleNewChat = (): void => {
   emit('new-chat')
 }
 
+const handleDeleteChat = (e: Event, chat: AiChatTopic) => {
+    e.stopPropagation()
+    dialog.warning({
+        title: '删除记录',
+        content: '确定要删除这条对话记录吗？',
+        positiveText: '确定',
+        negativeText: '取消',
+        onPositiveClick: async () => {
+            try {
+                await aiChatStore.deleteAiChat(chat.id)
+            } catch (err) {
+                message.error('删除失败')
+            }
+        }
+    })
+}
+
+const handleDeleteClip = (item: SmartCutItem) => {
+    dialog.warning({
+        title: '删除剪辑',
+        content: '确定要删除这条剪辑历史吗？',
+        positiveText: '确定',
+        negativeText: '取消',
+        onPositiveClick: async () => {
+            try {
+                await deleteSmartCutApi(item.id)
+                clipHistory.value = clipHistory.value.filter(i => i.id !== item.id)
+            } catch (err) {
+                message.error('删除失败')
+            }
+        }
+    })
+}
+
 const fetchHistory = async () => {
-    if (loadingHistory.value) return
+    if (loadingHistory.value || !historyHasMore.value) return
     loadingHistory.value = true
     try {
         const anchorId = props.currentAnchor?.id
@@ -47,6 +86,9 @@ const fetchHistory = async () => {
             clipHistory.value.push(...res.list)
         }
         historyHasMore.value = clipHistory.value.length < res.total
+        if (historyHasMore.value) {
+            historyPage.value++
+        }
     } catch (e) {
         console.error('Failed to fetch clip history', e)
     } finally {
@@ -101,6 +143,11 @@ const handleClipClick = (item: SmartCutItem) => {
 const websocketStore = useWebsocketStore()
 const { usageInfo, isVipAvailable } = storeToRefs(websocketStore)
 
+// 提取 AI 对话存储状态，确保响应式
+const aiChats = aiChatStore.getAiChats()
+const isLoadingAiChats = aiChatStore.getIsLoadingAiChats()
+const hasMoreAiChats = aiChatStore.getHasMoreAiChats()
+
 const currentUsage = computed(() => {
   return usageInfo.value
 })
@@ -132,6 +179,30 @@ const formatDate = (dateStr?: string) => {
 const showUsageInfo = computed(() => {
     return usageInfo.value && usageInfo.value.dailyLimit > 0
 })
+
+const historyScrollRef = ref<HTMLElement | null>(null)
+
+const onHistoryScroll = (e: Event) => {
+    const el = e.target as HTMLElement
+    if (!el || activeTab.value !== 'history' || !historyHasMore.value || loadingHistory.value) return
+    const { scrollTop, scrollHeight, clientHeight } = el
+    const threshold = 20 // 减小阈值，确保在接近底部时触发
+    if (scrollHeight - scrollTop - clientHeight <= threshold) {
+        fetchHistory()
+    }
+}
+
+const onRecentScroll = (e: Event) => {
+    const el = e.target as HTMLElement
+    if (!el || activeTab.value !== 'recent') return
+    if (!hasMoreAiChats.value || isLoadingAiChats.value) return
+    
+    const { scrollTop, scrollHeight, clientHeight } = el
+    const threshold = 20
+    if (scrollHeight - scrollTop - clientHeight <= threshold) {
+        aiChatStore.loadMoreAiChats()
+    }
+}
 </script>
 
 <template>
@@ -176,8 +247,12 @@ const showUsageInfo = computed(() => {
             </div>
         </div>
 
-        <div v-if="activeTab === 'recent'" class="tab-content">
-            <div v-if="!aiChats.length" class="history-empty">暂无记录</div>
+        <div 
+            v-if="activeTab === 'recent'" 
+            class="tab-content"
+            @scroll="onRecentScroll"
+        >
+            <div v-if="!aiChats || !aiChats.length" class="history-empty">暂无记录</div>
             <div v-else class="history-list">
             <div
                 v-for="chat in aiChats"
@@ -187,15 +262,27 @@ const showUsageInfo = computed(() => {
             >
                 <n-icon size="16"><ChatbubbleOutline /></n-icon>
                 <span class="history-title">{{ chat.topic || '未命名项目' }}</span>
+                <div class="item-actions">
+                    <n-tooltip trigger="hover" placement="top">
+                        <template #trigger>
+                            <div class="action-btn delete-btn" @click="(e) => handleDeleteChat(e, chat)">
+                                <n-icon size="14"><TrashOutline /></n-icon>
+                            </div>
+                        </template>
+                        删除记录
+                    </n-tooltip>
+                </div>
             </div>
             </div>
         </div>
 
-        <div v-else class="tab-content">
-             <div v-if="loadingHistory && clipHistory.length === 0" class="loading-state">
-                <n-skeleton text :repeat="3" />
-             </div>
-             <div v-else-if="clipHistory.length === 0" class="history-empty">
+        <div
+            v-else
+            ref="historyScrollRef"
+            class="tab-content"
+            @scroll="onHistoryScroll"
+        >
+             <div v-if="clipHistory.length === 0" class="history-empty">
                  <div class="empty-text">当前主播下暂无剪辑历史</div>
                  <div class="empty-subtext" v-if="currentAnchor">({{ currentAnchor.name }})</div>
              </div>
@@ -225,6 +312,16 @@ const showUsageInfo = computed(() => {
                             <span>{{ formatTime(item.created_at) }}</span>
                             <span :class="['status-tag', 'status-' + item.status]">{{ getStatusText(item.status) }}</span>
                         </div>
+                    </div>
+                    <div class="clip-actions">
+                        <n-tooltip trigger="hover" placement="top">
+                            <template #trigger>
+                                <div class="action-btn delete-btn" @click.stop="handleDeleteClip(item)">
+                                    <n-icon size="14"><TrashOutline /></n-icon>
+                                </div>
+                            </template>
+                            删除剪辑
+                        </n-tooltip>
                     </div>
                  </div>
              </div>
@@ -376,12 +473,9 @@ const showUsageInfo = computed(() => {
     flex: 1;
     overflow-y: auto;
     min-height: 0;
-    padding-right: 4px; /* Space for scrollbar */
-    -ms-overflow-style: none; /* IE and Edge */
-    scrollbar-width: none; /* Firefox */
+    padding-right: 4px;
 }
 
-/* Scrollbar refinement */
 .tab-content::-webkit-scrollbar {
     display: none;
 }
@@ -407,6 +501,13 @@ const showUsageInfo = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.load-more-tip {
+  text-align: center;
+  color: #71717a;
+  font-size: 12px;
+  padding: 12px 0;
 }
 
 .nav-item {
@@ -435,9 +536,44 @@ const showUsageInfo = computed(() => {
   flex: 1;
 }
 
+.item-actions {
+  display: flex;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.history-item:hover .item-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.action-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #71717a;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
 /* Clip Item Styles */
 .clip-item {
     display: flex; /* Flex row layout */
+    position: relative;
     gap: 10px;
     padding: 10px;
     border-radius: 6px;
@@ -446,6 +582,22 @@ const showUsageInfo = computed(() => {
     cursor: pointer;
     transition: all 0.2s;
     border: 1px solid rgba(255,255,255,0.03);
+}
+
+.clip-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+  pointer-events: none;
+  margin-left: 4px;
+}
+
+.clip-item:hover .clip-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .clip-thumb {

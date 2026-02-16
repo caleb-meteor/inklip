@@ -24,7 +24,7 @@ const isExpanded = ref(false)
 const isFocused = ref(false)
 
 const placeholderText = computed(() => {
-  return props.disabled ? 'AI 正在处理任务...' : '描述你想剪辑的内容...'
+  return props.disabled ? 'AI 正在处理当前任务，您可以开启新对话同时进行其他操作' : '描述你想剪辑的内容...'
 })
 
 const toggleExpand = (): void => {

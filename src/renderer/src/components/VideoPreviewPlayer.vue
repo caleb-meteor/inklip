@@ -30,6 +30,16 @@ let leaveTimer: ReturnType<typeof setTimeout> | null = null
 const { isLoading, hasError, showPreview, hidePreview, isCurrentlyPreviewing } =
   useGlobalVideoPreview()
 
+const playAtTime = (startTime: number, endTime?: number): void => {
+  if (!props.path || props.disabled || !videoContainerRef.value) return
+  isHovered.value = true
+  showPreview(props.path, videoContainerRef.value, startTime, false, endTime)
+}
+
+defineExpose({
+  playAtTime
+})
+
 const coverUrl = computed(() => getMediaUrl(props.cover))
 
 const formatDuration = (seconds?: number): string => {

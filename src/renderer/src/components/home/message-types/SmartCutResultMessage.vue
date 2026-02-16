@@ -127,7 +127,14 @@ const handleExport = async () => {
 // We consider it processing if it's not 1, 3, or 4.
 const isProcessing = computed(() => {
   const s = taskStatus.value
-  return s !== 1 && s !== 3 && s !== 4
+  const processing = s !== 1 && s !== 3 && s !== 4
+  
+  // 当任务完成或失败时，重置 aiChatStore 的处理状态
+  if (!processing && aiChatStore) {
+    aiChatStore.setCurrentChatProcessing(false)
+  }
+  
+  return processing
 })
 
 const isFailed = computed(() => {
@@ -367,9 +374,16 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="progress-details">
-          <div class="wait-banner">
-            <span class="clock-icon">⏱️</span>
-            <span>预计耗时 3～5 分钟，请耐心等待...</span>
+          <div class="combined-wait-panel">
+            <div class="wait-header">
+              <span class="clock-icon">⏱️</span>
+              <span>预计耗时 3～5 分钟，请耐心等待...</span>
+            </div>
+            <div class="wait-divider"></div>
+            <div class="new-chat-tip">
+              <span class="tip-dot"></span>
+              <span>AI 正在后台处理中，您可以开启新对话同时进行其他操作</span>
+            </div>
           </div>
           
           <div class="task-grid">
@@ -625,17 +639,54 @@ onBeforeUnmount(() => {
   gap: 16px;
 }
 
-.wait-banner {
+.combined-wait-panel {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.wait-header {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
+  padding: 12px;
   font-size: 13px;
   color: #94a3b8;
   font-weight: 500;
+}
+
+.wait-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.05), transparent);
+}
+
+.new-chat-tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+  padding: 10px;
+  background: rgba(59, 130, 246, 0.02);
+}
+
+.tip-dot {
+  width: 6px;
+  height: 6px;
+  background: #3b82f6;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); opacity: 0.5; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.5; }
 }
 
 .task-grid {

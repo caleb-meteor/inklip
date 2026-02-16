@@ -11,6 +11,14 @@ export interface VideoItem {
   width?: number
   height?: number
   subtitle: string | any // Backend may return parsed JSON object or string
+  feature?: {
+    main_content?: string
+    product_name?: string
+    pain_points?: string
+    selling_points?: string
+    price?: string
+    anchor_info?: string
+  } | null // 视频特征：字幕提取内容
   audio: string
   silent: string
   status: number
@@ -57,6 +65,45 @@ export function getVideosApi(params?: {
     url: '/api/videos',
     method: 'get',
     params: params
+  })
+}
+
+/** 全文搜索命中的字幕片段（带时间与相关度分） */
+export interface SearchSegment {
+  video_id: number
+  text: string
+  start_ms: number
+  end_ms: number
+  start_s: number
+  end_s: number
+  /** 字幕相关度分，越高越相关 */
+  score?: number
+}
+
+/** 全文搜索结果单项 */
+export interface VideoSearchResultItem {
+  video: VideoItem
+  segments: SearchSegment[]
+  match_in: string[]
+  score: number
+}
+
+export interface VideoSearchResponse {
+  intent: number
+  intent_label: string
+  keywords: string[]
+  results: VideoSearchResultItem[]
+}
+
+/**
+ * 全文搜索视频（字幕 + 名称，带关键词权重）
+ * 识别到搜索意图后调用，返回匹配视频及字幕片段（含时间）
+ */
+export function searchVideosApi(query: string, limit?: number): Promise<VideoSearchResponse> {
+  return request({
+    url: '/api/videos/search',
+    method: 'post',
+    data: { query: query.trim(), limit: limit ?? 5 }
   })
 }
 
