@@ -56,10 +56,10 @@ export interface VideoUploadResponse {
  * @param params Optional filters
  * @returns Promise with list of videos
  */
-export function getVideosApi(params?: { 
-  ids?: number[], 
-  anchor_id?: number, 
-  product_id?: number 
+export function getVideosApi(params?: {
+  ids?: number[]
+  anchor_id?: number
+  product_id?: number
 }): Promise<VideoItem[]> {
   return request({
     url: '/api/videos',
@@ -256,27 +256,6 @@ export function deleteSmartCutApi(id: number): Promise<void> {
   })
 }
 
-export interface PromptBuiltin {
-  id: string
-  name: string
-  description: string
-}
-
-export interface PromptBuiltinsResponse {
-  list: PromptBuiltin[]
-}
-
-/**
- * Get built-in prompts
- * @returns Promise with list of built-in prompts
- */
-export function getPromptBuiltinsApi(): Promise<PromptBuiltinsResponse> {
-  return request({
-    url: '/api/prompt-builtins',
-    method: 'get'
-  })
-}
-
 /**
  * Rename a video
  * @param id Video ID
@@ -305,40 +284,6 @@ export function deleteVideoApi(id: number): Promise<void> {
     method: 'delete',
     data: {
       id
-    }
-  })
-}
-
-/**
- * Add video category
- * @param id Video ID
- * @param categoryId Category ID
- * @returns Promise with updated video response
- */
-export function addVideoCategoryApi(id: number, categoryId: number): Promise<VideoItem> {
-  return request({
-    url: '/api/video/category',
-    method: 'post',
-    data: {
-      id,
-      category_id: categoryId
-    }
-  })
-}
-
-/**
- * Remove video category
- * @param id Video ID
- * @param categoryId Category ID
- * @returns Promise with updated video response
- */
-export function removeVideoCategoryApi(id: number, categoryId: number): Promise<VideoItem> {
-  return request({
-    url: '/api/video/category',
-    method: 'delete',
-    data: {
-      id,
-      category_id: categoryId
     }
   })
 }

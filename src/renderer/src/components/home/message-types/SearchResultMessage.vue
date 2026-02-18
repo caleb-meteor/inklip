@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { type PropType, ref } from 'vue'
-import { NTag, NIcon, NSpace, NDivider, NCollapse, NCollapseItem } from 'naive-ui'
-import { PlayCircleOutline, SearchOutline, VideocamOutline } from '@vicons/ionicons5'
+import { NIcon, NCollapse, NCollapseItem } from 'naive-ui'
+import { VideocamOutline } from '@vicons/ionicons5'
 import VideoPreviewPlayer from '../../VideoPreviewPlayer.vue'
 import type { VideoSearchResultItem } from '../../../api/video'
 
@@ -40,14 +40,20 @@ const handleSegmentClick = (videoId: number, startTime: number, endTime: number)
           <template #header>
             <div class="collapse-header">
               <n-icon :component="VideocamOutline" class="header-video-icon" />
-              <span class="header-video-name" :title="item.video?.name">{{ item.video?.name }}</span>
+              <span class="header-video-name" :title="item.video?.name">{{
+                item.video?.name
+              }}</span>
             </div>
           </template>
-          
+
           <div class="video-row">
             <div class="video-preview-wrap">
               <VideoPreviewPlayer
-                :ref="(el) => { if (item.video?.id) videoPlayers[item.video.id] = el }"
+                :ref="
+                  (el) => {
+                    if (item.video?.id) videoPlayers[item.video.id] = el
+                  }
+                "
                 :path="item.video?.path"
                 :cover="item.video?.cover"
                 :duration="item.video?.duration ?? 0"

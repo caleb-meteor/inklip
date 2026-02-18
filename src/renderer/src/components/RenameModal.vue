@@ -63,11 +63,11 @@ const handleConfirm = () => {
         <span>重命名视频</span>
       </div>
     </template>
-    
+
     <template #header-extra>
-       <div class="close-btn" @click="handleClose">
-         <n-icon size="20"><CloseOutline /></n-icon>
-       </div>
+      <div class="close-btn" @click="handleClose">
+        <n-icon size="20"><CloseOutline /></n-icon>
+      </div>
     </template>
 
     <div class="modal-content">
@@ -75,13 +75,13 @@ const handleConfirm = () => {
       <n-input
         v-model:value="renameVideoName"
         placeholder="请输入名称"
-        @keyup.enter="handleConfirm"
         autofocus
         class="custom-input"
         size="large"
+        @keyup.enter="handleConfirm"
       >
         <template #suffix>
-           <span class="extension-text">{{ extension }}</span>
+          <span class="extension-text">{{ extension }}</span>
         </template>
       </n-input>
       <div class="hint-text">
@@ -92,7 +92,13 @@ const handleConfirm = () => {
     <template #footer>
       <div class="modal-footer">
         <n-button quaternary size="medium" @click="handleClose">取消</n-button>
-        <n-button type="primary" size="medium" :loading="props.loading" @click="handleConfirm" color="#f59e0b">
+        <n-button
+          type="primary"
+          size="medium"
+          :loading="props.loading"
+          color="#f59e0b"
+          @click="handleConfirm"
+        >
           确认修改
         </n-button>
       </div>

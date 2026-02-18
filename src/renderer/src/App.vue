@@ -6,11 +6,10 @@ import {
   darkTheme,
   type GlobalThemeOverrides
 } from 'naive-ui'
-import { RouterView, useRouter, useRoute } from 'vue-router'
+import { RouterView, useRouter } from 'vue-router'
 import { onMounted } from 'vue'
 import { useWebsocketStore } from './stores/websocket'
 import { setBaseUrl } from './utils/request'
-
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
@@ -32,7 +31,6 @@ const themeOverrides: GlobalThemeOverrides = {
 
 const wsStore = useWebsocketStore()
 const router = useRouter()
-const route = useRoute()
 
 const initConnection = (port: number): void => {
   console.log('[Renderer] Initializing connection with port:', port)

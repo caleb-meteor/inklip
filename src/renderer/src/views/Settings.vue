@@ -14,7 +14,7 @@ import {
   NH2,
   NInputGroup
 } from 'naive-ui'
-import { Settings as SettingsIcon, ArrowBack, FolderOpenOutline, KeyOutline } from '@vicons/ionicons5'
+import { ArrowBack, FolderOpenOutline, KeyOutline } from '@vicons/ionicons5'
 import { saveConfig, getConfig, setApiKey, getApiKey, validateApiKey } from '../api/config'
 
 const router = useRouter()
@@ -205,7 +205,7 @@ onMounted(() => {
           </template>
         </n-button>
         <div class="header-title">
-          <n-h2 style="margin: 0; font-size: 24px; line-height: 1.2;">设置</n-h2>
+          <n-h2 style="margin: 0; font-size: 24px; line-height: 1.2">设置</n-h2>
           <n-text depth="3" class="header-subtitle">管理应用程序配置和首选项</n-text>
         </div>
       </div>
@@ -217,7 +217,7 @@ onMounted(() => {
             <template #header-extra>
               <n-icon size="20" depth="3"><FolderOpenOutline /></n-icon>
             </template>
-            
+
             <n-alert type="info" class="mb-4" :show-icon="true" :bordered="false">
               修改目录后，系统会自动将原目录下的所有视频文件迁移到新目录。
             </n-alert>
@@ -228,23 +228,23 @@ onMounted(() => {
                 <div class="setting-desc">存储视频文件和相关数据的本地路径</div>
               </div>
               <div class="setting-control">
-                 <n-input
-                    v-model:value="videoDataDirectory"
-                    placeholder="视频数据目录路径"
-                    readonly
-                  >
+                <n-input v-model:value="videoDataDirectory" placeholder="视频数据目录路径" readonly>
                   <template #suffix>
-                    <n-button 
-                      text 
-                      type="primary" 
-                      :loading="loading || migrating" 
+                    <n-button
+                      text
+                      type="primary"
+                      :loading="loading || migrating"
                       @click="selectDirectory"
                     >
                       {{ migrating ? '迁移中' : '更改' }}
                     </n-button>
                   </template>
-                 </n-input>
-                 <n-text v-if="migrateProgress" depth="3" style="font-size: 12px; margin-top: 8px; display: block;">
+                </n-input>
+                <n-text
+                  v-if="migrateProgress"
+                  depth="3"
+                  style="font-size: 12px; margin-top: 8px; display: block"
+                >
                   {{ migrateProgress }}
                 </n-text>
               </div>
@@ -262,43 +262,54 @@ onMounted(() => {
                 <div class="setting-title">API Key</div>
                 <div class="setting-desc">用于访问云端服务的认证密钥</div>
               </div>
-              
+
               <div class="setting-control">
                 <n-space vertical>
-                   <div v-if="hasApiKey && !isEditingApiKey" class="api-key-display">
-                      <n-input :value="maskedApiKey" readonly type="text">
-                        <template #suffix>
-                          <n-button text type="primary" @click="isEditingApiKey = true">修改</n-button>
-                        </template>
-                      </n-input>
-                   </div>
+                  <div v-if="hasApiKey && !isEditingApiKey" class="api-key-display">
+                    <n-input :value="maskedApiKey" readonly type="text">
+                      <template #suffix>
+                        <n-button text type="primary" @click="isEditingApiKey = true"
+                          >修改</n-button
+                        >
+                      </template>
+                    </n-input>
+                  </div>
 
-                   <n-input-group v-if="!hasApiKey || isEditingApiKey">
-                      <n-input
-                        v-model:value="apiKey"
-                        type="password"
-                        placeholder="请输入 API Key"
-                        show-password-on="click"
-                        @keyup.enter="saveApiKey"
-                      />
-                      <n-button
-                        type="primary"
-                        :loading="loading"
-                        :disabled="!apiKey.trim()"
-                        @click="saveApiKey"
-                      >
-                        保存
-                      </n-button>
-                      <n-button
-                         v-if="hasApiKey"
-                         @click="() => { isEditingApiKey = false; apiKey = ''; }"
-                      >
-                        取消
-                      </n-button>
-                   </n-input-group>
-                   
-                   <n-text depth="3" style="font-size: 12px">
-                    {{ hasApiKey && !isEditingApiKey ? '您的 API Key 已安全保存' : '请输入有效的 API Key 以启用云端功能' }}
+                  <n-input-group v-if="!hasApiKey || isEditingApiKey">
+                    <n-input
+                      v-model:value="apiKey"
+                      type="password"
+                      placeholder="请输入 API Key"
+                      show-password-on="click"
+                      @keyup.enter="saveApiKey"
+                    />
+                    <n-button
+                      type="primary"
+                      :loading="loading"
+                      :disabled="!apiKey.trim()"
+                      @click="saveApiKey"
+                    >
+                      保存
+                    </n-button>
+                    <n-button
+                      v-if="hasApiKey"
+                      @click="
+                        () => {
+                          isEditingApiKey = false
+                          apiKey = ''
+                        }
+                      "
+                    >
+                      取消
+                    </n-button>
+                  </n-input-group>
+
+                  <n-text depth="3" style="font-size: 12px">
+                    {{
+                      hasApiKey && !isEditingApiKey
+                        ? '您的 API Key 已安全保存'
+                        : '请输入有效的 API Key 以启用云端功能'
+                    }}
                   </n-text>
                 </n-space>
               </div>

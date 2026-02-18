@@ -172,7 +172,10 @@ export function registerIpcHandlers(
       properties: ['openFile', 'multiSelections'],
       buttonLabel: '选择',
       filters: [
-        { name: '视频和字幕文件', extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'm4v', 'srt'] }
+        {
+          name: '视频和字幕文件',
+          extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'm4v', 'srt']
+        }
       ]
     })
 
@@ -206,10 +209,10 @@ export function registerIpcHandlers(
 
     // 尝试自动匹配字幕
     const subtitleFiles: Record<string, string> = {}
-    validFilePaths.forEach(videoPath => {
+    validFilePaths.forEach((videoPath) => {
       const videoBaseName = path.basename(videoPath, path.extname(videoPath)).toLowerCase()
-      
-      const matchedSubtitle = validSubtitlePaths.find(subPath => {
+
+      const matchedSubtitle = validSubtitlePaths.find((subPath) => {
         const subBaseName = path.basename(subPath, path.extname(subPath)).toLowerCase()
         return subBaseName === videoBaseName
       })

@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, type PropType } from 'vue'
 import { NIcon } from 'naive-ui'
-import { AlertCircleOutline, SparklesOutline } from '@vicons/ionicons5'
-import VideoPreviewPlayer from '../VideoPreviewPlayer.vue'
+import { SparklesOutline, FolderOpenOutline, VideocamOutline } from '@vicons/ionicons5'
 import VideoSelectionMessage from './message-types/VideoSelectionMessage.vue'
 import VideoUploadMessage from './message-types/VideoUploadMessage.vue'
 import SmartCutResultMessage from './message-types/SmartCutResultMessage.vue'
@@ -25,7 +24,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits<{
+const _emit = defineEmits<{
   (e: 'suggestionClick', suggestion: any): void
 }>()
 
@@ -33,28 +32,30 @@ const scrollContainer = ref<HTMLElement | null>(null)
 const messageList = computed(() => props.messages)
 
 const typedMessageIds = new Set<string>()
-watch(messageList, async (newList) => {
-  if (!newList.length) return
-  
-  for (const msg of newList) {
-    const isNewMessage = msg.id.startsWith('new_message_')
-    
-    if (
-      msg.role === 'assistant' &&
-      !typedMessageIds.has(msg.id) &&
-      !msg.isTyping &&
-      isNewMessage &&
-      typeof msg.content === 'string' &&
-      msg.content.length > 0 &&
-      (!msg.displayedContent || msg.displayedContent.length === 0)
-    ) {
-      typedMessageIds.add(msg.id)
-      await typeMessage(msg.id, msg.content, 20)
-    }
-  }
-}, { immediate: true, deep: true })
+watch(
+  messageList,
+  async (newList) => {
+    if (!newList.length) return
 
-const suggestionList = computed(() => props.suggestions)
+    for (const msg of newList) {
+      const isNewMessage = msg.id.startsWith('new_message_')
+
+      if (
+        msg.role === 'assistant' &&
+        !typedMessageIds.has(msg.id) &&
+        !msg.isTyping &&
+        isNewMessage &&
+        typeof msg.content === 'string' &&
+        msg.content.length > 0 &&
+        (!msg.displayedContent || msg.displayedContent.length === 0)
+      ) {
+        typedMessageIds.add(msg.id)
+        await typeMessage(String(msg.id), msg.content, 20)
+      }
+    }
+  },
+  { immediate: true, deep: true }
+)
 
 const scrollToBottom = async (): Promise<void> => {
   await nextTick()
@@ -63,17 +64,27 @@ const scrollToBottom = async (): Promise<void> => {
   }
 }
 
-watch(messageList, () => {
-  scrollToBottom()
-}, { deep: true })
+watch(
+  messageList,
+  () => {
+    scrollToBottom()
+  },
+  { deep: true }
+)
 
-const handleSuggestionClick = (suggestion: any): void => {
-  emit('suggestionClick', suggestion)
-}
-
-const handleConfirmVideos = async (msgId: string, videoIds: number[], minTime: number, maxTime: number): Promise<void> => {
+const handleConfirmVideos = async (
+  msgId: string,
+  videoIds: number[],
+  minTime: number,
+  maxTime: number
+): Promise<void> => {
   try {
-    console.log('[handleConfirmVideos] 开始确认:', { msgId, videoCount: videoIds.length, minTime, maxTime })
+    console.log('[handleConfirmVideos] 开始确认:', {
+      msgId,
+      videoCount: videoIds.length,
+      minTime,
+      maxTime
+    })
     // Pass duration options to your service (assuming service can handle it, otherwise pass as payload)
     // Here assuming the service function signature might need update or we pass config object.
     // Given previous code was `smartCutAiService.confirmAndProceed(msgId, videoIds)`
@@ -83,30 +94,37 @@ const handleConfirmVideos = async (msgId: string, videoIds: number[], minTime: n
     // Since I cannot see service definition right now, I will assume interaction payload update is handled there.
     // But wait, the user request said: "User input -> Request API -> Get Dict -> Match -> Show Card. If confirmed -> Call Smart Cut API."
     // So `confirmAndProceed` likely triggers the Smart Cut API.
-    
+
     // Let's pass the config.
-    await smartCutAiService.confirmAndProceed(msgId, videoIds, { minDuration: minTime, maxDuration: maxTime })
-    
+    await smartCutAiService.confirmAndProceed(msgId, videoIds, {
+      minDuration: minTime,
+      maxDuration: maxTime
+    })
+
     console.log('[handleConfirmVideos] 确认完成')
   } catch (error) {
     console.error('[handleConfirmVideos] 确认视频失败:', error)
   }
 }
 
-const handleCancelVideos = async (msgId: string): Promise<void> => {
+const handleCancelVideos = async (_msgId: string): Promise<void> => {
   await smartCutAiService.cancelConfirmation()
 }
 
 // Optimized typeMessage for faster/fluid output 'like AI'
-const typeMessage = async (msgId: string, fullContent: string, speed: number = 20): Promise<void> => {
-  const idx = messageList.value.findIndex(m => m.id === msgId)
+const typeMessage = async (
+  _msgId: string,
+  fullContent: string,
+  speed: number = 20
+): Promise<void> => {
+  const idx = messageList.value.findIndex((m) => m.id === _msgId)
   if (idx === -1) return
 
   const msg = { ...messageList.value[idx] }
   msg.isTyping = true
   // 开始打字时设置处理状态
   aiChatStore.setCurrentChatProcessing(true)
-  
+
   msg.displayedContent = ''
   messageList.value.splice(idx, 1, { ...msg })
 
@@ -117,51 +135,47 @@ const typeMessage = async (msgId: string, fullContent: string, speed: number = 2
     msg.displayedContent = fullContent.substring(0, i + step)
     messageList.value.splice(idx, 1, { ...msg })
     // Use requestAnimationFrame or very small timeout for "token" feel
-    await new Promise(resolve => setTimeout(resolve, speed))
+    await new Promise((resolve) => setTimeout(resolve, speed))
   }
-  
+
   // Ensure full content matches at end
   msg.displayedContent = fullContent
   msg.isTyping = false
   messageList.value.splice(idx, 1, { ...msg })
-  
+
   // 打字结束时检查是否还有其他正在打字的消息
-  const hasOtherTyping = messageList.value.some(m => m.id !== msgId && m.isTyping)
+  const hasOtherTyping = messageList.value.some((m) => m.id !== _msgId && m.isTyping)
   if (!hasOtherTyping) {
     aiChatStore.setCurrentChatProcessing(false)
   }
 }
 
 const getMessageContent = (msg: Message): string => {
-  return msg.isTyping ? (msg.displayedContent || '') : msg.content
-}
-
-const formatDurationSeconds = (seconds: number): string => {
-  if (seconds < 60) {
-    return `${Math.floor(seconds)}秒`
-  }
-  const minutes = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
+  return msg.isTyping ? msg.displayedContent || '' : msg.content
 }
 </script>
 
 <template>
   <div class="chat-container">
-    <div class="messages-viewport" ref="scrollContainer">
+    <div ref="scrollContainer" class="messages-viewport">
       <div v-if="messageList.length === 0" class="empty-state">
         <div class="greeting-container">
           <h1 class="greeting-text">
             <span class="gradient-text">你好，创作者</span>
           </h1>
           <p class="greeting-sub">
-            把繁琐交给 <span class="highlight-text">影氪</span>，剪辑从未如此 <span class="highlight-text">快乐</span>
+            把繁琐交给 <span class="highlight-text">影氪</span>，剪辑从未如此
+            <span class="highlight-text">快乐</span>
           </p>
         </div>
 
         <div class="features-grid">
           <div class="feature-card">
-            <div class="feature-icon">🗂️</div>
+            <div class="feature-icon">
+              <n-icon size="24" color="#4facfe">
+                <FolderOpenOutline />
+              </n-icon>
+            </div>
             <div class="feature-content">
               <h3>智能素材管理</h3>
               <p>秒级定位素材，让管理井井有条。</p>
@@ -169,31 +183,45 @@ const formatDurationSeconds = (seconds: number): string => {
           </div>
 
           <div class="feature-card">
-            <div class="feature-icon">⚡️</div>
+            <div class="feature-icon">
+              <n-icon size="24" color="#00f2fe">
+                <VideocamOutline />
+              </n-icon>
+            </div>
             <div class="feature-content">
               <h3>极速智能剪辑</h3>
-              <p>你只管表达创意，繁琐的筛选与粗剪交给 影氪。一键提取精华片段并自动成片，剪辑从未如此高效。</p>
+              <p>
+                你只管表达创意，繁琐的筛选与粗剪交给
+                影氪。一键提取精华片段并自动成片，剪辑从未如此高效。
+              </p>
             </div>
           </div>
         </div>
       </div>
 
       <div v-else class="messages-list">
-        <div
-          v-for="msg in messageList"
-          :key="msg.id"
-          :class="['message-row', msg.role]"
-        >
+        <div v-for="msg in messageList" :key="msg.id" :class="['message-row', msg.role]">
           <div class="message-body">
-            <div class="message-bubble" :class="{ 'vip-upgrade-bubble': msg.payload?.type === 'vip_upgrade_prompt' }">
+            <div
+              class="message-bubble"
+              :class="{ 'vip-upgrade-bubble': msg.payload?.type === 'vip_upgrade_prompt' }"
+            >
               <div class="message-text">
                 <!-- VIP 升级提示 -->
                 <div v-if="msg.payload?.type === 'vip_upgrade_prompt'" class="vip-upgrade-message">
                   <div class="vip-icon-wrapper">
                     <!-- 使用更专业的钻石图标替代皇冠 -->
-                    <svg class="vip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M6 4h12l4 6-10 10L2 10l4-6z"/>
-                      <path d="M2 10h20M12 20V10"/>
+                    <svg
+                      class="vip-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M6 4h12l4 6-10 10L2 10l4-6z" />
+                      <path d="M2 10h20M12 20V10" />
                     </svg>
                     <div class="vip-glow-effect"></div>
                   </div>
@@ -205,12 +233,19 @@ const formatDurationSeconds = (seconds: number): string => {
                     <n-icon size="16"><sparkles-outline /></n-icon>
                   </div>
                 </div>
-                
-                <div v-else-if="msg.content && !msg.payload?.taskCard" class="text-content" v-html="getMessageContent(msg)"></div>
-                
+
+                <div
+                  v-else-if="msg.content && !msg.payload?.taskCard"
+                  class="text-content"
+                  v-html="getMessageContent(msg)"
+                ></div>
+
                 <!-- Thinking steps or other interactive elements here -->
-                <ThinkingStepsMessage v-if="msg.role === 'assistant' && msg.payload?.steps && !msg.payload?.type" :steps="msg.payload.steps" />
-                
+                <ThinkingStepsMessage
+                  v-if="msg.role === 'assistant' && msg.payload?.steps && !msg.payload?.type"
+                  :steps="msg.payload.steps"
+                />
+
                 <VideoFilteringTaskMessage
                   v-if="msg.payload?.type === 'video_filter_task' && msg.payload?.steps"
                   :steps="msg.payload.steps"
@@ -218,7 +253,11 @@ const formatDurationSeconds = (seconds: number): string => {
 
                 <!-- TaskCardMessage is already rendered inside SmartCutResultMessage if aiGenVideoId exists -->
                 <TaskCardMessage
-                  v-if="msg.payload?.type === 'task_card' && msg.payload?.taskCard?.steps && !msg.payload?.aiGenVideoId"
+                  v-if="
+                    msg.payload?.type === 'task_card' &&
+                    msg.payload?.taskCard?.steps &&
+                    !msg.payload?.aiGenVideoId
+                  "
                   :steps="msg.payload.taskCard.steps"
                 />
 
@@ -235,21 +274,35 @@ const formatDurationSeconds = (seconds: number): string => {
                 />
 
                 <VideoSelectionMessage
-                  v-if="msg.payload?.videos && msg.payload.videos.length > 0 && msg.payload?.type !== 'video_upload'"
+                  v-if="
+                    msg.payload?.videos &&
+                    msg.payload.videos.length > 0 &&
+                    msg.payload?.type !== 'video_upload'
+                  "
                   :message-id="msg.id"
                   :videos="msg.payload.videos"
                   :hide-title="!!msg.payload?.taskCard"
                   :awaiting-confirmation="msg.payload?.awaitingConfirmation || false"
                   :is-interactive="msg.payload?.isInteractive !== false"
                   :cancelled="msg.payload?.cancelled || false"
-                  @confirm="(videoIds, minTime, maxTime) => handleConfirmVideos(msg.id, videoIds, minTime, maxTime)"
+                  @confirm="
+                    (videoIds, minTime, maxTime) =>
+                      handleConfirmVideos(msg.id, videoIds, minTime, maxTime)
+                  "
                   @cancel="() => handleCancelVideos(msg.id)"
                 />
 
-                <SmartCutResultMessage v-if="msg.payload?.aiGenVideoId" :msg-id="msg.id" :task="msg.payload" />
-                
+                <SmartCutResultMessage
+                  v-if="msg.payload?.aiGenVideoId"
+                  :msg-id="msg.id"
+                  :task="msg.payload"
+                />
+
                 <!-- Match APPLIED CHANGES UI from screenshot -->
-                <div v-if="msg.role === 'assistant' && msg.payload?.smartCutTask" class="applied-changes-card">
+                <div
+                  v-if="msg.role === 'assistant' && msg.payload?.smartCutTask"
+                  class="applied-changes-card"
+                >
                   <div class="changes-header">APPLIED CHANGES</div>
                   <ul class="changes-list">
                     <li><span class="check">✓</span> Jump cut @ 00:40.5</li>
@@ -707,7 +760,7 @@ const formatDurationSeconds = (seconds: number): string => {
 .vip-icon {
   width: 24px;
   height: 24px;
-  color: #FDB931;
+  color: #fdb931;
   z-index: 2;
   animation: gentle-bounce 3s ease-in-out infinite;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
@@ -731,7 +784,7 @@ const formatDurationSeconds = (seconds: number): string => {
 .vip-title {
   font-size: 14px;
   font-weight: 700;
-  background: linear-gradient(135deg, #FFD700 0%, #FDB931 100%);
+  background: linear-gradient(135deg, #ffd700 0%, #fdb931 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -746,7 +799,7 @@ const formatDurationSeconds = (seconds: number): string => {
 }
 
 .vip-action-arrow {
-  color: #FDB931;
+  color: #fdb931;
   opacity: 0.8;
   transition: transform 0.3s ease;
   display: flex;
@@ -759,7 +812,8 @@ const formatDurationSeconds = (seconds: number): string => {
 }
 
 @keyframes gentle-bounce {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px);
   }
   50% {
@@ -768,8 +822,15 @@ const formatDurationSeconds = (seconds: number): string => {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.2); }
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.2);
+  }
 }
 
 .timeline-segment {
@@ -881,8 +942,14 @@ const formatDurationSeconds = (seconds: number): string => {
 }
 
 @keyframes cardFadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .analyzing-icon {
@@ -907,8 +974,14 @@ const formatDurationSeconds = (seconds: number): string => {
 }
 
 @keyframes iconPulse {
-  0% { transform: scale(1); opacity: 0.5; }
-  100% { transform: scale(1.3); opacity: 0; }
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
 }
 
 .analyzing-info {
@@ -953,9 +1026,18 @@ const formatDurationSeconds = (seconds: number): string => {
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.8); opacity: 0.5; }
-  50% { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(0.8); opacity: 0.5; }
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
 }
 
 /* Features Grid in Empty State */
@@ -1021,10 +1103,9 @@ const formatDurationSeconds = (seconds: number): string => {
   gap: 16px;
 }
 
-
 /* Scrollbar hidden for cleanest look, but functional */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 0px; 
+  width: 0px;
   background: transparent;
 }
 </style>

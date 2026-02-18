@@ -24,11 +24,11 @@ export interface UsageInfo {
 export function isUsageAvailable(info: UsageInfo | null | undefined): boolean {
   if (!info?.isVip) return false
   if (!info.expiredAt) return true
-  
+
   // 确保日期比较准确，将当前日期也设为当天开始（如果 expiredAt 只包含日期）
   const expireDate = new Date(info.expiredAt)
   const now = new Date()
-  
+
   // 如果 expiredAt 只是日期（没有时间），则比较年、月、日
   return expireDate > now
 }
@@ -238,7 +238,11 @@ export const useWebsocketStore = defineStore('websocket', () => {
         if (data.task_status === 2 || data.ai_gen_video_status === 1) {
           // 任务完成
           window.api.showNotification('智能剪辑完成', '点击查看最新剪辑结果', '/smart-editor')
-        } else if (data.task_status === 3 || data.ai_gen_video_status === 3 || data.ai_gen_video_status === 4) {
+        } else if (
+          data.task_status === 3 ||
+          data.ai_gen_video_status === 3 ||
+          data.ai_gen_video_status === 4
+        ) {
           // 任务失败
           window.api.showNotification('智能剪辑失败', '请检查任务详情', '/smart-editor')
         }

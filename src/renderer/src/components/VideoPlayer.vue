@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, watch } from 'vue'
 import { getMediaUrl } from '../utils/media'
-import { getVideosApi, getSmartCutApi, type VideoItem } from '../api/video'
+import { getVideosApi, getSmartCutApi } from '../api/video'
 
 interface SubtitleItem {
   text: string
@@ -31,15 +31,6 @@ const duration = ref(0)
 const subtitles = ref<SubtitleItem[]>([])
 const currentSubtitleIndex = ref<number>(-1)
 const subtitlePanelRef = ref<HTMLElement | null>(null)
-
-const togglePlay = (): void => {
-  if (!videoRef.value) return
-  if (videoRef.value.paused) {
-    videoRef.value.play()
-  } else {
-    videoRef.value.pause()
-  }
-}
 
 const onTimeUpdate = (): void => {
   if (!videoRef.value) return
@@ -74,9 +65,7 @@ const updateCurrentSubtitle = (): void => {
 
 const scrollToSubtitle = (index: number) => {
   if (index >= 0 && subtitlePanelRef.value) {
-    const subtitleElement = subtitlePanelRef.value.querySelector(
-      `[data-subtitle-index="${index}"]`
-    )
+    const subtitleElement = subtitlePanelRef.value.querySelector(`[data-subtitle-index="${index}"]`)
     if (subtitleElement) {
       subtitleElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
@@ -90,7 +79,7 @@ const seekToSubtitle = (index: number): void => {
   const targetTime = subtitle.offsets.from / 1000
   videoRef.value.currentTime = targetTime
   videoRef.value.play()
-  
+
   currentSubtitleIndex.value = index
   scrollToSubtitle(index)
 }
@@ -100,7 +89,7 @@ const processSubtitleData = (subtitleData: any): SubtitleItem[] => {
 
   // Check if it's already an array (JSON parsed)
   let subtitleArray: any[] = []
-  
+
   if (Array.isArray(subtitleData)) {
     subtitleArray = subtitleData
   } else if (subtitleData?.transcription && Array.isArray(subtitleData.transcription)) {
@@ -108,16 +97,16 @@ const processSubtitleData = (subtitleData: any): SubtitleItem[] => {
   } else if (typeof subtitleData === 'string') {
     // Try to parse if it's a string
     try {
-        const parsed = JSON.parse(subtitleData)
-        if (Array.isArray(parsed)) {
-            subtitleArray = parsed
-        } else if (parsed?.transcription && Array.isArray(parsed.transcription)) {
-            subtitleArray = parsed.transcription
-        }
+      const parsed = JSON.parse(subtitleData)
+      if (Array.isArray(parsed)) {
+        subtitleArray = parsed
+      } else if (parsed?.transcription && Array.isArray(parsed.transcription)) {
+        subtitleArray = parsed.transcription
+      }
     } catch (e) {
-        // Not a JSON string
-        console.warn('Subtitle is a string but not JSON', e)
-        return []
+      // Not a JSON string
+      console.warn('Subtitle is a string but not JSON', e)
+      return []
     }
   }
 
@@ -145,7 +134,7 @@ const processSubtitleData = (subtitleData: any): SubtitleItem[] => {
 
 const loadSubtitles = async (): Promise<void> => {
   subtitles.value = []
-  
+
   // 1. Direct props
   if (props.subtitleData) {
     const processed = processSubtitleData(props.subtitleData)
@@ -169,10 +158,10 @@ const loadSubtitles = async (): Promise<void> => {
       // Only fetch if we really need to (e.g. subtitleData prop was empty)
       // If we have videoId, let's fetch to be safe in case props.subtitleData was stale or empty string
       if (props.videoId) {
-         const videos = await getVideosApi([props.videoId])
-         if (videos && videos.length > 0 && videos[0].subtitle) {
-            videoSubtitle = videos[0].subtitle
-         }
+        const videos = await getVideosApi([props.videoId])
+        if (videos && videos.length > 0 && videos[0].subtitle) {
+          videoSubtitle = videos[0].subtitle
+        }
       }
     }
 
@@ -192,22 +181,24 @@ const formatSubtitleTime = (subtitle: SubtitleItem): string => {
   }
 
   if (subtitle.timestamps) {
-     // Use timestamp strings if available
-     // Simplified for display
-     const from = subtitle.timestamps.from.split(',')[0]
-     return from
+    // Use timestamp strings if available
+    // Simplified for display
+    const from = subtitle.timestamps.from.split(',')[0]
+    return from
   }
-  
+
   return formatTimePart(subtitle.offsets.from / 1000)
 }
 
 watch(() => props.videoId, loadSubtitles, { immediate: true })
 watch(() => props.subtitleData, loadSubtitles)
-watch(() => props.path, () => {
+watch(
+  () => props.path,
+  () => {
     // Reset if path changes
     currentTime.value = 0
-})
-
+  }
+)
 </script>
 
 <template>
@@ -239,7 +230,7 @@ watch(() => props.path, () => {
             <span v-else>无字幕</span>
           </span>
         </div>
-        
+
         <div v-if="subtitles.length > 0" class="subtitle-list">
           <div
             v-for="(subtitle, index) in subtitles"

@@ -1,13 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { NInput, NButton, NIcon, NTooltip } from 'naive-ui'
-import {
-  Send,
-  Attach,
-  Expand,
-  Contract,
-  StopCircleOutline
-} from '@vicons/ionicons5'
+import { NInput, NButton, NIcon } from 'naive-ui'
+import { Send, Expand, Contract, StopCircleOutline } from '@vicons/ionicons5'
 
 const props = defineProps({
   disabled: {
@@ -16,7 +10,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['send', 'open-upload-modal'])
+const emit = defineEmits(['send'])
 
 const text = ref('')
 const inputRef = ref<any>(null)
@@ -24,7 +18,9 @@ const isExpanded = ref(false)
 const isFocused = ref(false)
 
 const placeholderText = computed(() => {
-  return props.disabled ? 'AI 正在处理当前任务，您可以开启新对话同时进行其他操作' : '描述你想剪辑的内容...'
+  return props.disabled
+    ? 'AI 正在处理当前任务，您可以开启新对话同时进行其他操作'
+    : '描述你想剪辑的内容...'
 })
 
 const toggleExpand = (): void => {
@@ -60,29 +56,12 @@ onMounted(() => {
     inputRef.value?.focus()
   }, 300)
 })
-
 </script>
 
 <template>
   <div class="chat-input-container">
     <div :class="['input-wrapper', { 'is-expanded': isExpanded, 'is-focused': isFocused }]">
       <div class="input-inner">
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <n-button 
-              quaternary 
-              circle 
-              class="action-btn attach-btn"
-              @click="emit('open-upload-modal')"
-            >
-              <template #icon>
-                <n-icon size="20"><Attach /></n-icon>
-              </template>
-            </n-button>
-          </template>
-          上传素材
-        </n-tooltip>
-        
         <n-input
           ref="inputRef"
           v-model:value="text"
@@ -97,10 +76,10 @@ onMounted(() => {
         />
 
         <div class="right-actions">
-           <n-button 
+          <n-button
             v-if="text.length > 50 || isExpanded"
-            quaternary 
-            circle 
+            quaternary
+            circle
             class="action-btn expand-btn"
             @click="toggleExpand"
           >
@@ -112,10 +91,10 @@ onMounted(() => {
             </template>
           </n-button>
 
-          <n-button 
+          <n-button
             v-if="!disabled"
-            type="primary" 
-            circle 
+            type="primary"
+            circle
             class="send-btn"
             :disabled="!text.trim()"
             @click="handleSend"
@@ -124,15 +103,10 @@ onMounted(() => {
               <n-icon size="18"><Send /></n-icon>
             </template>
           </n-button>
-          
+
           <div v-else class="loading-container">
             <div class="pulse-ring"></div>
-            <n-button 
-              circle 
-              secondary
-              class="stop-btn"
-              disabled
-            >
+            <n-button circle secondary class="stop-btn" disabled>
               <template #icon>
                 <n-icon size="20"><StopCircleOutline /></n-icon>
               </template>
@@ -140,7 +114,7 @@ onMounted(() => {
           </div>
         </div>
       </div>
-      
+
       <div v-if="!disabled && text.trim().length === 0" class="input-hint">
         <span><b>Enter</b> 发送</span>
         <span class="hint-divider"></span>
@@ -174,7 +148,9 @@ onMounted(() => {
 .input-wrapper.is-focused {
   background: rgba(39, 39, 42, 0.85);
   border-color: rgba(79, 172, 254, 0.5);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(79, 172, 254, 0.2);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(79, 172, 254, 0.2);
   transform: translateY(-2px);
 }
 

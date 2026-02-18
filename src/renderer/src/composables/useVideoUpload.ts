@@ -3,7 +3,7 @@ import { addAiChatMessageApi } from '../api/aiChat'
 
 export function useVideoUpload() {
   const handleUploadSuccess = async (
-    uploadedVideos: any[], 
+    uploadedVideos: any[],
     metadata?: { anchor?: string; product?: string }
   ): Promise<void> => {
     if (!uploadedVideos || uploadedVideos.length === 0) return
@@ -17,7 +17,7 @@ export function useVideoUpload() {
         if (metadata?.anchor && metadata?.product) {
           topic = `导入「${metadata.anchor}」的「${metadata.product}」${uploadedVideos.length}个视频`
         }
-        
+
         const newChat = await aiChatStore.createAiChat(topic)
         chatId = newChat.id
       }
@@ -27,14 +27,14 @@ export function useVideoUpload() {
       if (metadata?.anchor && metadata?.product) {
         userContent = `导入了「${metadata.anchor}」的「${metadata.product}」共 ${uploadedVideos.length} 个本地视频`
       }
-      
+
       // 保存到数据库
       const userMsg = await addAiChatMessageApi({
         ai_chat_id: chatId,
         role: 'user',
         content: userContent
       })
-      
+
       // 添加到本地显示 (使用真实ID)
       aiChatStore.addMessage({
         id: userMsg.id.toString(),
@@ -44,7 +44,7 @@ export function useVideoUpload() {
       })
 
       // 3. 添加助手消息（带视频卡片）
-      const displayVideos = uploadedVideos.map(v => ({
+      const displayVideos = uploadedVideos.map((v) => ({
         id: v.id,
         name: v.name || v.filename,
         path: v.path,

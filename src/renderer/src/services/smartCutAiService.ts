@@ -3,7 +3,7 @@ import { getVideosApi, smartCutApi } from '../api/video'
 import { getAnchorsApi } from '../api/anchor'
 import { getProductsApi } from '../api/product'
 import { addAiChatMessageApi, updateAiChatMessageApi } from '../api/aiChat'
-import { getDictsFromSentenceApi, type DictItem } from '../api/dict'
+import type { DictItem } from '../api/dict'
 import type { Message } from '../types/chat'
 import { aiChatStore } from './aiChatStore'
 import { useWebsocketStore, isUsageAvailable } from '../stores/websocket'
@@ -82,7 +82,7 @@ export class SmartCutAiService {
    * 重置对话步骤
    */
   private resetChatSteps(): void {
-    this.state.chatSteps.value.forEach(s => {
+    this.state.chatSteps.value.forEach((s) => {
       s.state = 'wait'
     })
   }
@@ -91,9 +91,9 @@ export class SmartCutAiService {
    * 过滤视频，并只保留封面、地址、名称、时长信息
    */
   private filterVideosByDicts(videos: any[], dicts: DictItem[]): any[] {
-    const dictIds = dicts.map(d => d.id)
+    const dictIds = dicts.map((d) => d.id)
     return videos
-      .filter(video => {
+      .filter((video) => {
         // 检查 categories 数组中是否有任何分类ID与字典ID匹配
         if (video.categories && Array.isArray(video.categories)) {
           return video.categories.some((cat: any) => dictIds.includes(cat.id))
@@ -101,7 +101,7 @@ export class SmartCutAiService {
         // 向后兼容：也检查单个的 category_id 字段
         return dictIds.includes(video.category_id) || dictIds.includes(video.cate_id)
       })
-      .map(video => ({
+      .map((video) => ({
         id: video.id,
         cover: video.cover,
         path: video.path,
@@ -119,7 +119,7 @@ export class SmartCutAiService {
     const currentAiChatId = aiChatStore.getCurrentAiChatId().value
 
     // 更新步骤状态为错误
-    this.state.chatSteps.value.forEach(step => {
+    this.state.chatSteps.value.forEach((step) => {
       if (step.state === 'wait') {
         step.state = 'error'
       }
@@ -127,15 +127,13 @@ export class SmartCutAiService {
 
     // 更新任务卡片为错误状态
     const messages = aiChatStore.getMessages().value
-    const taskCardMsg = messages.find(m => m.payload?.taskCard && m.role === 'assistant')
-    
+    const taskCardMsg = messages.find((m) => m.payload?.taskCard && m.role === 'assistant')
+
     if (taskCardMsg) {
       const errorPayload = {
         type: 'task_card',
         taskCard: {
-          steps: [
-            { label: '正在解析关键信息', status: 'error' as const, detail: '未找到相关内容' }
-          ]
+          steps: [{ label: '正在解析关键信息', status: 'error' as const, detail: '未找到相关内容' }]
         }
       }
 
@@ -193,7 +191,12 @@ export class SmartCutAiService {
     // 尝试从 pendingConfirmationData 中获取（新流程）
     let data = this.state.pendingConfirmationData.value
 
-    console.log('[confirmAndProceed] pendingConfirmationData:', data ? '存在' : '不存在', 'msgId:', msgId)
+    console.log(
+      '[confirmAndProceed] pendingConfirmationData:',
+      data ? '存在' : '不存在',
+      'msgId:',
+      msgId
+    )
 
     // 如果没有待确认数据且提供了 msgId，尝试从消息中恢复
     if (!data && msgId) {
@@ -206,7 +209,11 @@ export class SmartCutAiService {
         videosLength: msg?.payload?.videos?.length || 0
       })
 
-      if (msg?.payload?.videos && Array.isArray(msg.payload.videos) && msg.payload.videos.length > 0) {
+      if (
+        msg?.payload?.videos &&
+        Array.isArray(msg.payload.videos) &&
+        msg.payload.videos.length > 0
+      ) {
         // 从消息payload中恢复数据（用于加载历史消息的情况）
         data = {
           msgId: msgId,
@@ -237,7 +244,7 @@ export class SmartCutAiService {
     this.state.isAwaitingConfirmation.value = false
 
     // 更新确认消息：标记为不可交互，记录选择的视频
-    const currentMsg = aiChatStore.getMessages().value.find(m => m.id === data.msgId)
+    const currentMsg = aiChatStore.getMessages().value.find((m) => m.id === data.msgId)
 
     // 获取用户选择的视频
     let selectedVideos = data.videos
@@ -281,10 +288,7 @@ export class SmartCutAiService {
         selectedVideos = filteredVideos.filter((v: any) => selectedVideoIds.includes(v.id))
       }
 
-      const {
-        minDuration = 80,
-        maxDuration = 100
-      } = { ...data.options, ...durationOptions }
+      const { minDuration = 80, maxDuration = 100 } = { ...data.options, ...durationOptions }
 
       // Step 1: 创建剪辑任务卡片（三个步骤）
       const clipTaskCardPayload = {
@@ -347,7 +351,11 @@ export class SmartCutAiService {
         taskCard: {
           steps: [
             { label: '正在请求视频解析', status: 'completed' as const, detail: '请求已接收' },
-            { label: '正在解析视频', status: 'processing' as const, detail: '预计需要3-5分钟，可以开启新的剪辑任务' },
+            {
+              label: '正在解析视频',
+              status: 'processing' as const,
+              detail: '预计需要3-5分钟，可以开启新的剪辑任务'
+            },
             { label: '正在智能剪辑', status: 'pending' as const }
           ]
         },
@@ -380,10 +388,9 @@ export class SmartCutAiService {
 
       // 清除待确认数据
       this.state.pendingConfirmationData.value = null
-
     } catch (error) {
       console.error('确认流程失败:', error)
-      const errStep = this.state.chatSteps.value.find(s => s.state === 'process')
+      const errStep = this.state.chatSteps.value.find((s) => s.state === 'process')
       if (errStep) errStep.state = 'error'
 
       const currentAiChatId = aiChatStore.getCurrentAiChatId().value
@@ -395,7 +402,7 @@ export class SmartCutAiService {
           ai_chat_id: currentAiChatId,
           role: 'assistant',
           content: formattedError
-        }).catch(err => console.error('记录对话失败:', err))
+        }).catch((err) => console.error('记录对话失败:', err))
       }
     } finally {
       this.state.isProcessing.value = false
@@ -414,7 +421,7 @@ export class SmartCutAiService {
     }
 
     // 更新消息：标记为已取消且不可交互
-    const currentMsg = aiChatStore.getMessages().value.find(m => m.id === data.msgId)
+    const currentMsg = aiChatStore.getMessages().value.find((m) => m.id === data.msgId)
     const cancelledPayload = {
       ...(currentMsg?.payload || {}),
       type: 'video_selection',
@@ -491,19 +498,14 @@ export class SmartCutAiService {
           type: 'vip_upgrade_prompt'
         }
       }
-      
+
       aiChatStore.addMessage(assistantMessage)
       // 注意：不创建 ai_chat 记录，不保存到数据库，仅本地显示
-      
+
       return
     }
 
-    const {
-      minDuration = 80,
-      maxDuration = 100,
-      maxRetries = 20,
-      retryInterval = 3000
-    } = options
+    const { minDuration = 80, maxDuration = 100, maxRetries = 20, retryInterval = 3000 } = options
 
     this.state.isProcessing.value = true
     aiChatStore.setCurrentChatProcessing(true)
@@ -588,13 +590,13 @@ export class SmartCutAiService {
       // ==========================================
       // 流程一：主播 -> 产品 -> 视频
       // ==========================================
-      
+
       try {
         // 1. 匹配主播
         this.state.chatSteps.value[0].state = 'process'
         const anchorRes = await getAnchorsApi({ all: true })
-        const matchedAnchor = anchorRes.list.find(a => sanitizedPrompt.includes(a.name))
-        
+        const matchedAnchor = anchorRes.list.find((a) => sanitizedPrompt.includes(a.name))
+
         if (!matchedAnchor) {
           throw new Error('未找到提及的主播信息')
         }
@@ -603,7 +605,11 @@ export class SmartCutAiService {
         const updatedPayload1 = {
           type: 'video_filter_task',
           steps: [
-            { label: '正在匹配主播', status: 'completed' as const, detail: `已匹配主播：${matchedAnchor.name}` },
+            {
+              label: '正在匹配主播',
+              status: 'completed' as const,
+              detail: `已匹配主播：${matchedAnchor.name}`
+            },
             { label: '正在匹配主播产品', status: 'processing' as const },
             { label: '正在查询产品视频', status: 'pending' as const }
           ]
@@ -611,12 +617,12 @@ export class SmartCutAiService {
         aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload1 })
         await updateAiChatMessageApi(Number(taskCardMsgId), { payload: updatedPayload1 })
         this.state.chatSteps.value[0].state = 'finish'
-        await new Promise(resolve => setTimeout(resolve, 300))
+        await new Promise((resolve) => setTimeout(resolve, 300))
 
         // 2. 匹配产品
         this.state.chatSteps.value[1].state = 'process'
         const productRes = await getProductsApi({ all: true, anchor_id: matchedAnchor.id })
-        const matchedProduct = productRes.list.find(p => sanitizedPrompt.includes(p.name))
+        const matchedProduct = productRes.list.find((p) => sanitizedPrompt.includes(p.name))
 
         if (!matchedProduct) {
           throw new Error(`在主播 ${matchedAnchor.name} 下未找到对应的产品`)
@@ -626,20 +632,28 @@ export class SmartCutAiService {
         const updatedPayload2 = {
           type: 'video_filter_task',
           steps: [
-            { label: '正在匹配主播', status: 'completed' as const, detail: `已匹配主播：${matchedAnchor.name}` },
-            { label: '正在匹配主播产品', status: 'completed' as const, detail: `已匹配产品：${matchedProduct.name}` },
+            {
+              label: '正在匹配主播',
+              status: 'completed' as const,
+              detail: `已匹配主播：${matchedAnchor.name}`
+            },
+            {
+              label: '正在匹配主播产品',
+              status: 'completed' as const,
+              detail: `已匹配产品：${matchedProduct.name}`
+            },
             { label: '正在查询产品视频', status: 'processing' as const }
           ]
         }
         aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload2 })
         await updateAiChatMessageApi(Number(taskCardMsgId), { payload: updatedPayload2 })
         this.state.chatSteps.value[1].state = 'finish'
-        await new Promise(resolve => setTimeout(resolve, 300))
+        await new Promise((resolve) => setTimeout(resolve, 300))
 
         // 3. 查询视频
         this.state.chatSteps.value[2].state = 'process'
         const videos = await getVideosApi({ product_id: matchedProduct.id })
-        
+
         if (!videos || videos.length === 0) {
           throw new Error(`未找到 "${matchedProduct.name}" 相关的素材视频`)
         }
@@ -648,9 +662,21 @@ export class SmartCutAiService {
         const updatedPayload3 = {
           type: 'video_filter_task',
           steps: [
-            { label: '正在匹配主播', status: 'completed' as const, detail: `已匹配主播：${matchedAnchor.name}` },
-            { label: '正在匹配主播产品', status: 'completed' as const, detail: `已匹配产品：${matchedProduct.name}` },
-            { label: '正在查询产品视频', status: 'completed' as const, detail: `找到 ${videos.length} 个相关素材` }
+            {
+              label: '正在匹配主播',
+              status: 'completed' as const,
+              detail: `已匹配主播：${matchedAnchor.name}`
+            },
+            {
+              label: '正在匹配主播产品',
+              status: 'completed' as const,
+              detail: `已匹配产品：${matchedProduct.name}`
+            },
+            {
+              label: '正在查询产品视频',
+              status: 'completed' as const,
+              detail: `找到 ${videos.length} 个相关素材`
+            }
           ]
         }
         aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload3 })
@@ -658,8 +684,8 @@ export class SmartCutAiService {
         this.state.chatSteps.value[2].state = 'finish'
 
         // 4. 显示视频选择卡片
-        await new Promise(resolve => setTimeout(resolve, 400))
-        
+        await new Promise((resolve) => setTimeout(resolve, 400))
+
         const selectionPayload = {
           type: 'video_selection',
           videos,
@@ -708,19 +734,18 @@ export class SmartCutAiService {
 
         this.state.isProcessing.value = false
         return
-
       } catch (error: any) {
         console.error('视频筛选流程失败:', error)
-        
+
         // 更新任务卡片为错误/未找到状态
         const baseSteps = [
           { label: '正在匹配主播', status: 'pending' as const },
           { label: '正在匹配主播产品', status: 'pending' as const },
           { label: '正在查询产品视频', status: 'pending' as const }
         ]
-        
+
         // 根据当前思考步骤状态来确定哪个步骤失败了
-        const failedStepIndex = this.state.chatSteps.value.findIndex(s => s.state === 'process')
+        const failedStepIndex = this.state.chatSteps.value.findIndex((s) => s.state === 'process')
         if (failedStepIndex !== -1) {
           // 将失败前的步骤标记为完成
           for (let i = 0; i < failedStepIndex; i++) {
@@ -741,11 +766,11 @@ export class SmartCutAiService {
         }
 
         aiChatStore.updateMessage(taskCardMsgId, { payload: errorPayload })
-        
+
         // 更新思考步骤
-        const errStep = this.state.chatSteps.value.find(s => s.state === 'process')
+        const errStep = this.state.chatSteps.value.find((s) => s.state === 'process')
         if (errStep) errStep.state = 'error'
-        
+
         // 发送一条友好的未找到提示
         const errorContent = `抱歉，${error.message || '未找到对应的视频'}。请确认输入的信息是否正确。`
         const errorMsg = await addAiChatMessageApi({

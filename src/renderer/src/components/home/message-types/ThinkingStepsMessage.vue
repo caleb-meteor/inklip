@@ -3,7 +3,9 @@ import type { PropType } from 'vue'
 
 defineProps({
   steps: {
-    type: Array as PropType<Array<{ label: string; state: 'wait' | 'process' | 'finish' | 'error' }>>,
+    type: Array as PropType<
+      Array<{ label: string; state: 'wait' | 'process' | 'finish' | 'error' }>
+    >,
     required: true
   }
 })
@@ -13,12 +15,7 @@ defineProps({
   <div class="thinking-container">
     <div class="thinking-header">💭 思考过程</div>
     <div class="thinking-content">
-      <div
-        v-for="(step, index) in steps"
-        :key="index"
-        class="thinking-step"
-        :class="step.state"
-      >
+      <div v-for="(step, index) in steps" :key="index" class="thinking-step" :class="step.state">
         <div class="step-indicator">
           <div v-if="step.state === 'finish'" class="step-complete">✓</div>
           <div v-else-if="step.state === 'process'" class="step-loading">
@@ -135,7 +132,8 @@ defineProps({
 }
 
 @keyframes loading {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.4;
     transform: scale(0.8);
   }

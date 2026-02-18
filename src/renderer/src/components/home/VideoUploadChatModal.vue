@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
-import { 
-  NModal, 
-  NForm, 
-  NFormItem, 
-  NSelect, 
-  NButton, 
-  NIcon, 
-  NSpace, 
-  useMessage 
-} from 'naive-ui'
-import { CloudUploadOutline, FolderOutline, CloseOutline, DocumentTextOutline, VideocamOutline } from '@vicons/ionicons5'
-import { getDictsByTypeApi, createDictApi, type DictItem } from '../../api/dict'
+import { ref, watch } from 'vue'
+import { NModal, NForm, NFormItem, NSelect, NButton, NIcon, NSpace, useMessage } from 'naive-ui'
+import {
+  CloudUploadOutline,
+  FolderOutline,
+  CloseOutline,
+  DocumentTextOutline,
+  VideocamOutline
+} from '@vicons/ionicons5'
+import { getDictsByTypeApi, createDictApi } from '../../api/dict'
 import { uploadVideosBatchApi } from '../../api/video'
 
 const MAX_VIDEOS_PER_PRODUCT = 6
@@ -36,8 +33,8 @@ const subtitleFiles = ref<Record<string, string>>({})
 const folderPath = ref('')
 
 // Dictionary options
-const anchorOptions = ref<{label: string, value: string}[]>([])
-const productOptions = ref<{label: string, value: string}[]>([])
+const anchorOptions = ref<{ label: string; value: string }[]>([])
+const productOptions = ref<{ label: string; value: string }[]>([])
 // Map name to ID for existing items
 const nameToIdMap = ref<Record<string, number>>({})
 
@@ -63,19 +60,19 @@ const fetchDicts = async (): Promise<void> => {
   try {
     const anchors = await getDictsByTypeApi('video_anchor')
     const products = await getDictsByTypeApi('video_product')
-    
+
     const newMap: Record<string, number> = {}
-    
-    anchorOptions.value = anchors.map(d => {
+
+    anchorOptions.value = anchors.map((d) => {
       newMap[`anchor:${d.name}`] = d.id
       return { label: d.name, value: d.name }
     })
-    
-    productOptions.value = products.map(d => {
+
+    productOptions.value = products.map((d) => {
       newMap[`product:${d.name}`] = d.id
       return { label: d.name, value: d.name }
     })
-    
+
     nameToIdMap.value = newMap
   } catch (e) {
     console.error('Failed to fetch dicts', e)
@@ -83,28 +80,31 @@ const fetchDicts = async (): Promise<void> => {
   }
 }
 
-watch(() => props.show, (val) => {
-  if (val) {
-    fetchDicts()
-    // Don't clear formValue to remember last selection? Or clear? 
-    // User request: "引导用户输入...", probably fresh start is better or maybe minimal retention.
-    // Let's keep it persistent if user closes and reopens, but maybe reset on success.
+watch(
+  () => props.show,
+  (val) => {
+    if (val) {
+      fetchDicts()
+      // Don't clear formValue to remember last selection? Or clear?
+      // User request: "引导用户输入...", probably fresh start is better or maybe minimal retention.
+      // Let's keep it persistent if user closes and reopens, but maybe reset on success.
+    }
   }
-})
+)
 
 const handleSelectFile = async (): Promise<void> => {
   try {
     const result = await window.api.selectVideoFile()
     if (result.success && result.filePaths) {
       // Append unique paths
-      const newPaths = result.filePaths.filter(p => !videoPaths.value.includes(p))
+      const newPaths = result.filePaths.filter((p) => !videoPaths.value.includes(p))
       videoPaths.value = [...videoPaths.value, ...newPaths]
-      
+
       // Merge subtitle files
       if (result.subtitleFiles) {
         subtitleFiles.value = { ...subtitleFiles.value, ...result.subtitleFiles }
       }
-      
+
       folderPath.value = '' // Clear folder path if mixed or file selected
     }
   } catch (e) {
@@ -147,7 +147,7 @@ const getDictId = async (name: string, type: 'anchor' | 'product'): Promise<numb
   if (nameToIdMap.value[key]) {
     return nameToIdMap.value[key]
   }
-  
+
   // Create new dict
   try {
     const dictType = type === 'anchor' ? 'video_anchor' : 'video_product'
@@ -168,13 +168,15 @@ const handleConfirm = async (): Promise<void> => {
 
   const currentCount = props.preSelectedProductVideoCount ?? 0
   if (props.preSelectedProduct && currentCount + videoPaths.value.length > MAX_VIDEOS_PER_PRODUCT) {
-    message.warning(`每个产品下最多只能添加 ${MAX_VIDEOS_PER_PRODUCT} 个视频，当前已有 ${currentCount} 个`)
+    message.warning(
+      `每个产品下最多只能添加 ${MAX_VIDEOS_PER_PRODUCT} 个视频，当前已有 ${currentCount} 个`
+    )
     return
   }
 
   try {
     isUploading.value = true
-    
+
     // Get IDs
     let anchorId: number = 0
     let productId: number = 0
@@ -188,12 +190,17 @@ const handleConfirm = async (): Promise<void> => {
     if (props.preSelectedProduct) {
       productId = props.preSelectedProduct.id
     } else if (formValue.value.product) {
-       productId = await getDictId(formValue.value.product, 'product')
+      productId = await getDictId(formValue.value.product, 'product')
     }
-    
+
     // Upload
-    const res = await uploadVideosBatchApi(videoPaths.value, subtitleFiles.value, anchorId, productId)
-    
+    const res = await uploadVideosBatchApi(
+      videoPaths.value,
+      subtitleFiles.value,
+      anchorId,
+      productId
+    )
+
     // Normalize result
     let uploadedVideos: any[] = []
     if (Array.isArray(res)) {
@@ -208,7 +215,7 @@ const handleConfirm = async (): Promise<void> => {
       product: props.preSelectedProduct ? props.preSelectedProduct.name : formValue.value.product
     })
     emit('update:show', false)
-    
+
     // Reset state
     videoPaths.value = []
     folderPath.value = ''
@@ -217,7 +224,6 @@ const handleConfirm = async (): Promise<void> => {
     // Resetting seems safer to avoid accidental wrong attribution.
     formValue.value.anchor = null
     formValue.value.product = null
-    
   } catch (e: any) {
     console.error('Upload failed', e)
     message.error(e.message || '上传失败')
@@ -246,14 +252,14 @@ const handleClose = (): void => {
   >
     <div class="upload-modal-content">
       <n-form
+        v-if="false"
         ref="formRef"
         :model="formValue"
         :rules="rules"
         label-placement="left"
         label-width="80"
-        v-if="false"
       >
-        <n-form-item label="主播" path="anchor" v-if="!props.preSelectedAnchor">
+        <n-form-item v-if="!props.preSelectedAnchor" label="主播" path="anchor">
           <n-select
             v-model:value="formValue.anchor"
             filterable
@@ -262,8 +268,8 @@ const handleClose = (): void => {
             :options="anchorOptions"
           />
         </n-form-item>
-        
-        <n-form-item label="产品" path="product" v-if="!props.preSelectedProduct">
+
+        <n-form-item v-if="!props.preSelectedProduct" label="产品" path="product">
           <n-select
             v-model:value="formValue.product"
             filterable
@@ -277,12 +283,16 @@ const handleClose = (): void => {
       <div class="file-selection-area">
         <div class="action-buttons">
           <n-space>
-            <n-button @click="handleSelectFile" :disabled="isUploading">
-              <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
+            <n-button :disabled="isUploading" @click="handleSelectFile">
+              <template #icon
+                ><n-icon><CloudUploadOutline /></n-icon
+              ></template>
               选择文件
             </n-button>
-            <n-button @click="handleSelectFolder" :disabled="isUploading">
-               <template #icon><n-icon><FolderOutline /></n-icon></template>
+            <n-button :disabled="isUploading" @click="handleSelectFolder">
+              <template #icon
+                ><n-icon><FolderOutline /></n-icon
+              ></template>
               选择文件夹
             </n-button>
           </n-space>
@@ -313,28 +323,26 @@ const handleClose = (): void => {
                 </div>
               </div>
             </div>
-            <n-button 
-              quaternary 
-              circle 
-              size="small" 
+            <n-button
+              quaternary
+              circle
+              size="small"
               class="file-action-btn"
-              @click="removeFile(index)"
               :disabled="isUploading"
+              @click="removeFile(index)"
             >
-              <template #icon><n-icon><CloseOutline /></n-icon></template>
+              <template #icon
+                ><n-icon><CloseOutline /></n-icon
+              ></template>
             </n-button>
           </div>
         </div>
-        <div v-else class="empty-hint">
-          请选择视频文件或文件夹上传
-        </div>
+        <div v-else class="empty-hint">请选择视频文件或文件夹上传</div>
       </div>
 
       <div class="modal-footer">
-        <n-button @click="handleClose" :disabled="isUploading">取消</n-button>
-        <n-button type="primary" @click="handleConfirm" :loading="isUploading">
-          开始上传
-        </n-button>
+        <n-button :disabled="isUploading" @click="handleClose">取消</n-button>
+        <n-button type="primary" :loading="isUploading" @click="handleConfirm"> 开始上传 </n-button>
       </div>
     </div>
   </n-modal>

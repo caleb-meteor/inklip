@@ -13,7 +13,11 @@ export interface AnchorListResponse {
   total: number
 }
 
-export function getAnchorsApi(params?: { all?: boolean; page?: number; page_size?: number }): Promise<AnchorListResponse> {
+export function getAnchorsApi(params?: {
+  all?: boolean
+  page?: number
+  page_size?: number
+}): Promise<AnchorListResponse> {
   return request({
     url: '/api/anchors',
     method: 'get',
@@ -29,7 +33,11 @@ export function createAnchorApi(data: { name: string; avatar?: string }): Promis
   })
 }
 
-export function updateAnchorApi(data: { id: number; name?: string; avatar?: string }): Promise<Anchor> {
+export function updateAnchorApi(data: {
+  id: number
+  name?: string
+  avatar?: string
+}): Promise<Anchor> {
   return request({
     url: '/api/anchor',
     method: 'put',

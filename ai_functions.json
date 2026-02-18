@@ -91,7 +91,7 @@
           "items": { "type": "number" },
           "description": "List of video IDs to process."
         },
-        "prompt_id":{
+        "prompt_id": {
           "type": "number",
           "description": "Prompt ID to use for editing."
         },

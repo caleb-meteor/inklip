@@ -19,7 +19,7 @@ const props = defineProps({
 })
 
 const allCompleted = computed(() => {
-  return props.steps.every(step => step.status === 'completed')
+  return props.steps.every((step) => step.status === 'completed')
 })
 </script>
 
@@ -29,14 +29,9 @@ const allCompleted = computed(() => {
       <div class="header-icon">🎬</div>
       <div class="header-title">{{ title }}</div>
     </div>
-    
+
     <div class="task-steps">
-      <div
-        v-for="(step, index) in steps"
-        :key="index"
-        class="task-step"
-        :class="step.status"
-      >
+      <div v-for="(step, index) in steps" :key="index" class="task-step" :class="step.status">
         <div class="step-indicator">
           <div v-if="step.status === 'completed'" class="step-check">✓</div>
           <div v-else-if="step.status === 'error'" class="step-error">!</div>
@@ -153,12 +148,24 @@ const allCompleted = computed(() => {
   animation: dot-pulse 1.5s infinite ease-in-out;
 }
 
-.step-loading .dot:nth-child(2) { animation-delay: 0.2s; }
-.step-loading .dot:nth-child(3) { animation-delay: 0.4s; }
+.step-loading .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.step-loading .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
 
 @keyframes dot-pulse {
-  0%, 80%, 100% { transform: scale(0); opacity: 0; }
-  40% { transform: scale(1); opacity: 1; }
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .step-content {

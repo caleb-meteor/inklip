@@ -19,13 +19,13 @@ const emit = defineEmits<{
   <div v-if="video" class="video-player-container">
     <div class="player-header">
       <h2 class="video-title">{{ video.name }}</h2>
-      <n-button quaternary circle @click="emit('close')" class="close-btn">
+      <n-button quaternary circle class="close-btn" @click="emit('close')">
         <n-icon size="24"><CloseOutline /></n-icon>
       </n-button>
     </div>
     <div class="player-content">
-      <VideoPlayer 
-        :path="video.path" 
+      <VideoPlayer
+        :path="video.path"
         :video-id="video.id"
         :subtitle-data="video.subtitle"
         autoplay

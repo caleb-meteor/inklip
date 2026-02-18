@@ -46,20 +46,20 @@ const selectedVideos = ref<Set<number>>(new Set())
  */
 const toggleVideoSelection = (videoId: number, duration: number): void => {
   const selected = selectedVideos.value.has(videoId)
-  
+
   if (selected) {
     selectedVideos.value.delete(videoId)
   } else {
     if (selectedVideos.value.size >= 3) {
       return
     }
-    
+
     // 检查总时长
     const totalDuration = getSelectedDuration()
     if (totalDuration + duration > 30 * 60) {
       return
     }
-    
+
     selectedVideos.value.add(videoId)
   }
 }
@@ -83,18 +83,6 @@ const formatDurationMinutes = (seconds: number): string => {
 }
 
 /**
- * 格式化时长为秒
- */
-const formatDurationSeconds = (seconds: number): string => {
-  if (seconds < 60) {
-    return `${Math.floor(seconds)}秒`
-  }
-  const minutes = Math.floor(seconds / 60)
-  const secs = Math.floor(seconds % 60)
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
-}
-
-/**
  * 确认选择
  */
 const handleConfirm = (): void => {
@@ -114,24 +102,28 @@ const handleCancel = (): void => {
     <div v-if="!hideTitle" class="videos-title">
       📹 找到 {{ videos.length }} 个符合条件的视频
       <span v-if="awaitingConfirmation && isInteractive" class="selection-stats">
-        （已选 {{ selectedVideos.size }} / 3 个，{{ formatDurationMinutes(getSelectedDuration()) }} / 30分钟）
+        （已选 {{ selectedVideos.size }} / 3 个，{{ formatDurationMinutes(getSelectedDuration()) }}
+        / 30分钟）
       </span>
       <span v-if="cancelled" class="cancelled-badge">已取消</span>
     </div>
     <div v-else-if="awaitingConfirmation && isInteractive" class="selection-indicator-bar">
       <span class="selection-stats-inline">
-        已选 {{ selectedVideos.size }} / 3 个，{{ formatDurationMinutes(getSelectedDuration()) }} / 30分钟
+        已选 {{ selectedVideos.size }} / 3 个，{{ formatDurationMinutes(getSelectedDuration()) }} /
+        30分钟
       </span>
     </div>
     <div class="videos-list-compact">
-      <div 
-        v-for="video in videos" 
-        :key="video.id" 
+      <div
+        v-for="video in videos"
+        :key="video.id"
         class="compact-video-card"
         :class="{ selected: selectedVideos.has(video.id), disabled: !isInteractive }"
-        @click="isInteractive && awaitingConfirmation && toggleVideoSelection(video.id, video.duration)"
+        @click="
+          isInteractive && awaitingConfirmation && toggleVideoSelection(video.id, video.duration)
+        "
       >
-        <div class="video-selection-badge" v-if="awaitingConfirmation && isInteractive">
+        <div v-if="awaitingConfirmation && isInteractive" class="video-selection-badge">
           <div class="checkbox" :class="{ checked: selectedVideos.has(video.id) }">
             <span v-if="selectedVideos.has(video.id)">✓</span>
           </div>
@@ -152,17 +144,13 @@ const handleCancel = (): void => {
     <div v-if="awaitingConfirmation && isInteractive" class="duration-settings">
       <span class="settings-label">✂️ 剪辑时长(秒):</span>
       <div class="duration-inputs">
-        <input type="number" v-model.number="minTime" min="10" max="600" class="duration-input" />
+        <input v-model.number="minTime" type="number" min="10" max="600" class="duration-input" />
         <span class="separator">-</span>
-        <input type="number" v-model.number="maxTime" min="10" max="600" class="duration-input" />
+        <input v-model.number="maxTime" type="number" min="10" max="600" class="duration-input" />
       </div>
     </div>
     <div v-if="awaitingConfirmation && isInteractive" class="confirmation-buttons">
-      <button
-        class="btn-confirm"
-        :disabled="selectedVideos.size === 0"
-        @click="handleConfirm"
-      >
+      <button class="btn-confirm" :disabled="selectedVideos.size === 0" @click="handleConfirm">
         ✅ 确认并继续（已选 {{ selectedVideos.size }} 个）
       </button>
       <button class="btn-cancel" @click="handleCancel">❌ 取消</button>

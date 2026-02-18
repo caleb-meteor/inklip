@@ -145,7 +145,10 @@ const loadSubtitles = async (): Promise<void> => {
 
     if (props.videoType === 'edited' && props.videoId) {
       // Handle AI Generated / Edited Videos (剪辑视频)
-      console.log('[GlobalFullscreenPlayer] Fetching latest smart cut data for subtitles:', props.videoId)
+      console.log(
+        '[GlobalFullscreenPlayer] Fetching latest smart cut data for subtitles:',
+        props.videoId
+      )
       const smartCut = await getSmartCutApi(props.videoId)
       if (smartCut && smartCut.subtitle) {
         videoSubtitle = smartCut.subtitle

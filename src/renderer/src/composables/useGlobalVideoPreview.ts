@@ -18,9 +18,14 @@ export function useGlobalVideoPreview(): {
   currentVideoPath: Ref<string | null>
   isLoading: Ref<boolean>
   hasError: Ref<boolean>
-  showPreview: (path: string, container: HTMLElement, startTime?: number, muted?: boolean, endTime?: number) => void
+  showPreview: (
+    path: string,
+    container: HTMLElement,
+    startTime?: number,
+    muted?: boolean,
+    endTime?: number
+  ) => void
   hidePreview: () => void
-  seekTo: (time: number) => void
   isCurrentlyPreviewing: (path: string) => boolean
 } {
   /**
@@ -31,7 +36,13 @@ export function useGlobalVideoPreview(): {
    * @param muted Whether the video should be muted (default: true)
    * @param endTime Optional end time in seconds to pause the video
    */
-  const showPreview = (path: string, container: HTMLElement, startTime?: number, muted: boolean = true, endTime?: number): void => {
+  const showPreview = (
+    path: string,
+    container: HTMLElement,
+    startTime?: number,
+    muted: boolean = true,
+    endTime?: number
+  ): void => {
     const timestamp = new Date().toISOString().split('T')[1]
 
     // Cancel any pending cleanup
@@ -46,7 +57,12 @@ export function useGlobalVideoPreview(): {
     currentVideoPath.value = path
     targetContainer.value = container
 
-    console.log(`[${timestamp}] [GlobalVideoPreview] Showing preview for:`, path, isSameVideo ? '(same video)' : '', muted ? 'muted' : 'unmuted')
+    console.log(
+      `[${timestamp}] [GlobalVideoPreview] Showing preview for:`,
+      path,
+      isSameVideo ? '(same video)' : '',
+      muted ? 'muted' : 'unmuted'
+    )
 
     // Create video element if it doesn't exist
     if (!videoElement.value) {
@@ -66,7 +82,11 @@ export function useGlobalVideoPreview(): {
 
       // Event listeners
       videoElement.value.addEventListener('timeupdate', () => {
-        if (currentEndTime != null && videoElement.value && videoElement.value.currentTime >= currentEndTime) {
+        if (
+          currentEndTime != null &&
+          videoElement.value &&
+          videoElement.value.currentTime >= currentEndTime
+        ) {
           console.log(`[GlobalVideoPreview] Auto-pausing at ${currentEndTime}`)
           videoElement.value.pause()
           currentEndTime = null // Reset after pausing
@@ -77,7 +97,7 @@ export function useGlobalVideoPreview(): {
         isLoading.value = false
         const loadTimestamp = new Date().toISOString().split('T')[1]
         console.log(`[${loadTimestamp}] [GlobalVideoPreview] Video loaded`)
-        
+
         // Apply start time if provided
         if (startTime != null && videoElement.value) {
           videoElement.value.currentTime = startTime
@@ -120,11 +140,11 @@ export function useGlobalVideoPreview(): {
         // In the same tick, we update currentEndTime and currentTime, so timeupdate won't fire between them.
         videoElement.value.currentTime = startTime
       }
-      
+
       // If it's already playing but paused
       if (videoElement.value.paused) {
         console.log(`[${timestamp}] [GlobalVideoPreview] Resuming paused video`)
-        videoElement.value.play().catch(err => {
+        videoElement.value.play().catch((err) => {
           console.warn('[GlobalVideoPreview] Play error:', err)
         })
       }
@@ -133,12 +153,6 @@ export function useGlobalVideoPreview(): {
     // Move video element to target container
     if (container && videoElement.value.parentElement !== container) {
       container.appendChild(videoElement.value)
-    }
-  }
-
-  const seekTo = (time: number): void => {
-    if (videoElement.value) {
-      videoElement.value.currentTime = time
     }
   }
 

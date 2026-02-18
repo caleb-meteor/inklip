@@ -1,5 +1,13 @@
 import { ref, type Ref } from 'vue'
-import { getAiChatListApi, getAiChatMessagesApi, createAiChatApi, type AiChatTopic, type AiChatMessage, updateAiChatMessageApi, deleteAiChatApi } from '../api/aiChat'
+import {
+  getAiChatListApi,
+  getAiChatMessagesApi,
+  createAiChatApi,
+  type AiChatTopic,
+  type AiChatMessage,
+  updateAiChatMessageApi,
+  deleteAiChatApi
+} from '../api/aiChat'
 import { getSmartCutApi, getVideosApi } from '../api/video'
 import type { Message } from '../types/chat'
 
@@ -126,11 +134,15 @@ export class AiChatStore {
   async loadAiChatMessages(aiChatId: number): Promise<void> {
     try {
       const list: AiChatMessage[] = await getAiChatMessagesApi(aiChatId)
-      this.messages.value = list.map(item => ({
+      this.messages.value = list.map((item) => ({
         id: item.id.toString(), // 从数据库加载的 id 是纯数字字符串
         role: item.role,
         content: item.content,
-        payload: item.payload ? (typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload) : undefined,
+        payload: item.payload
+          ? typeof item.payload === 'string'
+            ? JSON.parse(item.payload)
+            : item.payload
+          : undefined,
         timestamp: new Date(item.created_at)
       }))
     } catch (error) {
@@ -188,7 +200,7 @@ export class AiChatStore {
    * 更新消息
    */
   updateMessage(id: string, updates: Partial<Message>): void {
-    const msg = this.messages.value.find(m => m.id === id)
+    const msg = this.messages.value.find((m) => m.id === id)
     if (msg) {
       Object.assign(msg, updates)
     }
@@ -198,7 +210,7 @@ export class AiChatStore {
    * 替换消息 ID（将临时 ID 替换为数据库 ID）
    */
   replaceMessageId(oldId: string, newId: string): void {
-    const msg = this.messages.value.find(m => m.id === oldId)
+    const msg = this.messages.value.find((m) => m.id === oldId)
     if (msg) {
       msg.id = newId
     }
@@ -210,7 +222,7 @@ export class AiChatStore {
   async deleteAiChat(aiChatId: number): Promise<void> {
     try {
       await deleteAiChatApi(aiChatId)
-      this.aiChats.value = this.aiChats.value.filter(chat => chat.id !== aiChatId)
+      this.aiChats.value = this.aiChats.value.filter((chat) => chat.id !== aiChatId)
       if (this.currentAiChatId.value === aiChatId) {
         this.newChat()
       }
@@ -260,14 +272,17 @@ export class AiChatStore {
       // status 4 = Video Error (视频处理异常)
       // status 5 = AI Cutting
       // We want to refresh if it's NOT Completed (1), NOT AI Error (3), and NOT Video Error (4)
-      const status = payload?.smartCutTask?.status !== undefined ? payload.smartCutTask.status : payload?.status
+      const status =
+        payload?.smartCutTask?.status !== undefined ? payload.smartCutTask.status : payload?.status
 
       // Check if we should refresh:
       // 1. aiGenVideoId exists (already checked)
       // 2. Status is undefined OR (NOT 1 AND NOT 3 AND NOT 4)
       if (status === undefined || (status !== 1 && status !== 3 && status !== 4)) {
         try {
-          console.log(`[aiChatStore] Refreshing status for AI gen video ${aiGenVideoId}, current status: ${status}`)
+          console.log(
+            `[aiChatStore] Refreshing status for AI gen video ${aiGenVideoId}, current status: ${status}`
+          )
 
           // Request latest status from backend
           const latestData = await getSmartCutApi(aiGenVideoId)
@@ -303,7 +318,7 @@ export class AiChatStore {
 
             // Status 1: Completed
             if (backendStatus === 1) {
-              steps.forEach(step => step.status = 'completed')
+              steps.forEach((step) => (step.status = 'completed'))
             }
             // Status 2: Processing or 5: AI Cutting
             else if (backendStatus === 2 || backendStatus === 5) {
@@ -318,7 +333,7 @@ export class AiChatStore {
             else if (backendStatus === 3 || backendStatus === 4) {
               // Mark pending/processing steps as error? Or just the current one?
               // Simplest approach: find the processing one and mark as error, or last one
-              const processIdx = steps.findIndex(s => s.status === 'processing')
+              const processIdx = steps.findIndex((s) => s.status === 'processing')
               if (processIdx !== -1) {
                 steps[processIdx].status = 'error' // Note: 'error' might not be in the strict type definition, check chat.ts
                 // But wait, chat.ts definition said: status: 'pending' | 'processing' | 'completed' for taskCard
@@ -348,7 +363,9 @@ export class AiChatStore {
           // Update local store
           this.updateMessage(msg.id, { payload: updatedPayload })
 
-          console.log(`[aiChatStore] Refreshed AI gen video ${aiGenVideoId} status to ${latestData.status}`)
+          console.log(
+            `[aiChatStore] Refreshed AI gen video ${aiGenVideoId} status to ${latestData.status}`
+          )
         } catch (error) {
           console.error(`[aiChatStore] Failed to refresh AI gen video ${aiGenVideoId}:`, error)
         }
@@ -363,35 +380,41 @@ export class AiChatStore {
             const isMissingMetadata = !v.cover || !v.duration
             return !isCompleted || isMissingMetadata
           })
-          
+
           if (videosToRefresh.length > 0) {
-             const idsToFetch = videosToRefresh.map((v: any) => v.id)
-             console.log(`[aiChatStore] Refreshing status for ${idsToFetch.length} uploaded videos (incomplete/missing meta)`)
-             
-             const latestVideos = await getVideosApi(idsToFetch)
-             const videoMap = new Map(latestVideos.map((v: any) => [v.id, v]))
-             
-             let hasUpdates = false
-             const updatedVideos = payload.videos.map((v: any) => {
-               const latest = videoMap.get(v.id)
-               if (latest) {
-                 if (latest.status !== v.status || latest.cover !== v.cover || latest.duration !== v.duration) {
-                   hasUpdates = true
-                   return {
-                     ...v,
-                     status: latest.status,
-                     cover: latest.cover,
-                     duration: latest.duration,
-                     path: latest.path, 
-                     name: latest.name
-                   }
-                 }
-               }
-               return v
-             })
-             
-             if (hasUpdates) {
-               const updatedPayload = { ...payload, videos: updatedVideos }
+            const idsToFetch = videosToRefresh.map((v: any) => v.id)
+            console.log(
+              `[aiChatStore] Refreshing status for ${idsToFetch.length} uploaded videos (incomplete/missing meta)`
+            )
+
+            const latestVideos = await getVideosApi(idsToFetch)
+            const videoMap = new Map(latestVideos.map((v: any) => [v.id, v]))
+
+            let hasUpdates = false
+            const updatedVideos = payload.videos.map((v: any) => {
+              const latest = videoMap.get(v.id)
+              if (latest) {
+                if (
+                  latest.status !== v.status ||
+                  latest.cover !== v.cover ||
+                  latest.duration !== v.duration
+                ) {
+                  hasUpdates = true
+                  return {
+                    ...v,
+                    status: latest.status,
+                    cover: latest.cover,
+                    duration: latest.duration,
+                    path: latest.path,
+                    name: latest.name
+                  }
+                }
+              }
+              return v
+            })
+
+            if (hasUpdates) {
+              const updatedPayload = { ...payload, videos: updatedVideos }
 
               // Update database first
               try {
@@ -399,12 +422,15 @@ export class AiChatStore {
                   payload: updatedPayload
                 })
               } catch (error) {
-                console.error('[aiChatStore] Failed to update video upload message in database:', error)
+                console.error(
+                  '[aiChatStore] Failed to update video upload message in database:',
+                  error
+                )
               }
 
-               this.updateMessage(msg.id, { payload: updatedPayload })
-               console.log(`[aiChatStore] Updated uploaded videos info for message ${msg.id}`)
-             }
+              this.updateMessage(msg.id, { payload: updatedPayload })
+              console.log(`[aiChatStore] Updated uploaded videos info for message ${msg.id}`)
+            }
           }
         } catch (error) {
           console.error('[aiChatStore] Failed to refresh uploaded video status:', error)

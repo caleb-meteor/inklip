@@ -53,37 +53,3 @@ export function getDictsFromSentenceApi(sentence: string): Promise<DictItem[]> {
     data: { sentence }
   })
 }
-
-/**
- * Update dict item
- * @param id Dict id
- * @param name Optional new name
- * @param type Optional new type
- * @returns Promise with updated dict item
- */
-export function updateDictApi(id: number, name?: string, type?: string): Promise<DictItem> {
-  return request({
-    url: '/api/dict',
-    method: 'put',
-    data: {
-      id,
-      name,
-      type
-    }
-  })
-}
-
-/**
- * Delete dict item
- * @param id Dict id
- * @returns Promise
- */
-export function deleteDictApi(id: number): Promise<void> {
-  return request({
-    url: '/api/dict',
-    method: 'delete',
-    data: {
-      id
-    }
-  })
-}

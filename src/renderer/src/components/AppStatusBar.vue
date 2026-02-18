@@ -8,7 +8,7 @@ interface Props {
   appVersion?: string
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   appVersion: '1.0.0'
 })
 
@@ -26,16 +26,16 @@ const currentYear = computed(() => new Date().getFullYear())
       <n-icon size="16"><SettingsOutline /></n-icon>
       <span>设置</span>
     </div>
-    
+
     <div class="status-spacer"></div>
-    
+
     <div class="brand-item">
       <span>© {{ currentYear }} 影氪</span>
       <span class="version-badge">v{{ appVersion }}</span>
     </div>
-    
+
     <div class="status-spacer"></div>
-    
+
     <div class="status-badge" :class="{ 'is-active': wsStore.connected }">
       <div class="status-indicator"></div>
       <span class="status-text">{{ wsStore.connected ? '服务正常' : '服务离线' }}</span>
@@ -56,7 +56,7 @@ const currentYear = computed(() => new Date().getFullYear())
   color: rgba(255, 255, 255, 0.45);
   user-select: none;
   z-index: 1000;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .status-item {
@@ -111,7 +111,8 @@ const currentYear = computed(() => new Date().getFullYear())
 }
 
 @keyframes status-ping {
-  75%, 100% {
+  75%,
+  100% {
     transform: translate(-50%, -50%) scale(3);
     opacity: 0;
   }
@@ -154,7 +155,7 @@ const currentYear = computed(() => new Date().getFullYear())
 
 .version-badge {
   color: rgba(255, 255, 255, 0.25);
-  font-family: "SF Mono", "Menlo", monospace;
+  font-family: 'SF Mono', 'Menlo', monospace;
   font-size: 11px;
   background: rgba(255, 255, 255, 0.03);
   padding: 2px 6px;

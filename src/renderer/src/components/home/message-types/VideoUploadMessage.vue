@@ -45,15 +45,26 @@ const getVideoStatus = (videoId: number) => {
             video-type="material"
             class="video-player"
           />
-          
-          <div v-if="getVideoStatus(video.id).value && getVideoStatus(video.id).value?.status !== 'completed'" class="processing-overlay">
+
+          <div
+            v-if="
+              getVideoStatus(video.id).value &&
+              getVideoStatus(video.id).value?.status !== 'completed'
+            "
+            class="processing-overlay"
+          >
             <div class="processing-content">
-              <n-spin size="small" v-if="getVideoStatus(video.id).value?.status !== 'failed'" />
+              <n-spin v-if="getVideoStatus(video.id).value?.status !== 'failed'" size="small" />
               <n-icon v-else size="20" color="#ef4444"><AlertCircleOutline /></n-icon>
-              
+
               <span class="processing-text">
-                {{ getVideoStatus(video.id).value?.status === 'failed' ? '处理失败' : 
-                   getVideoStatus(video.id).value?.status === 'transcribing' ? '转录中...' : '处理中...' }}
+                {{
+                  getVideoStatus(video.id).value?.status === 'failed'
+                    ? '处理失败'
+                    : getVideoStatus(video.id).value?.status === 'transcribing'
+                      ? '转录中...'
+                      : '处理中...'
+                }}
               </span>
             </div>
           </div>

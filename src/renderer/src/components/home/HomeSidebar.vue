@@ -1,35 +1,54 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, h, watch } from 'vue'
-import { NIcon, NAvatar, NPopconfirm, NInput, NButton, NUpload, NDropdown, NModal, NTooltip, useMessage, useDialog, type UploadFileInfo } from 'naive-ui'
+import {
+  NIcon,
+  NAvatar,
+  NPopconfirm,
+  NInput,
+  NUpload,
+  NDropdown,
+  NTooltip,
+  useMessage,
+  useDialog,
+  type UploadFileInfo
+} from 'naive-ui'
 import {
   VideocamOutline,
-  CutOutline,
   ImagesOutline,
   FolderOpenOutline,
   CubeOutline,
-  FilmOutline,
   ChevronForwardOutline,
   ChevronDownOutline,
   PersonAddOutline,
   PlanetOutline,
-  PersonOutline,
   PencilOutline,
   TrashOutline,
   MenuOutline,
   ChevronBackOutline,
   PeopleOutline,
   LibraryOutline,
-  CloudUploadOutline,
   AddCircleOutline
 } from '@vicons/ionicons5'
-import type { AiChatTopic } from '../../api/aiChat'
-import { getVideosApi, uploadVideosBatchApi, deleteVideoApi, renameVideoApi, type VideoItem } from '../../api/video'
-import { getAnchorsApi, createAnchorApi, updateAnchorApi, deleteAnchorApi, type Anchor } from '../../api/anchor'
-import { getProductsApi, createProductApi, updateProductApi, deleteProductApi, type Product } from '../../api/product'
+import { getVideosApi, deleteVideoApi, renameVideoApi, type VideoItem } from '../../api/video'
+import {
+  getAnchorsApi,
+  createAnchorApi,
+  updateAnchorApi,
+  deleteAnchorApi,
+  type Anchor
+} from '../../api/anchor'
+import {
+  getProductsApi,
+  createProductApi,
+  updateProductApi,
+  deleteProductApi,
+  type Product
+} from '../../api/product'
 import VideoUploadChatModal from './VideoUploadChatModal.vue'
 import RenameModal from '../RenameModal.vue'
 import DeleteModal from '../DeleteModal.vue'
 import { getMediaUrl } from '../../utils/media'
+import { useWebsocketStore } from '../../stores/websocket'
 
 defineProps<{
   collapsed: boolean
@@ -44,6 +63,7 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const dialog = useDialog()
+const wsStore = useWebsocketStore()
 const anchors = ref<Anchor[]>([])
 const products = ref<Product[]>([])
 const videos = ref<VideoItem[]>([])
@@ -100,15 +120,28 @@ const MAX_ANCHORS = 3
 const MAX_PRODUCTS_PER_ANCHOR = 100
 const MAX_VIDEOS_PER_PRODUCT = 6
 
-const currentAnchor = computed(() => anchors.value.find(a => a.id === selectedAnchorId.value))
+const currentAnchor = computed(() => anchors.value.find((a) => a.id === selectedAnchorId.value))
 
-watch(currentAnchor, (newVal) => {
-  emit('update:selected-anchor', newVal || null)
-}, { immediate: true })
+watch(
+  currentAnchor,
+  (newVal) => {
+    emit('update:selected-anchor', newVal || null)
+  },
+  { immediate: true }
+)
+
+// 监听 WebSocket 视频上传/解析状态：后端推送 video_upload / video_status 后更新左侧视频列表
+watch(
+  () => wsStore.videoUploaded,
+  async (ts) => {
+    if (!ts) return
+    await refreshVideosFromApi()
+  }
+)
 
 const currentAnchorProducts = computed(() => {
   if (!selectedAnchorId.value) return []
-  return products.value.filter(p => p.anchor_id === selectedAnchorId.value)
+  return products.value.filter((p) => p.anchor_id === selectedAnchorId.value)
 })
 
 onMounted(async () => {
@@ -119,7 +152,7 @@ onMounted(async () => {
     ])
     anchors.value = anchorsRes.list
     products.value = productsRes.list
-    
+
     // Load all videos
     try {
       videos.value = await getVideosApi()
@@ -135,10 +168,6 @@ onMounted(async () => {
     console.error('Failed to fetch resources:', error)
   }
 })
-
-const handleNavigate = (path: string): void => {
-  emit('navigate', path)
-}
 
 const toggleAnchor = (id: number): void => {
   if (selectedAnchorId.value === id) {
@@ -158,7 +187,21 @@ const toggleProduct = (id: number): void => {
 }
 
 const getProductVideos = (productId: number) => {
-  return videos.value.filter(v => v.product_id === productId)
+  return videos.value.filter((v) => v.product_id === productId)
+}
+
+/** 根据 WebSocket 消息刷新首页左侧视频列表（上传/解析状态变化时由 WS 触发） */
+const refreshVideosFromApi = async () => {
+  try {
+    const list = await getVideosApi()
+    videos.value = list
+    // 已完成的视频从 WS 进度表移除，避免继续显示进度遮罩（task_status: 0=待执行, 1=执行中, 2=已完成, 3=失败）
+    list.forEach((v) => {
+      if (v.task_status === 2) wsStore.clearVideoProgress(v.id)
+    })
+  } catch (e) {
+    console.error('Failed to refresh videos from WS', e)
+  }
 }
 
 const formatDuration = (seconds?: number) => {
@@ -174,18 +217,30 @@ const openUploadModal = (product: Product) => {
 }
 
 const handleUploadSuccess = async () => {
-    // Re-fetch all videos
-    try {
-        videos.value = await getVideosApi()
-    } catch(e) {
-        console.error('Failed to refresh videos', e)
-    }
+  // Re-fetch all videos
+  try {
+    videos.value = await getVideosApi()
+  } catch (e) {
+    console.error('Failed to refresh videos', e)
+  }
 }
 
 const getAvatarColor = (name: string): string => {
   const colors = [
-    '#f56a00', '#7265e6', '#ffbf00', '#00a2ae', '#1890ff', '#52c41a', '#eb2f96',
-    '#e11d48', '#0891b2', '#4f46e5', '#d97706', '#059669', '#7c3aed', '#db2777'
+    '#f56a00',
+    '#7265e6',
+    '#ffbf00',
+    '#00a2ae',
+    '#1890ff',
+    '#52c41a',
+    '#eb2f96',
+    '#e11d48',
+    '#0891b2',
+    '#4f46e5',
+    '#d97706',
+    '#059669',
+    '#7c3aed',
+    '#db2777'
   ]
   let hash = 0
   for (let i = 0; i < name.length; i++) {
@@ -238,16 +293,16 @@ const handleAddAnchor = async () => {
       name: newAnchorName.value.trim(),
       avatar: newAnchorAvatar.value
     })
-    
+
     anchors.value.push(newAnchor)
     // 选中新添加的主播
     selectedAnchorId.value = newAnchor.id
-    
+
     // Reset inputs
     newAnchorName.value = ''
     newAnchorAvatar.value = ''
     fileList.value = []
-    
+
     // message.success('添加主播成功')
     return true
   } catch (error) {
@@ -277,14 +332,14 @@ const handleAddProduct = async () => {
       anchor_id: selectedAnchorId.value,
       cover: newProductCover.value
     })
-    
+
     products.value.push(newProduct)
-    
+
     // Reset inputs
     newProductName.value = ''
     newProductCover.value = ''
     productFileList.value = []
-    
+
     // message.success('添加产品成功')
     return true
   } catch (error) {
@@ -296,11 +351,15 @@ const handleAddProduct = async () => {
   }
 }
 
-const handleContextMenu = (e: MouseEvent, item: Anchor | Product | VideoItem, type: 'anchor' | 'product' | 'video') => {
+const handleContextMenu = (
+  e: MouseEvent,
+  item: Anchor | Product | VideoItem,
+  type: 'anchor' | 'product' | 'video'
+) => {
   e.preventDefault()
   showDropdown.value = false
   contextMenuType.value = type
-  
+
   if (type === 'anchor') {
     contextMenuAnchor.value = item as Anchor
     contextMenuProduct.value = null
@@ -328,7 +387,7 @@ const handleClickOutside = () => {
 
 const handleSelectDropdown = (key: string) => {
   showDropdown.value = false
-  
+
   if (key === 'edit') {
     if (contextMenuType.value === 'anchor' && contextMenuAnchor.value) {
       startEdit(contextMenuAnchor.value)
@@ -360,21 +419,21 @@ const handleRenameVideoConfirm = async (newName: string) => {
   const originalName = currentVideoForAction.value.name
   const lastDotIndex = originalName.lastIndexOf('.')
   const ext = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : ''
-  
+
   // Checking if newName already has the extension (user might have typed it)
   if (ext && !finalName.endsWith(ext)) {
-     finalName += ext
+    finalName += ext
   }
-  
+
   try {
     const updatedVideo = await renameVideoApi(currentVideoForAction.value.id, finalName)
-    
+
     // Update local list
-    const index = videos.value.findIndex(v => v.id === updatedVideo.id)
+    const index = videos.value.findIndex((v) => v.id === updatedVideo.id)
     if (index !== -1) {
       videos.value[index] = updatedVideo
     }
-    
+
     // message.success('重命名成功')
     showRenameModal.value = false
   } catch (error) {
@@ -388,10 +447,10 @@ const handleDeleteVideoConfirm = async () => {
 
   try {
     await deleteVideoApi(currentVideoForAction.value.id)
-    
+
     // Remove from local list
-    videos.value = videos.value.filter(v => v.id !== currentVideoForAction.value!.id)
-    
+    videos.value = videos.value.filter((v) => v.id !== currentVideoForAction.value!.id)
+
     // message.success('删除视频成功')
     showDeleteModal.value = false
   } catch (error) {
@@ -404,24 +463,32 @@ const startEdit = (anchor: Anchor) => {
   editAnchorId.value = anchor.id
   editName.value = anchor.name
   editAvatar.value = anchor.avatar
-  editFileList.value = anchor.avatar ? [{
-    id: '1',
-    name: 'avatar',
-    status: 'finished',
-    url: anchor.avatar
-  }] : []
+  editFileList.value = anchor.avatar
+    ? [
+        {
+          id: '1',
+          name: 'avatar',
+          status: 'finished',
+          url: anchor.avatar
+        }
+      ]
+    : []
 }
 
 const startEditProduct = (product: Product) => {
   editProductId.value = product.id
   editProductName.value = product.name
   editProductCover.value = product.cover
-  editProductFileList.value = product.cover ? [{
-    id: '1',
-    name: 'cover',
-    status: 'finished',
-    url: product.cover
-  }] : []
+  editProductFileList.value = product.cover
+    ? [
+        {
+          id: '1',
+          name: 'cover',
+          status: 'finished',
+          url: product.cover
+        }
+      ]
+    : []
 }
 
 const handleEditUploadChange = (data: { fileList: UploadFileInfo[] }) => {
@@ -470,16 +537,16 @@ const handleUpdateAnchor = async () => {
       name: editName.value.trim(),
       avatar: editAvatar.value
     })
-    
+
     // Update local list
-    const index = anchors.value.findIndex(a => a.id === updated.id)
+    const index = anchors.value.findIndex((a) => a.id === updated.id)
     if (index !== -1) {
       anchors.value[index] = updated
     }
-    
+
     // Update current selected if it was the one
     if (selectedAnchorId.value === updated.id) {
-       // computed `currentAnchor` will automatically update
+      // computed `currentAnchor` will automatically update
     }
 
     // message.success('更新成功')
@@ -502,9 +569,9 @@ const handleUpdateProduct = async () => {
       name: editProductName.value.trim(),
       cover: editProductCover.value
     })
-    
+
     // Update local list
-    const index = products.value.findIndex(p => p.id === updated.id)
+    const index = products.value.findIndex((p) => p.id === updated.id)
     if (index !== -1) {
       products.value[index] = updated
     }
@@ -528,7 +595,7 @@ const confirmDeleteAnchor = (anchor: Anchor) => {
     onPositiveClick: async () => {
       try {
         await deleteAnchorApi(anchor.id)
-        anchors.value = anchors.value.filter(a => a.id !== anchor.id)
+        anchors.value = anchors.value.filter((a) => a.id !== anchor.id)
         if (selectedAnchorId.value === anchor.id) {
           selectedAnchorId.value = null
         }
@@ -550,14 +617,14 @@ const confirmDeleteProduct = (product: Product) => {
     onPositiveClick: async () => {
       try {
         await deleteProductApi(product.id)
-        products.value = products.value.filter(p => p.id !== product.id)
-        
+        products.value = products.value.filter((p) => p.id !== product.id)
+
         // Remove from expanded list if present
         const expandIndex = expandedProductIds.value.indexOf(product.id)
         if (expandIndex > -1) {
-           expandedProductIds.value.splice(expandIndex, 1)
+          expandedProductIds.value.splice(expandIndex, 1)
         }
-        
+
         // message.success('删除成功')
       } catch (error) {
         message.error('删除失败')
@@ -574,16 +641,20 @@ const confirmDeleteProduct = (product: Product) => {
       <!-- 全局素材区域 -->
       <div class="sidebar-group">
         <div class="section-title-wrapper">
-          <div class="section-title" v-show="!collapsed" style="color: #fbbf24;">全局素材</div>
-          <div class="sidebar-toggle-btn" @click="emit('toggle-left-collapse')" :title="collapsed ? '展开' : '折叠'">
+          <div v-show="!collapsed" class="section-title" style="color: #fbbf24">全局素材</div>
+          <div
+            class="sidebar-toggle-btn"
+            :title="collapsed ? '展开' : '折叠'"
+            @click="emit('toggle-left-collapse')"
+          >
             <n-icon size="16">
               <MenuOutline v-if="collapsed" />
               <ChevronBackOutline v-else />
             </n-icon>
           </div>
         </div>
-        
-        <div class="nav-item disabled" v-show="!collapsed">
+
+        <div v-show="!collapsed" class="nav-item disabled">
           <n-icon size="14" class="arrow-icon"><ChevronForwardOutline /></n-icon>
           <n-icon size="18" color="#eab308"><PlanetOutline /></n-icon>
           <span>全局素材库</span>
@@ -606,14 +677,20 @@ const confirmDeleteProduct = (product: Product) => {
           <n-tooltip placement="right">
             <template #trigger>
               <div class="collapsed-icon-item" :class="{ active: !selectedAnchorId }">
-                <n-avatar 
+                <n-avatar
                   v-if="currentAnchor"
-                  round 
+                  round
                   :size="24"
                   :src="currentAnchor.avatar || undefined"
-                  :style="{ backgroundColor: getAvatarColor(currentAnchor.name), color: '#fff', fontSize: '10px' }"
+                  :style="{
+                    backgroundColor: getAvatarColor(currentAnchor.name),
+                    color: '#fff',
+                    fontSize: '10px'
+                  }"
                 >
-                  <template v-if="!currentAnchor.avatar">{{ currentAnchor.name.charAt(0) }}</template>
+                  <template v-if="!currentAnchor.avatar">{{
+                    currentAnchor.name.charAt(0)
+                  }}</template>
                 </n-avatar>
                 <n-icon v-else size="20" color="#3b82f6"><PeopleOutline /></n-icon>
               </div>
@@ -621,7 +698,7 @@ const confirmDeleteProduct = (product: Product) => {
             {{ currentAnchor ? currentAnchor.name : '主播列表' }}
           </n-tooltip>
 
-          <n-tooltip placement="right" v-if="selectedAnchorId">
+          <n-tooltip v-if="selectedAnchorId" placement="right">
             <template #trigger>
               <div class="collapsed-icon-item">
                 <n-icon size="20"><LibraryOutline /></n-icon>
@@ -630,7 +707,7 @@ const confirmDeleteProduct = (product: Product) => {
             主播公共素材
           </n-tooltip>
 
-          <n-tooltip placement="right" v-if="selectedAnchorId">
+          <n-tooltip v-if="selectedAnchorId" placement="right">
             <template #trigger>
               <div class="collapsed-icon-item">
                 <n-icon size="20" color="#10b981"><CubeOutline /></n-icon>
@@ -641,12 +718,12 @@ const confirmDeleteProduct = (product: Product) => {
         </div>
       </div>
 
-      <div class="divider" v-show="!collapsed"></div>
+      <div v-show="!collapsed" class="divider"></div>
 
       <!-- 主播选择区域 -->
-      <div class="anchors-section" v-show="!collapsed">
+      <div v-show="!collapsed" class="anchors-section">
         <div class="section-header">
-          <div class="section-title" style="margin-bottom: 0; color: #3b82f6;">主播选择</div>
+          <div class="section-title" style="margin-bottom: 0; color: #3b82f6">主播选择</div>
           <n-tooltip v-if="anchors.length >= MAX_ANCHORS" placement="right">
             <template #trigger>
               <div class="add-anchor-btn disabled">
@@ -658,11 +735,11 @@ const confirmDeleteProduct = (product: Product) => {
           </n-tooltip>
           <n-popconfirm
             v-else
-            @positive-click="handleAddAnchor"
             :show-icon="false"
             placement="right"
             positive-text="添加"
             negative-text="取消"
+            @positive-click="handleAddAnchor"
           >
             <template #trigger>
               <div class="add-anchor-btn">
@@ -670,41 +747,57 @@ const confirmDeleteProduct = (product: Product) => {
                 <span>添加主播</span>
               </div>
             </template>
-            <div style="width: 240px; display: flex; flex-direction: column; gap: 16px; padding: 8px 4px;">
-              <div style="display: flex; justify-content: center;">
+            <div
+              style="
+                width: 240px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding: 8px 4px;
+              "
+            >
+              <div style="display: flex; justify-content: center">
                 <n-upload
                   :file-list="fileList"
                   list-type="image-card"
                   :max="1"
                   accept="image/*"
-                  @change="handleUploadChange"
                   :show-preview-button="false"
-                  style="--n-item-size: 80px;"
+                  style="--n-item-size: 80px"
+                  @change="handleUploadChange"
                 >
-                  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                  <div
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      justify-content: center;
+                      height: 100%;
+                    "
+                  >
                     <n-icon size="18" depth="3"><PersonAddOutline /></n-icon>
-                    <span style="font-size: 10px; margin-top: 4px; color: #666;">上传头像</span>
+                    <span style="font-size: 10px; margin-top: 4px; color: #666">上传头像</span>
                   </div>
                 </n-upload>
               </div>
-              
+
               <div>
-                <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px;">新主播名称</div>
-                <n-input 
-                  v-model:value="newAnchorName" 
-                  placeholder="请输入名称" 
+                <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px">新主播名称</div>
+                <n-input
+                  v-model:value="newAnchorName"
+                  placeholder="请输入名称"
                   size="small"
-                  @keyup.enter="handleAddAnchor"
                   autofocus
+                  @keyup.enter="handleAddAnchor"
                 />
               </div>
             </div>
           </n-popconfirm>
         </div>
-        
-        <div class="anchors-grid" v-if="anchors.length > 0">
+
+        <div v-if="anchors.length > 0" class="anchors-grid">
           <n-popconfirm
-            v-for="anchor in anchors" 
+            v-for="anchor in anchors"
             :key="anchor.id"
             :show="editAnchorId === anchor.id"
             trigger="manual"
@@ -717,7 +810,7 @@ const confirmDeleteProduct = (product: Product) => {
             @clickoutside="cancelEdit"
           >
             <template #trigger>
-              <div 
+              <div
                 class="anchor-tile"
                 :class="{ active: selectedAnchorId === anchor.id }"
                 @click="toggleAnchor(anchor.id)"
@@ -729,7 +822,11 @@ const confirmDeleteProduct = (product: Product) => {
                     :size="32"
                     class="anchor-avatar"
                     :src="anchor.avatar || undefined"
-                    :style="{ backgroundColor: getAvatarColor(anchor.name), color: '#fff', fontSize: '14px' }"
+                    :style="{
+                      backgroundColor: getAvatarColor(anchor.name),
+                      color: '#fff',
+                      fontSize: '14px'
+                    }"
                   >
                     <template v-if="!anchor.avatar">
                       {{ anchor.name.charAt(0) }}
@@ -740,38 +837,54 @@ const confirmDeleteProduct = (product: Product) => {
               </div>
             </template>
             <!-- Edit Content matches Add Content -->
-            <div style="width: 240px; display: flex; flex-direction: column; gap: 16px; padding: 8px 4px;">
-              <div style="display: flex; justify-content: center;">
+            <div
+              style="
+                width: 240px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding: 8px 4px;
+              "
+            >
+              <div style="display: flex; justify-content: center">
                 <n-upload
                   :file-list="editFileList"
                   list-type="image-card"
                   :max="1"
                   accept="image/*"
-                  @change="handleEditUploadChange"
                   :show-preview-button="false"
-                  style="--n-item-size: 80px;"
+                  style="--n-item-size: 80px"
+                  @change="handleEditUploadChange"
                 >
-                  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                  <div
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      justify-content: center;
+                      height: 100%;
+                    "
+                  >
                     <n-icon size="18" depth="3"><PencilOutline /></n-icon>
-                    <span style="font-size: 10px; margin-top: 4px; color: #666;">更换头像</span>
+                    <span style="font-size: 10px; margin-top: 4px; color: #666">更换头像</span>
                   </div>
                 </n-upload>
               </div>
-              
+
               <div>
-                <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px;">主播名称</div>
-                <n-input 
-                  v-model:value="editName" 
-                  placeholder="请输入名称" 
+                <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px">主播名称</div>
+                <n-input
+                  v-model:value="editName"
+                  placeholder="请输入名称"
                   size="small"
-                  @keyup.enter="handleUpdateAnchor"
                   autofocus
+                  @keyup.enter="handleUpdateAnchor"
                 />
               </div>
             </div>
           </n-popconfirm>
         </div>
-        <div class="empty-state" v-else>
+        <div v-else class="empty-state">
           <span>暂无主播</span>
         </div>
       </div>
@@ -779,9 +892,9 @@ const confirmDeleteProduct = (product: Product) => {
       <div class="divider"></div>
 
       <!-- 主播专属素材区域 -->
-      <div class="anchor-details-section" v-if="selectedAnchorId && currentAnchor && !collapsed">
-        <div class="section-title" style="color: #a855f7;">主播专属素材</div>
-        
+      <div v-if="selectedAnchorId && currentAnchor && !collapsed" class="anchor-details-section">
+        <div class="section-title" style="color: #a855f7">主播专属素材</div>
+
         <!-- 公共素材 (静态) -->
         <div class="nav-item disabled">
           <n-icon size="14" class="arrow-icon"><ChevronForwardOutline /></n-icon>
@@ -791,9 +904,12 @@ const confirmDeleteProduct = (product: Product) => {
         </div>
 
         <!-- 产品管理 Header -->
-        <div class="section-header" style="margin-top: 6px; margin-bottom: 4px;">
-          <div class="section-title" style="margin-bottom: 0; color: #10b981;">产品列表</div>
-          <n-tooltip v-if="selectedAnchorId && currentAnchorProducts.length >= MAX_PRODUCTS_PER_ANCHOR" placement="right">
+        <div class="section-header" style="margin-top: 6px; margin-bottom: 4px">
+          <div class="section-title" style="margin-bottom: 0; color: #10b981">产品列表</div>
+          <n-tooltip
+            v-if="selectedAnchorId && currentAnchorProducts.length >= MAX_PRODUCTS_PER_ANCHOR"
+            placement="right"
+          >
             <template #trigger>
               <div class="add-anchor-btn disabled">
                 <n-icon size="14"><FolderOpenOutline /></n-icon>
@@ -804,11 +920,11 @@ const confirmDeleteProduct = (product: Product) => {
           </n-tooltip>
           <n-popconfirm
             v-else-if="selectedAnchorId"
-            @positive-click="handleAddProduct"
             :show-icon="false"
             placement="right"
             positive-text="添加"
             negative-text="取消"
+            @positive-click="handleAddProduct"
           >
             <template #trigger>
               <div class="add-anchor-btn">
@@ -816,32 +932,48 @@ const confirmDeleteProduct = (product: Product) => {
                 <span>添加产品</span>
               </div>
             </template>
-            <div style="width: 240px; display: flex; flex-direction: column; gap: 16px; padding: 8px 4px;">
-              <div style="display: flex; justify-content: center;">
+            <div
+              style="
+                width: 240px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding: 8px 4px;
+              "
+            >
+              <div style="display: flex; justify-content: center">
                 <n-upload
                   :file-list="productFileList"
                   list-type="image-card"
                   :max="1"
                   accept="image/*"
-                  @change="handleProductUploadChange"
                   :show-preview-button="false"
-                  style="--n-item-size: 80px;"
+                  style="--n-item-size: 80px"
+                  @change="handleProductUploadChange"
                 >
-                  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                  <div
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      justify-content: center;
+                      height: 100%;
+                    "
+                  >
                     <n-icon size="18" depth="3"><ImagesOutline /></n-icon>
-                    <span style="font-size: 10px; margin-top: 4px; color: #666;">产品封面</span>
+                    <span style="font-size: 10px; margin-top: 4px; color: #666">产品封面</span>
                   </div>
                 </n-upload>
               </div>
-              
+
               <div>
-                <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px;">产品名称</div>
-                <n-input 
-                  v-model:value="newProductName" 
-                  placeholder="请输入名称" 
+                <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px">产品名称</div>
+                <n-input
+                  v-model:value="newProductName"
+                  placeholder="请输入名称"
                   size="small"
-                  @keyup.enter="handleAddProduct"
                   autofocus
+                  @keyup.enter="handleAddProduct"
                 />
               </div>
             </div>
@@ -851,7 +983,7 @@ const confirmDeleteProduct = (product: Product) => {
         <!-- 产品列表 -->
         <div class="products-list">
           <n-popconfirm
-            v-for="product in currentAnchorProducts" 
+            v-for="product in currentAnchorProducts"
             :key="product.id"
             :show="editProductId === product.id"
             trigger="manual"
@@ -865,90 +997,146 @@ const confirmDeleteProduct = (product: Product) => {
           >
             <template #trigger>
               <div class="product-item">
-                <div class="nav-item" @click="toggleProduct(product.id)" @contextmenu="handleContextMenu($event, product, 'product')">
+                <div
+                  class="nav-item"
+                  @click="toggleProduct(product.id)"
+                  @contextmenu="handleContextMenu($event, product, 'product')"
+                >
                   <n-icon size="14" class="arrow-icon">
                     <ChevronDownOutline v-if="expandedProductIds.includes(product.id)" />
                     <ChevronForwardOutline v-else />
                   </n-icon>
                   <!-- Check if product has cover, otherwise use folder icon -->
-                  <div v-if="product.cover" style="width: 18px; height: 18px; border-radius: 2px; overflow: hidden; margin-right: 2px; display: flex; flex-shrink: 0;">
-                     <img :src="product.cover" style="width: 100%; height: 100%; object-fit: cover;" />
+                  <div
+                    v-if="product.cover"
+                    style="
+                      width: 18px;
+                      height: 18px;
+                      border-radius: 2px;
+                      overflow: hidden;
+                      margin-right: 2px;
+                      display: flex;
+                      flex-shrink: 0;
+                    "
+                  >
+                    <img
+                      :src="product.cover"
+                      style="width: 100%; height: 100%; object-fit: cover"
+                    />
                   </div>
-                  <n-icon v-else size="18" :color="getAvatarColor(product.name)"><FolderOpenOutline /></n-icon>
+                  <n-icon v-else size="18" :color="getAvatarColor(product.name)"
+                    ><FolderOpenOutline
+                  /></n-icon>
                   <span>{{ product.name }}</span>
                 </div>
-                
+
                 <!-- 视频列表 -->
                 <div v-show="expandedProductIds.includes(product.id)" class="videos-list">
-                   <!-- Upload Buttons -->
-                   <div 
-                     v-if="getProductVideos(product.id).length < MAX_VIDEOS_PER_PRODUCT" 
-                     class="video-preview-card upload-card" 
-                     @click="openUploadModal(product)"
-                   >
-                     <div class="preview-placeholder upload-placeholder">
-                        <n-icon size="24" color="#a1a1aa"><AddCircleOutline /></n-icon>
-                        <span style="font-size: 10px; margin-top: 4px; color: #a1a1aa;">上传视频</span>
-                     </div>
-                     <div class="preview-name"></div>
-                   </div>
+                  <!-- Upload Buttons -->
+                  <div
+                    v-if="getProductVideos(product.id).length < MAX_VIDEOS_PER_PRODUCT"
+                    class="video-preview-card upload-card"
+                    @click="openUploadModal(product)"
+                  >
+                    <div class="preview-placeholder upload-placeholder">
+                      <n-icon size="24" color="#a1a1aa"><AddCircleOutline /></n-icon>
+                      <span style="font-size: 10px; margin-top: 4px; color: #a1a1aa">上传视频</span>
+                    </div>
+                    <div class="preview-name"></div>
+                  </div>
 
-                   <!-- Videos -->
-                  <div 
-                    class="video-preview-card" 
-                    v-for="video in getProductVideos(product.id).slice(0, getProductVideos(product.id).length < MAX_VIDEOS_PER_PRODUCT ? 5 : 6)" 
+                  <!-- Videos -->
+                  <div
+                    v-for="video in getProductVideos(product.id).slice(
+                      0,
+                      getProductVideos(product.id).length < MAX_VIDEOS_PER_PRODUCT ? 5 : 6
+                    )"
                     :key="video.id"
+                    class="video-preview-card"
                     @dblclick="emit('play-video', video)"
                     @contextmenu="handleContextMenu($event, video, 'video')"
                   >
-                     <div class="preview-placeholder">
-                        <img v-if="video.cover" :src="getMediaUrl(video.cover)" class="video-cover-img" />
-                        <n-icon v-else size="24" color="#fff"><VideocamOutline /></n-icon>
-                        <div class="video-duration">{{ formatDuration(video.duration) }}</div>
-                     </div>
-                     <div class="preview-name" :title="video.name">{{ video.name }}</div>
+                    <div class="preview-placeholder">
+                      <img
+                        v-if="video.cover"
+                        :src="getMediaUrl(video.cover)"
+                        class="video-cover-img"
+                      />
+                      <n-icon v-else size="24" color="#fff"><VideocamOutline /></n-icon>
+                      <div class="video-duration">{{ formatDuration(video.duration) }}</div>
+                      <!-- WebSocket 解析进度：处理中时显示 -->
+                      <div v-if="wsStore.getVideoProgress(video.id)" class="video-parse-progress">
+                        <span
+                          v-if="wsStore.getVideoProgress(video.id)?.status === 'failed'"
+                          class="progress-failed"
+                          >失败</span
+                        >
+                        <template v-else>
+                          <span class="progress-text"
+                            >{{ wsStore.getVideoProgress(video.id)?.percentage ?? 0 }}%</span
+                          >
+                        </template>
+                      </div>
+                    </div>
+                    <div class="preview-name" :title="video.name">{{ video.name }}</div>
                   </div>
                 </div>
               </div>
             </template>
             <!-- Edit Content -->
-            <div style="width: 240px; display: flex; flex-direction: column; gap: 16px; padding: 8px 4px;">
-              <div style="display: flex; justify-content: center;">
+            <div
+              style="
+                width: 240px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                padding: 8px 4px;
+              "
+            >
+              <div style="display: flex; justify-content: center">
                 <n-upload
                   :file-list="editProductFileList"
                   list-type="image-card"
                   :max="1"
                   accept="image/*"
-                  @change="handleEditProductUploadChange"
                   :show-preview-button="false"
-                  style="--n-item-size: 80px;"
+                  style="--n-item-size: 80px"
+                  @change="handleEditProductUploadChange"
                 >
-                  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                  <div
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      justify-content: center;
+                      height: 100%;
+                    "
+                  >
                     <n-icon size="18" depth="3"><ImagesOutline /></n-icon>
-                    <span style="font-size: 10px; margin-top: 4px; color: #666;">更换封面</span>
+                    <span style="font-size: 10px; margin-top: 4px; color: #666">更换封面</span>
                   </div>
                 </n-upload>
               </div>
-              
+
               <div>
-                <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px;">产品名称</div>
-                <n-input 
-                  v-model:value="editProductName" 
-                  placeholder="请输入名称" 
+                <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px">产品名称</div>
+                <n-input
+                  v-model:value="editProductName"
+                  placeholder="请输入名称"
                   size="small"
-                  @keyup.enter="handleUpdateProduct"
                   autofocus
+                  @keyup.enter="handleUpdateProduct"
                 />
               </div>
             </div>
           </n-popconfirm>
-          <div class="empty-state" v-if="currentAnchorProducts.length === 0">
+          <div v-if="currentAnchorProducts.length === 0" class="empty-state">
             <span>暂无产品</span>
           </div>
         </div>
       </div>
-      
-      <div class="anchor-details-section empty-area" v-else-if="anchors.length > 0 && !collapsed">
+
+      <div v-else-if="anchors.length > 0 && !collapsed" class="anchor-details-section empty-area">
         <div class="empty-text">请选择一个主播查看资源</div>
       </div>
     </div>
@@ -966,12 +1154,20 @@ const confirmDeleteProduct = (product: Product) => {
     />
 
     <!-- Edit Modal Removed -->
-    
+
     <VideoUploadChatModal
       v-model:show="showUploadModal"
-      :pre-selected-anchor="currentAnchor ? {id: currentAnchor.id, name: currentAnchor.name} : undefined"
-      :pre-selected-product="currentUploadProduct ? {id: currentUploadProduct.id, name: currentUploadProduct.name} : undefined"
-      :pre-selected-product-video-count="currentUploadProduct ? getProductVideos(currentUploadProduct.id).length : undefined"
+      :pre-selected-anchor="
+        currentAnchor ? { id: currentAnchor.id, name: currentAnchor.name } : undefined
+      "
+      :pre-selected-product="
+        currentUploadProduct
+          ? { id: currentUploadProduct.id, name: currentUploadProduct.name }
+          : undefined
+      "
+      :pre-selected-product-video-count="
+        currentUploadProduct ? getProductVideos(currentUploadProduct.id).length : undefined
+      "
       @success="handleUploadSuccess"
     />
 
@@ -999,7 +1195,11 @@ const confirmDeleteProduct = (product: Product) => {
   padding: 16px;
   box-sizing: border-box;
   color: #e5e5e5;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    sans-serif;
   overflow: hidden;
 }
 
@@ -1101,7 +1301,8 @@ const confirmDeleteProduct = (product: Product) => {
   cursor: pointer;
 }
 
-.collapsed-icon-item:hover, .collapsed-icon-item.active {
+.collapsed-icon-item:hover,
+.collapsed-icon-item.active {
   background: rgba(255, 255, 255, 0.08);
   color: #e4e4e7;
 }
@@ -1348,6 +1549,27 @@ const confirmDeleteProduct = (product: Product) => {
   padding: 1px 3px;
   border-radius: 2px;
   z-index: 1;
+}
+
+.video-parse-progress {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  z-index: 2;
+}
+
+.video-parse-progress .progress-text {
+  font-size: 10px;
+  color: #fff;
+}
+
+.video-parse-progress .progress-failed {
+  font-size: 10px;
+  color: #f87171;
 }
 
 .preview-name {

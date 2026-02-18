@@ -64,7 +64,10 @@ export interface UpdateAiChatMessageInput {
   payload?: any
 }
 
-export function updateAiChatMessageApi(messageId: number, data: UpdateAiChatMessageInput): Promise<void> {
+export function updateAiChatMessageApi(
+  messageId: number,
+  data: UpdateAiChatMessageInput
+): Promise<void> {
   return request({
     url: `/api/ai_chat/message/${messageId}`,
     method: 'put',
@@ -78,4 +81,3 @@ export function deleteAiChatApi(aiChatId: number): Promise<void> {
     method: 'delete'
   })
 }
-

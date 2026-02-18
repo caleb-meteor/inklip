@@ -11,10 +11,10 @@ export interface MessageHandlers {
   }) => void
   onVideoCompleted?: (videoId: number) => void
   onVideoFailed?: (videoId: number, error: string) => void
-  onSmartCutUpdated?: (data: { 
-    task_status?: number; 
-    ai_gen_video_status?: number; 
-    ai_gen_video_id?: number 
+  onSmartCutUpdated?: (data: {
+    task_status?: number
+    ai_gen_video_status?: number
+    ai_gen_video_id?: number
   }) => void
   onVideoUploaded?: () => void
   onVideoStatus?: (data: {

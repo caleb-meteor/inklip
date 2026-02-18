@@ -24,7 +24,11 @@ interface SmartCutTask {
   cover?: string
   name?: string
   taskCard?: {
-    steps: Array<{ label: string; status: 'pending' | 'processing' | 'completed' | 'error'; detail?: string }>
+    steps: Array<{
+      label: string
+      status: 'pending' | 'processing' | 'completed' | 'error'
+      detail?: string
+    }>
   }
 }
 
@@ -59,13 +63,20 @@ watch(
     if (props.task.aiGenVideoId) {
       // 获取最新的 WebSocket 消息（需要从 store 中获取）
       // 此处直接请求后端接口，与点开逻辑保持一致
-      console.log('[SmartCutResultMessage] WebSocket notified update for ID:', props.task.aiGenVideoId, 'fetching latest status')
+      console.log(
+        '[SmartCutResultMessage] WebSocket notified update for ID:',
+        props.task.aiGenVideoId,
+        'fetching latest status'
+      )
       try {
         const latestData = await getSmartCutApi(props.task.aiGenVideoId)
         console.log('[SmartCutResultMessage] Received latest data from API:', latestData)
         await updateMessageStatus(latestData)
       } catch (error) {
-        console.error('[SmartCutResultMessage] Failed to fetch latest status on WebSocket update:', error)
+        console.error(
+          '[SmartCutResultMessage] Failed to fetch latest status on WebSocket update:',
+          error
+        )
       }
     }
   }
@@ -100,14 +111,14 @@ const handleExport = async () => {
     const fileName = completedVideoFileItem.value.name.endsWith('.mp4')
       ? completedVideoFileItem.value.name
       : `${completedVideoFileItem.value.name}.mp4`
-    
+
     const loadingMsg = message.loading('正在准备...', { duration: 0 })
     console.log('[SmartCutResultMessage] Starting export:', { filePath, fileName })
-    
+
     // 使用与剪辑历史相同的导出方法
     const result = await window.api.downloadVideo(filePath, fileName)
     loadingMsg.destroy()
-    
+
     if (result.success) {
       message.success(`已保存至: ${result.path}`)
     } else if (result.canceled) {
@@ -128,12 +139,12 @@ const handleExport = async () => {
 const isProcessing = computed(() => {
   const s = taskStatus.value
   const processing = s !== 1 && s !== 3 && s !== 4
-  
+
   // 当任务完成或失败时，重置 aiChatStore 的处理状态
   if (!processing && aiChatStore) {
     aiChatStore.setCurrentChatProcessing(false)
   }
-  
+
   return processing
 })
 
@@ -157,7 +168,7 @@ const dotAnimation = ref('.')
 const completedVideoFileItem = computed<FileItem | undefined>(() => {
   // 检查是否处理完成
   const isCompleted = taskStatus.value === 1
-  
+
   console.log('[SmartCutResultMessage] completedVideoFileItem check:', {
     isCompleted,
     status: taskStatus.value,
@@ -170,7 +181,7 @@ const completedVideoFileItem = computed<FileItem | undefined>(() => {
       duration: props.task.duration
     }
   })
-  
+
   if (isCompleted && props.task.fileUrl) {
     const item: FileItem = {
       id: props.task.aiGenVideoId || 0,
@@ -187,7 +198,7 @@ const completedVideoFileItem = computed<FileItem | undefined>(() => {
     console.log('[SmartCutResultMessage] Created FileItem:', item)
     return item
   }
-  
+
   return undefined
 })
 
@@ -196,23 +207,23 @@ const processingTips = [
   '⏳ 正在分析视频内容...',
   '🎬 正在提取关键帧...',
   '🎵 正在分析音频...',
-  '✂️ 正在智能剪辑...',
+  '✂️ 正在智能剪辑...'
 ]
 const currentTipIndex = ref(0)
 
 // 统一的消息状态更新函数
 const updateMessageStatus = async (latestData: any) => {
   console.log(`[SmartCutResultMessage] Updating message status:`, latestData)
-  
+
   // 更新本地状态
   taskStatus.value = latestData.status
-  
+
   // 更新消息的 payload
-  const currentMsg = aiChatStore.getMessages().value.find(m => m.id === props.msgId)
+  const currentMsg = aiChatStore.getMessages().value.find((m) => m.id === props.msgId)
   if (currentMsg?.payload) {
     const isNested = !!currentMsg.payload.smartCutTask
     const targetPayload = isNested ? currentMsg.payload.smartCutTask : currentMsg.payload
-    
+
     const updatedPayload: any = { ...currentMsg.payload }
     if (isNested) {
       updatedPayload.smartCutTask = {
@@ -230,17 +241,17 @@ const updateMessageStatus = async (latestData: any) => {
       updatedPayload.cover = latestData.cover
       updatedPayload.name = latestData.name
     }
-    
+
     // 确保 aiGenVideoId 总是存在
     if (latestData.id && !updatedPayload.aiGenVideoId) {
       updatedPayload.aiGenVideoId = latestData.id
     }
-     
+
     // 根据状态更新任务卡片
     if (updatedPayload.taskCard) {
       // task_status: 0=待执行, 1=执行中, 2=已完成, 3=失败
       // status (ai_gen_video_status): 0=待处理, 1=已完成, 2=处理中, 3=AI异常, 4=视频异常, 5=AI剪辑中
-      
+
       // 判断是否完成: status=1(已完成)
       const isCompleted = latestData.status === 1
       // 判断是否失败：status=3/4(异常)
@@ -249,7 +260,7 @@ const updateMessageStatus = async (latestData: any) => {
       const isAiReturned = latestData.status === 2
       // 判断是否在等待AI分析：status=5
       const isWaitingAi = latestData.status === 5
-      
+
       if (isCompleted) {
         // 已完成
         updatedPayload.taskCard.steps = [
@@ -261,7 +272,11 @@ const updateMessageStatus = async (latestData: any) => {
         // 失败
         updatedPayload.taskCard.steps = [
           { label: '正在请求视频解析', status: 'completed' as const, detail: '请求已接收' },
-          { label: '正在解析视频', status: latestData.status === 3 ? 'error' as const : 'completed' as const, detail: latestData.status === 3 ? 'AI分析失败' : '解析完成' },
+          {
+            label: '正在解析视频',
+            status: latestData.status === 3 ? ('error' as const) : ('completed' as const),
+            detail: latestData.status === 3 ? 'AI分析失败' : '解析完成'
+          },
           { label: '正在智能剪辑', status: 'error' as const, detail: '处理失败' }
         ]
       } else if (isAiReturned) {
@@ -281,21 +296,20 @@ const updateMessageStatus = async (latestData: any) => {
       }
     }
 
-
     // 更新数据库中的消息
     try {
       await updateAiChatMessageApi(Number(props.msgId), {
         payload: updatedPayload
       })
       // 更新内存中的消息
-    aiChatStore.updateMessage(props.msgId, { payload: updatedPayload })
+      aiChatStore.updateMessage(props.msgId, { payload: updatedPayload })
     } catch (error) {
       console.error('[SmartCutResultMessage] Failed to update message in database:', error)
     }
   }
-  
+
   console.log(`[SmartCutResultMessage] Updated AI gen video status to ${latestData.status}`)
-  
+
   // 如果已完成，清除定时器
   if (latestData.status === 1 || latestData.status === 3 || latestData.status === 4) {
     clearIntervals()
@@ -305,14 +319,15 @@ const updateMessageStatus = async (latestData: any) => {
 // 在组件挂载时检查处理中的 AI 视频
 onMounted(() => {
   console.log('[SmartCutResultMessage] Mounted with task:', props.task)
-  
+
   // 检查是否有 aiGenVideoId 且状态是处理中 (非 1, 3, 4)
   if (
     props.task?.aiGenVideoId &&
-    (props.task.status === undefined || (props.task.status !== 1 && props.task.status !== 3 && props.task.status !== 4))
+    (props.task.status === undefined ||
+      (props.task.status !== 1 && props.task.status !== 3 && props.task.status !== 4))
   ) {
     console.log('[SmartCutResultMessage] Task is processing, starting monitoring')
-    
+
     // 启动提示循环动画（只有提示，不查询）
     tipInterval = setInterval(() => {
       currentTipIndex.value = (currentTipIndex.value + 1) % processingTips.length
@@ -322,16 +337,14 @@ onMounted(() => {
       dotAnimation.value = dotAnimation.value === '...' ? '.' : dotAnimation.value + '.'
     }, 400) // 点动画
 
-
-
     // 初始时立即查询一次当前状态
     ;(async () => {
       try {
         const aiGenVideoId = props.task.aiGenVideoId!
         const latestData = await getSmartCutApi(aiGenVideoId)
-        
+
         console.log(`[SmartCutResultMessage] Initial fetch:`, latestData)
-        
+
         await updateMessageStatus(latestData)
       } catch (error) {
         console.error(`[SmartCutResultMessage] Failed to fetch initial status:`, error)
@@ -361,7 +374,7 @@ onBeforeUnmount(() => {
           <span class="processing-subtitle">AI 正在为您精心剪辑</span>
         </div>
       </div>
-      
+
       <div class="processing-content">
         <!-- 集成任务卡片步骤 -->
         <div v-if="task.taskCard" class="integrated-task-card">
@@ -385,7 +398,7 @@ onBeforeUnmount(() => {
               <span>AI 正在后台处理中，您可以开启新对话同时进行其他操作</span>
             </div>
           </div>
-          
+
           <div class="task-grid">
             <div class="grid-item">
               <span class="item-label">素材数量</span>
@@ -411,7 +424,7 @@ onBeforeUnmount(() => {
           <span class="failure-subtitle">{{ failureMessage }}</span>
         </div>
       </div>
-      
+
       <div class="failure-content">
         <div class="failure-details">
           <div class="task-grid">
@@ -428,7 +441,7 @@ onBeforeUnmount(() => {
               <span class="item-value">{{ taskStatus }}</span>
             </div>
           </div>
-          
+
           <div class="retry-banner">
             <span class="info-icon">💡</span>
             <span>建议检查视频内容和格式，或联系技术支持</span>
@@ -441,7 +454,7 @@ onBeforeUnmount(() => {
     <div v-else class="result-section">
       <div v-if="completedVideoFileItem" class="result-content">
         <!-- 即使完成后也保留任务卡片 -->
-        <div v-if="task.taskCard" class="integrated-task-card" style="margin-bottom: 12px;">
+        <div v-if="task.taskCard" class="integrated-task-card" style="margin-bottom: 12px">
           <TaskCardMessage :steps="task.taskCard.steps" />
         </div>
 
@@ -456,8 +469,8 @@ onBeforeUnmount(() => {
             round
             size="small"
             :loading="isExporting"
-            @click="handleExport"
             class="export-button"
+            @click="handleExport"
           >
             <template #icon>
               <n-icon>
@@ -513,17 +526,14 @@ onBeforeUnmount(() => {
   left: -100%;
   width: 50%;
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(79, 172, 254, 0.1),
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, rgba(79, 172, 254, 0.1), transparent);
   animation: scan 3s infinite linear;
 }
 
 @keyframes scan {
-  to { left: 200%; }
+  to {
+    left: 200%;
+  }
 }
 
 .processing-header {
@@ -554,7 +564,9 @@ onBeforeUnmount(() => {
 }
 
 @keyframes spin-dual {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spinner-icon {
@@ -565,7 +577,9 @@ onBeforeUnmount(() => {
 }
 
 @keyframes spin-gear {
-  to { transform: rotate(-360deg); }
+  to {
+    transform: rotate(-360deg);
+  }
 }
 
 .header-info {
@@ -606,10 +620,10 @@ onBeforeUnmount(() => {
 
 /* Ensure clean display in result section */
 .result-content .integrated-task-card :deep(.task-card) {
-   background: transparent;
-   border: none;
-   padding: 0;
-   margin-top: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-top: 0;
 }
 
 .tip-card {
@@ -684,9 +698,18 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.95); opacity: 0.5; }
-  50% { transform: scale(1.05); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.5; }
+  0% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
 }
 
 .task-grid {

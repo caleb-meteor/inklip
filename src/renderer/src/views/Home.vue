@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, unref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
-import { FlashOutline, SparklesOutline, FilmOutline } from '@vicons/ionicons5'
+import { VideocamOutline, FolderOpenOutline } from '@vicons/ionicons5'
 import HomeSidebar from '../components/home/HomeSidebar.vue'
 import HomeRightSidebar from '../components/home/HomeRightSidebar.vue'
 import HomeChatMessages from '../components/home/HomeChatMessages.vue'
@@ -65,14 +65,17 @@ onMounted(() => {
   aiChatStore.loadAiChats()
   // 首次加载时清空消息，准备新对话
   aiChatStore.newChat()
-  
+
   // 获取应用版本号
   if (window.api?.getAppVersion) {
-    window.api.getAppVersion().then((version: string) => {
-      appVersion.value = version
-    }).catch((err: any) => {
-      console.warn('Failed to get app version:', err)
-    })
+    window.api
+      .getAppVersion()
+      .then((version: string) => {
+        appVersion.value = version
+      })
+      .catch((err: any) => {
+        console.warn('Failed to get app version:', err)
+      })
   }
 })
 
@@ -81,38 +84,36 @@ const navigateTo = (path: string): void => {
 }
 
 const suggestions = [
-  { 
-    text: '🎬 开始AI智能剪辑',
-    description: '上传视频 → 选择<strong>【主播】</strong>和<strong>【产品】</strong> → 自动生成精彩片段',
-    icon: SparklesOutline,
-    action: 'upload'
+  {
+    text: '🪄 开始AI智能剪辑',
+    description:
+      '上传视频 → 选择<strong>【主播】</strong>和<strong>【产品】</strong> → 自动生成精彩片段',
+    icon: VideocamOutline
+    // action: 'upload'
   },
-  { 
-    text: '📤 导入本地视频素材',
-    description: '支持批量导入，为剪辑做准备',
-    icon: FilmOutline,
-    isUpload: true
-  },
-  { 
-    text: '💡 查看示例',
-    description: '基于<strong>【主播】</strong>和<strong>【产品】</strong>自动匹配相关内容',
-    icon: FlashOutline,
-    action: 'example'
+  {
+    text: '📁 导入本地素材',
+    description: '支持批量导入视频，为剪辑做准备',
+    icon: FolderOpenOutline
+    // isUpload: true
   }
 ]
 
-const examplePrompts = [
-  '李佳琪推荐的口红',
-  '薇娅介绍的连衣裙',
-  '辛巴讲解的iPhone手机'
-]
+const examplePrompts = ['李佳琪推荐的口红', '薇娅介绍的连衣裙', '辛巴讲解的iPhone手机']
 
 const handleSend = async (val: string): Promise<void> => {
   const trimmed = val.trim()
   if (!trimmed) return
 
   // 用户输入后先调用 jieba 意图识别
-  let intentPayload: { intent: number; intent_label: string; keywords: string[]; keyword_weights?: { word: string; weight: number }[] } | undefined
+  let intentPayload:
+    | {
+        intent: number
+        intent_label: string
+        keywords: string[]
+        keyword_weights?: { word: string; weight: number }[]
+      }
+    | undefined
   try {
     const intentResult = await recognizeIntentApi(trimmed)
     intentPayload = {
@@ -165,9 +166,10 @@ const handleSend = async (val: string): Promise<void> => {
   if (intent === INTENT_SEARCH) {
     try {
       const searchRes = await searchVideosApi(trimmed, 5)
-      const summary = searchRes.results.length > 0
-        ? `共找到 ${searchRes.results.length} 个相关视频`
-        : '未找到匹配的视频，可换个描述词试试'
+      const summary =
+        searchRes.results.length > 0
+          ? `共找到 ${searchRes.results.length} 个相关视频`
+          : '未找到匹配的视频，可换个描述词试试'
       const assistantMsgId = `assistant_${Date.now()}`
       aiChatStore.addMessage({
         id: assistantMsgId,
@@ -190,7 +192,7 @@ const handleSend = async (val: string): Promise<void> => {
             results: searchRes.results,
             keywords: searchRes.keywords
           }
-        }).catch(e => console.error('保存搜索结果消息失败:', e))
+        }).catch((e) => console.error('保存搜索结果消息失败:', e))
       }
     } catch (e) {
       console.error('全文搜索失败:', e)
@@ -206,7 +208,7 @@ const handleSend = async (val: string): Promise<void> => {
           ai_chat_id: currentAiChatId,
           role: 'assistant',
           content: '搜索失败，请稍后重试'
-        }).catch(er => console.error('保存消息失败:', er))
+        }).catch((er) => console.error('保存消息失败:', er))
       }
     }
     return
@@ -227,7 +229,7 @@ const handleSend = async (val: string): Promise<void> => {
         ai_chat_id: currentAiChatId,
         role: 'assistant',
         content: UNSUPPORTED_INTENT_TIP
-      }).catch(e => console.error('保存助手提示失败:', e))
+      }).catch((e) => console.error('保存助手提示失败:', e))
     }
   }
 }
@@ -265,9 +267,9 @@ const handleOpenUploadModal = (): void => {
   <div class="app-container">
     <div class="main-layout-wrapper">
       <n-layout has-sider class="home-layout">
-        <n-layout-sider 
-          width="240" 
-          collapse-mode="width" 
+        <n-layout-sider
+          width="240"
+          collapse-mode="width"
           :collapsed-width="48"
           :collapsed="leftSidebarCollapsed"
           bordered
@@ -288,17 +290,13 @@ const handleOpenUploadModal = (): void => {
               <HomeChatMessages
                 :messages="messages"
                 :suggestions="suggestions"
-                @suggestionClick="handleSuggestionClick"
+                @suggestion-click="handleSuggestionClick"
               />
             </div>
-            
+
             <div class="input-area-wrapper">
               <div class="input-area-container">
-                <ChatInput 
-                  :disabled="isTaskRunning" 
-                  @send="handleSend" 
-                  @open-upload-modal="handleOpenUploadModal"
-                />
+                <ChatInput :disabled="isTaskRunning" @send="handleSend" />
               </div>
             </div>
           </div>
@@ -309,16 +307,13 @@ const handleOpenUploadModal = (): void => {
             @close="handleClosePlayer"
             @open-chat="handleNewChat"
           />
-          
-          <VideoUploadChatModal
-            v-model:show="showUploadModal"
-            @success="handleUploadSuccess"
-          />
+
+          <VideoUploadChatModal v-model:show="showUploadModal" @success="handleUploadSuccess" />
         </n-layout-content>
-        
-        <n-layout-sider 
-          width="280" 
-          collapse-mode="width" 
+
+        <n-layout-sider
+          width="280"
+          collapse-mode="width"
           :collapsed-width="48"
           :collapsed="rightSidebarCollapsed"
           class="home-right-sider"
@@ -337,11 +332,8 @@ const handleOpenUploadModal = (): void => {
         </n-layout-sider>
       </n-layout>
     </div>
-    
-    <AppStatusBar 
-      :app-version="appVersion" 
-      @navigate-to-settings="navigateTo('/settings')"
-    />
+
+    <AppStatusBar :app-version="appVersion" @navigate-to-settings="navigateTo('/settings')" />
   </div>
 </template>
 
