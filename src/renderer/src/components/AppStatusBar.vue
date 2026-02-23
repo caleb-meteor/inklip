@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { NIcon } from 'naive-ui'
 import { SettingsOutline } from '@vicons/ionicons5'
-import { useWebsocketStore } from '../stores/websocket'
+import { useRealtimeStore } from '../stores/realtime'
 
 interface Props {
   appVersion?: string
@@ -16,7 +16,7 @@ const emit = defineEmits<{
   'navigate-to-settings': []
 }>()
 
-const wsStore = useWebsocketStore()
+const wsStore = useRealtimeStore()
 const currentYear = computed(() => new Date().getFullYear())
 </script>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, type PropType } from 'vue'
-import VideoPreviewPlayer from '../../VideoPreviewPlayer.vue'
+import UnifiedVideoPreview from '../../UnifiedVideoPreview.vue'
 
 const props = defineProps({
   messageId: {
@@ -41,6 +41,9 @@ const maxTime = ref(100)
 // 视频选择状态
 const selectedVideos = ref<Set<number>>(new Set())
 
+/** 视频是否已删除（路径缺失） */
+const isVideoDeleted = (v: any) => !v?.path && !v?.fileUrl
+
 /**
  * 切换视频选中状态
  */
@@ -70,7 +73,8 @@ const toggleVideoSelection = (videoId: number, duration: number): void => {
 const getSelectedDuration = (): number => {
   return Array.from(selectedVideos.value).reduce((sum, id) => {
     const video = props.videos.find((v: any) => v.id === id)
-    return sum + (video?.duration || 0)
+    if (!video || isVideoDeleted(video)) return sum
+    return sum + (video.duration || 0)
   }, 0)
 }
 
@@ -118,9 +122,16 @@ const handleCancel = (): void => {
         v-for="video in videos"
         :key="video.id"
         class="compact-video-card"
-        :class="{ selected: selectedVideos.has(video.id), disabled: !isInteractive }"
+        :class="{
+          selected: selectedVideos.has(video.id),
+          disabled: !isInteractive || isVideoDeleted(video),
+          'is-deleted': isVideoDeleted(video)
+        }"
         @click="
-          isInteractive && awaitingConfirmation && toggleVideoSelection(video.id, video.duration)
+          isInteractive &&
+            awaitingConfirmation &&
+            !isVideoDeleted(video) &&
+            toggleVideoSelection(video.id, video.duration)
         "
       >
         <div v-if="awaitingConfirmation && isInteractive" class="video-selection-badge">
@@ -128,13 +139,10 @@ const handleCancel = (): void => {
             <span v-if="selectedVideos.has(video.id)">✓</span>
           </div>
         </div>
-        <VideoPreviewPlayer
-          :path="video.path"
-          :cover="video.cover"
-          :duration="video.duration"
-          aspect-ratio="9/16"
-          :video-id="video.id"
+        <UnifiedVideoPreview
+          :video="video"
           video-type="material"
+          aspect-ratio="9/16"
         />
         <div class="compact-card-info">
           <div class="compact-name">{{ video.filename || video.name }}</div>
@@ -229,6 +237,15 @@ const handleCancel = (): void => {
 
 .compact-video-card.disabled {
   cursor: not-allowed;
+}
+
+.compact-video-card.is-deleted {
+  cursor: default;
+}
+
+.compact-video-card.is-deleted:hover {
+  transform: none;
+  box-shadow: none;
 }
 
 .video-selection-badge {

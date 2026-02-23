@@ -7,10 +7,9 @@ import { NIcon } from 'naive-ui'
 import { aiChatStore } from '../../../services/aiChatStore'
 import { getSmartCutApi } from '../../../api/video'
 import { updateAiChatMessageApi } from '../../../api/aiChat'
-import VideoCard from '../../VideoCard.vue' // Import VideoCard
-import TaskCardMessage from './TaskCardMessage.vue' // Import TaskCardMessage
-import type { FileItem } from '../../../types/video' // Import FileItem type
-import { useWebsocketStore } from '../../../stores/websocket'
+import UnifiedVideoCard from '../../UnifiedVideoCard.vue'
+import TaskCardMessage from './TaskCardMessage.vue'
+import { useRealtimeStore } from '../../../stores/realtime'
 
 interface SmartCutTask {
   taskId?: string
@@ -43,9 +42,13 @@ const props = defineProps({
   }
 })
 
+const emit = defineEmits<{
+  (e: 'play-video', video: any): void
+}>()
+
 const message = useMessage()
 const isExporting = ref(false)
-const websocketStore = useWebsocketStore()
+const rtStore = useRealtimeStore()
 
 const taskStatus = ref(props.task.status)
 watch(
@@ -55,29 +58,21 @@ watch(
   }
 )
 
-// 监听 WebSocket 智能剪辑状态更新
+// 监听实时推送（SSE）智能剪辑状态更新
 watch(
-  () => websocketStore.smartCutUpdated,
+  () => rtStore.smartCutUpdated,
   async () => {
-    // 只有当 WebSocket 消息的 ID 与当前组件的 ID 匹配时，才更新
+    // 只有当推送消息的 ID 与当前组件的 ID 匹配时，才更新
     if (props.task.aiGenVideoId) {
-      // 获取最新的 WebSocket 消息（需要从 store 中获取）
+      // 获取最新的推送消息（需要从 store 中获取）
       // 此处直接请求后端接口，与点开逻辑保持一致
       console.log(
-        '[SmartCutResultMessage] WebSocket notified update for ID:',
+        '[SmartCutResultMessage] Push notified update for ID:',
         props.task.aiGenVideoId,
         'fetching latest status'
       )
-      try {
-        const latestData = await getSmartCutApi(props.task.aiGenVideoId)
-        console.log('[SmartCutResultMessage] Received latest data from API:', latestData)
-        await updateMessageStatus(latestData)
-      } catch (error) {
-        console.error(
-          '[SmartCutResultMessage] Failed to fetch latest status on WebSocket update:',
-          error
-        )
-      }
+      const latestData = await getSmartCutApi(props.task.aiGenVideoId)
+      await updateMessageStatus(latestData)
     }
   }
 )
@@ -100,38 +95,23 @@ const clearIntervals = () => {
 
 // 处理导出/下载 - 复用剪辑历史的导出功能
 const handleExport = async () => {
-  if (!completedVideoFileItem.value?.path) {
+  if (!completedVideoItem.value?.path) {
     message.error('视频文件不存在，无法导出')
     return
   }
 
   isExporting.value = true
-  try {
-    const filePath = completedVideoFileItem.value.path
-    const fileName = completedVideoFileItem.value.name.endsWith('.mp4')
-      ? completedVideoFileItem.value.name
-      : `${completedVideoFileItem.value.name}.mp4`
-
-    const loadingMsg = message.loading('正在准备...', { duration: 0 })
-    console.log('[SmartCutResultMessage] Starting export:', { filePath, fileName })
-
-    // 使用与剪辑历史相同的导出方法
-    const result = await window.api.downloadVideo(filePath, fileName)
-    loadingMsg.destroy()
-
-    if (result.success) {
-      message.success(`已保存至: ${result.path}`)
-    } else if (result.canceled) {
-      message.info('已取消导出')
-    } else {
-      message.error(result.error || '导出失败')
-    }
-  } catch (error) {
-    console.error('[SmartCutResultMessage] Export failed:', error)
-    message.error('导出过程中发生错误')
-  } finally {
-    isExporting.value = false
-  }
+  const filePath = completedVideoItem.value.path
+  const fileName = completedVideoItem.value.name.endsWith('.mp4')
+    ? completedVideoFileItem.value.name
+    : `${completedVideoFileItem.value.name}.mp4`
+  const loadingMsg = message.loading('正在准备...', { duration: 0 })
+  const result = await window.api.downloadVideo(filePath, fileName)
+  loadingMsg.destroy()
+  if (result.success) message.success(`已保存至: ${result.path}`)
+  else if (result.canceled) message.info('已取消导出')
+  else message.error(result.error || '导出失败')
+  isExporting.value = false
 }
 
 // Status 1 is Completed. Status 3, 4 are Errors.
@@ -153,6 +133,11 @@ const isFailed = computed(() => {
   return s === 3 || s === 4
 })
 
+// 处理视频播放 - 使用首页播放器
+const handlePlayVideo = (file: any) => {
+  emit('play-video', file)
+}
+
 const failureMessage = computed(() => {
   if (taskStatus.value === 3) {
     return 'AI 分析失败，请检查视频内容或重新尝试'
@@ -164,42 +149,17 @@ const failureMessage = computed(() => {
 
 const dotAnimation = ref('.')
 
-// Computed property to transform completed task into a FileItem for VideoCard
-const completedVideoFileItem = computed<FileItem | undefined>(() => {
-  // 检查是否处理完成
-  const isCompleted = taskStatus.value === 1
-
-  console.log('[SmartCutResultMessage] completedVideoFileItem check:', {
-    isCompleted,
-    status: taskStatus.value,
-    fileUrl: props.task.fileUrl,
-    aiGenVideoId: props.task.aiGenVideoId,
-    hasFileUrl: !!props.task.fileUrl,
-    taskDetails: {
-      name: props.task.name,
-      cover: props.task.cover,
-      duration: props.task.duration
-    }
-  })
-
-  if (isCompleted && props.task.fileUrl) {
-    const item: FileItem = {
-      id: props.task.aiGenVideoId || 0,
-      name: props.task.name || `智能剪辑_${props.task.aiGenVideoId}.mp4`,
-      type: 'video',
-      size: '',
-      modified: new Date().toISOString(),
-      path: props.task.fileUrl,
-      cover: props.task.cover || '',
-      duration: props.task.duration,
-      parentId: null,
-      status: 4
-    }
-    console.log('[SmartCutResultMessage] Created FileItem:', item)
-    return item
+// 完成态的视频数据，供 UnifiedVideoCard 使用
+const completedVideoItem = computed(() => {
+  if (taskStatus.value !== 1 || !props.task.fileUrl) return undefined
+  return {
+    id: props.task.aiGenVideoId || 0,
+    name: props.task.name || `智能剪辑_${props.task.aiGenVideoId}.mp4`,
+    path: props.task.fileUrl,
+    cover: props.task.cover || '',
+    duration: props.task.duration,
+    status: 1
   }
-
-  return undefined
 })
 
 // 处理中的友好提示
@@ -296,16 +256,8 @@ const updateMessageStatus = async (latestData: any) => {
       }
     }
 
-    // 更新数据库中的消息
-    try {
-      await updateAiChatMessageApi(Number(props.msgId), {
-        payload: updatedPayload
-      })
-      // 更新内存中的消息
-      aiChatStore.updateMessage(props.msgId, { payload: updatedPayload })
-    } catch (error) {
-      console.error('[SmartCutResultMessage] Failed to update message in database:', error)
-    }
+    await updateAiChatMessageApi(Number(props.msgId), { payload: updatedPayload })
+    aiChatStore.updateMessage(props.msgId, { payload: updatedPayload })
   }
 
   console.log(`[SmartCutResultMessage] Updated AI gen video status to ${latestData.status}`)
@@ -337,18 +289,9 @@ onMounted(() => {
       dotAnimation.value = dotAnimation.value === '...' ? '.' : dotAnimation.value + '.'
     }, 400) // 点动画
 
-    // 初始时立即查询一次当前状态
     ;(async () => {
-      try {
-        const aiGenVideoId = props.task.aiGenVideoId!
-        const latestData = await getSmartCutApi(aiGenVideoId)
-
-        console.log(`[SmartCutResultMessage] Initial fetch:`, latestData)
-
-        await updateMessageStatus(latestData)
-      } catch (error) {
-        console.error(`[SmartCutResultMessage] Failed to fetch initial status:`, error)
-      }
+      const latestData = await getSmartCutApi(props.task.aiGenVideoId!)
+      await updateMessageStatus(latestData)
     })()
   }
 })
@@ -452,7 +395,7 @@ onBeforeUnmount(() => {
 
     <!-- 完成后的结果 -->
     <div v-else class="result-section">
-      <div v-if="completedVideoFileItem" class="result-content">
+      <div v-if="completedVideoItem" class="result-content">
         <!-- 即使完成后也保留任务卡片 -->
         <div v-if="task.taskCard" class="integrated-task-card" style="margin-bottom: 12px">
           <TaskCardMessage :steps="task.taskCard.steps" />
@@ -486,11 +429,11 @@ onBeforeUnmount(() => {
           <div class="video-preview-container">
             <div class="videos-grid">
               <div class="video-card-wrapper">
-                <VideoCard
-                  :file="completedVideoFileItem"
-                  :aspect-ratio="'9/16'"
-                  :video-status="'completed'"
+                <UnifiedVideoCard
+                  :video="completedVideoItem"
                   video-type="edited"
+                  aspect-ratio="9/16"
+                  @open="handlePlayVideo"
                 />
               </div>
             </div>

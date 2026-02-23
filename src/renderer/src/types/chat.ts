@@ -46,6 +46,14 @@ export interface MessagePayload {
       detail?: string
     }>
   }
+  // 意图识别结果（用户消息）
+  intent?: number
+  intent_label?: string
+  keywords?: string[]
+  keyword_weights?: { word: string; weight: number }[]
+  // 搜索结果（assistant 消息）
+  type?: string
+  results?: any[]
 }
 export interface Message {
   id: string
@@ -59,4 +67,6 @@ export interface Message {
   timestamp: Date
   isTyping?: boolean // 是否正在打字
   displayedContent?: string // 显示的内容（用于打字机效果）
+  /** 是否已读（仅对 assistant 消息有意义） */
+  isRead?: boolean
 }

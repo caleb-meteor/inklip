@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
-import { VideocamOutline, FolderOpenOutline } from '@vicons/ionicons5'
 import HomeSidebar from '../components/home/HomeSidebar.vue'
 import HomeRightSidebar from '../components/home/HomeRightSidebar.vue'
 import HomeChatMessages from '../components/home/HomeChatMessages.vue'
@@ -19,25 +18,22 @@ import { recognizeIntentApi, type IntentType } from '../api/intent'
 const INTENT_SEARCH = 1
 const INTENT_CLIP = 2
 
-const UNSUPPORTED_INTENT_TIP = `当前仅支持「搜索」和「剪辑」：
-
-• **搜索**：用「找、搜、查、内容」等描述想找的视频内容
-• **剪辑**：用「剪、片段」等描述要剪的内容
-
-请重新描述您的需求。`
-import { useWebSocketSync } from '../composables/useWebSocketSync'
+const UNSUPPORTED_INTENT_TIP = `我可能还没有完全理解你的意思，可以再详细说明一下吗？`
+import { useRealtimeSync } from '../composables/useRealtimeSync'
 import { useVideoUpload } from '../composables/useVideoUpload'
+import { useRealtimeStore } from '../stores/realtime'
 import type { VideoItem, SmartCutItem } from '../api/video'
 import { searchVideosApi } from '../api/video'
 
 const router = useRouter()
+const rtStore = useRealtimeStore()
 const appVersion = ref<string>('1.0.0')
 const showUploadModal = ref(false)
 const leftSidebarCollapsed = ref(false)
 const rightSidebarCollapsed = ref(true)
 
 // 使用 composables
-useWebSocketSync()
+useRealtimeSync()
 const { handleUploadSuccess } = useVideoUpload()
 
 // 获取共享的 AI 对话存储
@@ -53,6 +49,10 @@ const isTaskRunning = computed(() => {
 const currentPlayingVideo = ref<VideoItem | SmartCutItem | null>(null)
 const currentSelectedAnchor = ref<any>(null)
 
+const homeSidebarRef = ref<InstanceType<typeof HomeSidebar> | null>(null)
+const homeRightSidebarRef = ref<InstanceType<typeof HomeRightSidebar> | null>(null)
+let stopReconnectWatch: (() => void) | undefined
+
 const handlePlayVideo = (video: VideoItem | SmartCutItem) => {
   currentPlayingVideo.value = video
 }
@@ -61,45 +61,53 @@ const handleClosePlayer = () => {
   currentPlayingVideo.value = null
 }
 
-onMounted(() => {
+/** 长时间未操作/休眠恢复后：重新拉取主播、产品、视频、聊天列表、当前对话消息、剪辑历史，避免信息丢失 */
+const refreshPageData = (): void => {
+  homeSidebarRef.value?.loadAll?.()
   aiChatStore.loadAiChats()
-  // 首次加载时清空消息，准备新对话
-  aiChatStore.newChat()
+  const chatId = aiChatStore.getCurrentAiChatId().value
+  if (chatId != null) aiChatStore.loadAiChatMessages(chatId)
+  homeRightSidebarRef.value?.refreshClipHistory?.()
+}
+
+const onVisibilityChange = (): void => {
+  if (document.visibilityState === 'visible') refreshPageData()
+}
+
+onMounted(async () => {
+  await aiChatStore.loadAiChats()
+  // const chats = aiChatStore.getAiChats().value
+  // if (chats.length > 0) {
+  //   await aiChatStore.selectChat(chats[0])
+  // } else {
+  //   aiChatStore.newChat()
+  // }
+
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  // SSE 断线重连后同步一次数据，避免休眠期间数据丢失
+  stopReconnectWatch = watch(
+    () => rtStore.connected,
+    (connected, wasConnected) => {
+      if (wasConnected === false && connected === true) refreshPageData()
+    }
+  )
 
   // 获取应用版本号
   if (window.api?.getAppVersion) {
-    window.api
-      .getAppVersion()
-      .then((version: string) => {
-        appVersion.value = version
-      })
-      .catch((err: any) => {
-        console.warn('Failed to get app version:', err)
-      })
+    window.api.getAppVersion().then((version: string) => {
+      appVersion.value = version
+    })
   }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (stopReconnectWatch) stopReconnectWatch()
 })
 
 const navigateTo = (path: string): void => {
   router.push(path)
 }
-
-const suggestions = [
-  {
-    text: '🪄 开始AI智能剪辑',
-    description:
-      '上传视频 → 选择<strong>【主播】</strong>和<strong>【产品】</strong> → 自动生成精彩片段',
-    icon: VideocamOutline
-    // action: 'upload'
-  },
-  {
-    text: '📁 导入本地素材',
-    description: '支持批量导入视频，为剪辑做准备',
-    icon: FolderOpenOutline
-    // isUpload: true
-  }
-]
-
-const examplePrompts = ['李佳琪推荐的口红', '薇娅介绍的连衣裙', '辛巴讲解的iPhone手机']
 
 const handleSend = async (val: string): Promise<void> => {
   const trimmed = val.trim()
@@ -114,16 +122,12 @@ const handleSend = async (val: string): Promise<void> => {
         keyword_weights?: { word: string; weight: number }[]
       }
     | undefined
-  try {
-    const intentResult = await recognizeIntentApi(trimmed)
-    intentPayload = {
-      intent: intentResult.intent,
-      intent_label: intentResult.intent_label,
-      keywords: intentResult.keywords,
-      keyword_weights: intentResult.keyword_weights
-    }
-  } catch (e) {
-    console.warn('意图识别请求失败:', e)
+  const intentResult = await recognizeIntentApi(trimmed)
+  intentPayload = {
+    intent: intentResult.intent,
+    intent_label: intentResult.intent_label,
+    keywords: intentResult.keywords,
+    keyword_weights: intentResult.keyword_weights
   }
 
   // 识别到剪辑意图后，直接进入智能剪辑流程（会创建对话、添加用户消息并执行剪辑）
@@ -147,75 +151,50 @@ const handleSend = async (val: string): Promise<void> => {
     role: 'user',
     content: trimmed,
     timestamp: new Date(),
-    payload: intentPayload
+    payload: intentPayload ?? undefined
   })
   if (currentAiChatId) {
-    try {
-      await addAiChatMessageApi({
+    await addAiChatMessageApi({
         ai_chat_id: currentAiChatId,
         role: 'user',
         content: trimmed,
-        payload: intentPayload
+        payload: intentPayload ?? undefined
       })
-    } catch (e) {
-      console.error('保存用户消息失败:', e)
-    }
   }
 
-  // 识别到搜索意图后，进行全文搜索并展示结果（视频 + 匹配字幕时间）
   if (intent === INTENT_SEARCH) {
-    try {
-      const searchRes = await searchVideosApi(trimmed, 5)
-      const summary =
-        searchRes.results.length > 0
-          ? `共找到 ${searchRes.results.length} 个相关视频`
-          : '未找到匹配的视频，可换个描述词试试'
-      const assistantMsgId = `assistant_${Date.now()}`
-      aiChatStore.addMessage({
-        id: assistantMsgId,
+    const searchRes = await searchVideosApi(trimmed, 5)
+    const summary =
+      searchRes.results.length > 0
+        ? `共找到 ${searchRes.results.length} 个相关视频`
+        : '未找到匹配的视频，可换个描述词试试'
+    const assistantMsgId = `assistant_${Date.now()}`
+    const searchPayload = {
+      type: 'search_result',
+      results: searchRes.results,
+      keywords: searchRes.keywords
+    }
+    aiChatStore.addMessage({
+      id: assistantMsgId,
+      role: 'assistant',
+      content: summary,
+      timestamp: new Date(),
+      payload: searchPayload
+    })
+    if (currentAiChatId) {
+      await addAiChatMessageApi({
+        ai_chat_id: currentAiChatId,
         role: 'assistant',
         content: summary,
-        timestamp: new Date(),
-        payload: {
-          type: 'search_result',
-          results: searchRes.results,
-          keywords: searchRes.keywords
-        }
+        payload: searchPayload
       })
-      if (currentAiChatId) {
-        addAiChatMessageApi({
-          ai_chat_id: currentAiChatId,
-          role: 'assistant',
-          content: summary,
-          payload: {
-            type: 'search_result',
-            results: searchRes.results,
-            keywords: searchRes.keywords
-          }
-        }).catch((e) => console.error('保存搜索结果消息失败:', e))
-      }
-    } catch (e) {
-      console.error('全文搜索失败:', e)
-      const errMsgId = `assistant_${Date.now()}`
-      aiChatStore.addMessage({
-        id: errMsgId,
-        role: 'assistant',
-        content: '搜索失败，请稍后重试',
-        timestamp: new Date()
-      })
-      if (currentAiChatId) {
-        addAiChatMessageApi({
-          ai_chat_id: currentAiChatId,
-          role: 'assistant',
-          content: '搜索失败，请稍后重试'
-        }).catch((er) => console.error('保存消息失败:', er))
-      }
     }
     return
   }
 
-  // 非搜索/剪辑意图时，提示用户当前仅支持搜索与剪辑
-  const isSupported = intent === INTENT_SEARCH || intent === INTENT_CLIP
+  // 非搜索/剪辑意图时，提示用户当前仅支持搜索与剪辑（intent 为 0 或 undefined）
+  const isSupported =
+    intentPayload?.intent === INTENT_SEARCH || intentPayload?.intent === INTENT_CLIP
   if (intentPayload != null && !isSupported) {
     const assistantMsgId = `assistant_${Date.now()}`
     aiChatStore.addMessage({
@@ -229,22 +208,8 @@ const handleSend = async (val: string): Promise<void> => {
         ai_chat_id: currentAiChatId,
         role: 'assistant',
         content: UNSUPPORTED_INTENT_TIP
-      }).catch((e) => console.error('保存助手提示失败:', e))
+      })
     }
-  }
-}
-
-const handleSuggestionClick = (suggestion: any): void => {
-  if (suggestion.isUpload) {
-    handleOpenUploadModal()
-  } else if (suggestion.action === 'upload') {
-    handleOpenUploadModal()
-  } else if (suggestion.action === 'example') {
-    // 随机选择一个示例提示词
-    const randomPrompt = examplePrompts[Math.floor(Math.random() * examplePrompts.length)]
-    handleSend(randomPrompt)
-  } else {
-    handleSend(suggestion.text || suggestion)
   }
 }
 
@@ -256,10 +221,6 @@ const handleSelectChat = async (chat: AiChatTopic): Promise<void> => {
 const handleNewChat = (): void => {
   currentPlayingVideo.value = null
   aiChatStore.newChat()
-}
-
-const handleOpenUploadModal = (): void => {
-  showUploadModal.value = true
 }
 </script>
 
@@ -276,6 +237,7 @@ const handleOpenUploadModal = (): void => {
           class="home-sider"
         >
           <HomeSidebar
+            ref="homeSidebarRef"
             :collapsed="leftSidebarCollapsed"
             @navigate="navigateTo"
             @toggle-left-collapse="leftSidebarCollapsed = !leftSidebarCollapsed"
@@ -289,8 +251,7 @@ const handleOpenUploadModal = (): void => {
             <div class="messages-container">
               <HomeChatMessages
                 :messages="messages"
-                :suggestions="suggestions"
-                @suggestion-click="handleSuggestionClick"
+                @play-video="handlePlayVideo"
               />
             </div>
 
@@ -320,6 +281,7 @@ const handleOpenUploadModal = (): void => {
           bordered
         >
           <HomeRightSidebar
+            ref="homeRightSidebarRef"
             :ai-chats="aiChats"
             :is-loading-ai-chats="isLoadingAiChats"
             :collapsed="rightSidebarCollapsed"

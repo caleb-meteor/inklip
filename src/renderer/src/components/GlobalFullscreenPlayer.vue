@@ -140,64 +140,41 @@ const loadSubtitles = async (): Promise<void> => {
     }
   }
 
-  try {
-    let videoSubtitle: any = null
+  let videoSubtitle: any = null
 
-    if (props.videoType === 'edited' && props.videoId) {
-      // Handle AI Generated / Edited Videos (剪辑视频)
-      console.log(
-        '[GlobalFullscreenPlayer] Fetching latest smart cut data for subtitles:',
-        props.videoId
-      )
-      const smartCut = await getSmartCutApi(props.videoId)
-      if (smartCut && smartCut.subtitle) {
-        videoSubtitle = smartCut.subtitle
-      }
-    } else {
-      // Handle Source Materials (素材视频) - fallback or explicit 'material' type
-      console.log('[GlobalFullscreenPlayer] Fetching latest material video data for subtitles')
-      const videos = await getVideosApi()
-      let video: VideoItem | undefined = undefined
-
-      // Find video by ID (preferred) or path
-      if (props.videoId) {
-        video = videos.find((v) => v.id === props.videoId)
-      } else if (props.path) {
-        const normalizePath = (p: string): string => {
-          if (!p) return ''
-          return p
-            .replace(/^media:\/\//, '')
-            .replace(/^file:\/\//, '')
-            .replace(/\\/g, '/')
-            .toLowerCase()
-        }
-        const targetPath = normalizePath(props.path)
-        video = videos.find((v) => {
-          const videoPath = normalizePath(v.path)
-          return (
-            videoPath === targetPath ||
-            videoPath.includes(targetPath) ||
-            targetPath.includes(videoPath)
-          )
-        })
-      }
-
-      if (video && video.subtitle) {
-        videoSubtitle = video.subtitle
-      }
+  if (props.videoType === 'edited' && props.videoId) {
+    const smartCut = await getSmartCutApi(props.videoId)
+    if (smartCut?.subtitle) videoSubtitle = smartCut.subtitle
+  } else {
+    const videos = await getVideosApi()
+    let video: VideoItem | undefined
+    if (props.videoId) {
+      video = videos.find((v) => v.id === props.videoId)
+    } else if (props.path) {
+      const normalizePath = (p: string) =>
+        (p || '')
+          .replace(/^media:\/\//, '')
+          .replace(/^file:\/\//, '')
+          .replace(/\\/g, '/')
+          .toLowerCase()
+      const targetPath = normalizePath(props.path)
+      video = videos.find((v) => {
+        const videoPath = normalizePath(v.path)
+        return (
+          videoPath === targetPath ||
+          videoPath.includes(targetPath) ||
+          targetPath.includes(videoPath)
+        )
+      })
     }
-
-    if (!videoSubtitle) {
-      subtitles.value = []
-      return
-    }
-
-    // Process subtitle from API response (JSON data)
-    subtitles.value = processSubtitleData(videoSubtitle)
-  } catch (error) {
-    console.error('[GlobalFullscreenPlayer] Failed to load subtitles:', error)
-    subtitles.value = []
+    if (video?.subtitle) videoSubtitle = video.subtitle
   }
+
+  if (!videoSubtitle) {
+    subtitles.value = []
+    return
+  }
+  subtitles.value = processSubtitleData(videoSubtitle)
 }
 
 // Watch for visibility changes to load subtitles

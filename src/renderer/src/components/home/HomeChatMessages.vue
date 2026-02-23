@@ -18,14 +18,10 @@ const props = defineProps({
     type: Array as PropType<Message[]>,
     default: () => []
   },
-  suggestions: {
-    type: Array as PropType<Array<{ text: string; icon: any }>>,
-    default: () => []
-  }
 })
 
-const _emit = defineEmits<{
-  (e: 'suggestionClick', suggestion: any): void
+const emit = defineEmits<{
+  (e: 'play-video', video: any): void
 }>()
 
 const scrollContainer = ref<HTMLElement | null>(null)
@@ -78,33 +74,10 @@ const handleConfirmVideos = async (
   minTime: number,
   maxTime: number
 ): Promise<void> => {
-  try {
-    console.log('[handleConfirmVideos] 开始确认:', {
-      msgId,
-      videoCount: videoIds.length,
-      minTime,
-      maxTime
-    })
-    // Pass duration options to your service (assuming service can handle it, otherwise pass as payload)
-    // Here assuming the service function signature might need update or we pass config object.
-    // Given previous code was `smartCutAiService.confirmAndProceed(msgId, videoIds)`
-    // checking usage in previous steps, it seems `smartCutAiService.confirmAndProceed` takes videoIds.
-    // If the service doesn't support duration yet, we should probably update it or pass it.
-    // For now, I'll pass it as a 3rd argument (config object) if possible or updated signature.
-    // Since I cannot see service definition right now, I will assume interaction payload update is handled there.
-    // But wait, the user request said: "User input -> Request API -> Get Dict -> Match -> Show Card. If confirmed -> Call Smart Cut API."
-    // So `confirmAndProceed` likely triggers the Smart Cut API.
-
-    // Let's pass the config.
-    await smartCutAiService.confirmAndProceed(msgId, videoIds, {
-      minDuration: minTime,
-      maxDuration: maxTime
-    })
-
-    console.log('[handleConfirmVideos] 确认完成')
-  } catch (error) {
-    console.error('[handleConfirmVideos] 确认视频失败:', error)
-  }
+  await smartCutAiService.confirmAndProceed(msgId, videoIds, {
+    minDuration: minTime,
+    maxDuration: maxTime
+  })
 }
 
 const handleCancelVideos = async (_msgId: string): Promise<void> => {
@@ -177,7 +150,7 @@ const getMessageContent = (msg: Message): string => {
               </n-icon>
             </div>
             <div class="feature-content">
-              <h3>智能素材管理</h3>
+              <h3>素材智能管理</h3>
               <p>秒级定位素材，让管理井井有条。</p>
             </div>
           </div>
@@ -296,6 +269,7 @@ const getMessageContent = (msg: Message): string => {
                   v-if="msg.payload?.aiGenVideoId"
                   :msg-id="msg.id"
                   :task="msg.payload"
+                  @play-video="(video) => emit('play-video', video)"
                 />
 
                 <!-- Match APPLIED CHANGES UI from screenshot -->
@@ -574,76 +548,6 @@ const getMessageContent = (msg: Message): string => {
 .greeting-sub {
   font-size: 24px;
   color: rgba(255, 255, 255, 0.4);
-}
-
-.suggestions-grid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 16px;
-  width: 100%;
-}
-
-.suggestion-card {
-  background: #1e1e20;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 16px 20px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  flex: 1;
-  min-width: 280px;
-  position: relative;
-}
-
-.suggestion-card:hover {
-  background: #27272a;
-  transform: translateY(-2px);
-  border-color: rgba(79, 172, 254, 0.3);
-  box-shadow: 0 4px 12px rgba(79, 172, 254, 0.1);
-}
-
-.suggestion-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.suggestion-icon-wrapper {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(79, 172, 254, 0.1) 0%, rgba(0, 242, 254, 0.1) 100%);
-  color: #4facfe;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(79, 172, 254, 0.2);
-  flex-shrink: 0;
-}
-
-.suggestion-text {
-  font-size: 15px;
-  color: #e4e4e7;
-  font-weight: 600;
-}
-
-.suggestion-description {
-  font-size: 12px;
-  color: #a1a1a6;
-  line-height: 1.5;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.suggestion-description strong {
-  color: #4facfe;
-  font-weight: 600;
 }
 
 .messages-list {

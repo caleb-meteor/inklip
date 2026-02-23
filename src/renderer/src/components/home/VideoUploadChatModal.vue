@@ -57,27 +57,18 @@ const rules = {
 }
 
 const fetchDicts = async (): Promise<void> => {
-  try {
-    const anchors = await getDictsByTypeApi('video_anchor')
-    const products = await getDictsByTypeApi('video_product')
-
-    const newMap: Record<string, number> = {}
-
-    anchorOptions.value = anchors.map((d) => {
-      newMap[`anchor:${d.name}`] = d.id
-      return { label: d.name, value: d.name }
-    })
-
-    productOptions.value = products.map((d) => {
-      newMap[`product:${d.name}`] = d.id
-      return { label: d.name, value: d.name }
-    })
-
-    nameToIdMap.value = newMap
-  } catch (e) {
-    console.error('Failed to fetch dicts', e)
-    message.error('加载选项失败')
-  }
+  const anchors = await getDictsByTypeApi('video_anchor')
+  const products = await getDictsByTypeApi('video_product')
+  const newMap: Record<string, number> = {}
+  anchorOptions.value = anchors.map((d) => {
+    newMap[`anchor:${d.name}`] = d.id
+    return { label: d.name, value: d.name }
+  })
+  productOptions.value = products.map((d) => {
+    newMap[`product:${d.name}`] = d.id
+    return { label: d.name, value: d.name }
+  })
+  nameToIdMap.value = newMap
 }
 
 watch(
@@ -93,44 +84,28 @@ watch(
 )
 
 const handleSelectFile = async (): Promise<void> => {
-  try {
-    const result = await window.api.selectVideoFile()
-    if (result.success && result.filePaths) {
-      // Append unique paths
-      const newPaths = result.filePaths.filter((p) => !videoPaths.value.includes(p))
-      videoPaths.value = [...videoPaths.value, ...newPaths]
-
-      // Merge subtitle files
-      if (result.subtitleFiles) {
-        subtitleFiles.value = { ...subtitleFiles.value, ...result.subtitleFiles }
-      }
-
-      folderPath.value = '' // Clear folder path if mixed or file selected
+  const result = await window.api.selectVideoFile()
+  if (result.success && result.filePaths) {
+    const newPaths = result.filePaths.filter((p) => !videoPaths.value.includes(p))
+    videoPaths.value = [...videoPaths.value, ...newPaths]
+    if (result.subtitleFiles) {
+      subtitleFiles.value = { ...subtitleFiles.value, ...result.subtitleFiles }
     }
-  } catch (e) {
-    console.error(e)
-    message.error('选择文件失败')
+    folderPath.value = ''
   }
 }
 
 const handleSelectFolder = async (): Promise<void> => {
-  try {
-    const result = await window.api.selectVideoFolder()
-    if (result.success) {
-      if (result.videoFiles && result.videoFiles.length > 0) {
-        // Replace existing paths with folder content? Or append?
-        // Usually folder import implies "this is the source". Let's replace to avoid confusion or mixed sources.
-        videoPaths.value = result.videoFiles
-        subtitleFiles.value = result.subtitleFiles || {}
-        folderPath.value = result.folderPath || ''
-        message.success(`已选择文件夹，包含 ${result.videoFiles.length} 个视频`)
-      } else {
-        message.warning('该文件夹中没有找到视频文件')
-      }
+  const result = await window.api.selectVideoFolder()
+  if (result.success) {
+    if (result.videoFiles && result.videoFiles.length > 0) {
+      videoPaths.value = result.videoFiles
+      subtitleFiles.value = result.subtitleFiles || {}
+      folderPath.value = result.folderPath || ''
+      message.success(`已选择文件夹，包含 ${result.videoFiles.length} 个视频`)
+    } else {
+      message.warning('该文件夹中没有找到视频文件')
     }
-  } catch (e) {
-    console.error(e)
-    message.error('选择文件夹失败')
   }
 }
 
@@ -148,16 +123,10 @@ const getDictId = async (name: string, type: 'anchor' | 'product'): Promise<numb
     return nameToIdMap.value[key]
   }
 
-  // Create new dict
-  try {
-    const dictType = type === 'anchor' ? 'video_anchor' : 'video_product'
-    const newDict = await createDictApi(name, dictType)
-    nameToIdMap.value[key] = newDict.id // Cache it
-    return newDict.id
-  } catch (e) {
-    console.error(`Failed to create ${type}`, e)
-    throw new Error(`创建新${type === 'anchor' ? '主播' : '产品'}失败`)
-  }
+  const dictType = type === 'anchor' ? 'video_anchor' : 'video_product'
+  const newDict = await createDictApi(name, dictType)
+  nameToIdMap.value[key] = newDict.id
+  return newDict.id
 }
 
 const handleConfirm = async (): Promise<void> => {
@@ -174,62 +143,37 @@ const handleConfirm = async (): Promise<void> => {
     return
   }
 
-  try {
-    isUploading.value = true
+  isUploading.value = true
+  let anchorId: number = 0
+  let productId: number = 0
 
-    // Get IDs
-    let anchorId: number = 0
-    let productId: number = 0
+  if (props.preSelectedAnchor) anchorId = props.preSelectedAnchor.id
+  else if (formValue.value.anchor) anchorId = await getDictId(formValue.value.anchor, 'anchor')
 
-    if (props.preSelectedAnchor) {
-      anchorId = props.preSelectedAnchor.id
-    } else if (formValue.value.anchor) {
-      anchorId = await getDictId(formValue.value.anchor, 'anchor')
-    }
+  if (props.preSelectedProduct) productId = props.preSelectedProduct.id
+  else if (formValue.value.product) productId = await getDictId(formValue.value.product, 'product')
 
-    if (props.preSelectedProduct) {
-      productId = props.preSelectedProduct.id
-    } else if (formValue.value.product) {
-      productId = await getDictId(formValue.value.product, 'product')
-    }
+  const res = await uploadVideosBatchApi(
+    videoPaths.value,
+    subtitleFiles.value,
+    anchorId,
+    productId
+  )
+  let uploadedVideos: any[] = []
+  if (Array.isArray(res)) uploadedVideos = res
+  else if (res && Array.isArray(res.videos)) uploadedVideos = res.videos
 
-    // Upload
-    const res = await uploadVideosBatchApi(
-      videoPaths.value,
-      subtitleFiles.value,
-      anchorId,
-      productId
-    )
-
-    // Normalize result
-    let uploadedVideos: any[] = []
-    if (Array.isArray(res)) {
-      uploadedVideos = res
-    } else if (res && Array.isArray(res.videos)) {
-      uploadedVideos = res.videos
-    }
-
-    // message.success(`成功上传 ${videoPaths.value.length} 个视频`)
-    emit('success', uploadedVideos, {
-      anchor: props.preSelectedAnchor ? props.preSelectedAnchor.name : formValue.value.anchor,
-      product: props.preSelectedProduct ? props.preSelectedProduct.name : formValue.value.product
-    })
-    emit('update:show', false)
-
-    // Reset state
-    videoPaths.value = []
-    folderPath.value = ''
-    subtitleFiles.value = {}
-    // Keep anchor/product maybe? Let's reset for now or keep if user wants to upload more.
-    // Resetting seems safer to avoid accidental wrong attribution.
-    formValue.value.anchor = null
-    formValue.value.product = null
-  } catch (e: any) {
-    console.error('Upload failed', e)
-    message.error(e.message || '上传失败')
-  } finally {
-    isUploading.value = false
-  }
+  emit('success', uploadedVideos, {
+    anchor: props.preSelectedAnchor ? props.preSelectedAnchor.name : formValue.value.anchor,
+    product: props.preSelectedProduct ? props.preSelectedProduct.name : formValue.value.product
+  })
+  emit('update:show', false)
+  videoPaths.value = []
+  folderPath.value = ''
+  subtitleFiles.value = {}
+  formValue.value.anchor = null
+  formValue.value.product = null
+  isUploading.value = false
 }
 
 const handleClose = (): void => {

@@ -16,7 +16,7 @@ interface SubtitleItem {
 }
 
 const props = defineProps<{
-  path: string
+  path?: string
   videoId?: number
   subtitleData?: any
   videoType?: 'material' | 'edited'
@@ -25,6 +25,7 @@ const props = defineProps<{
 }>()
 
 const videoRef = ref<HTMLVideoElement | null>(null)
+const hasError = ref(false)
 const isPlaying = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
@@ -96,17 +97,11 @@ const processSubtitleData = (subtitleData: any): SubtitleItem[] => {
     subtitleArray = subtitleData.transcription
   } else if (typeof subtitleData === 'string') {
     // Try to parse if it's a string
-    try {
-      const parsed = JSON.parse(subtitleData)
-      if (Array.isArray(parsed)) {
-        subtitleArray = parsed
-      } else if (parsed?.transcription && Array.isArray(parsed.transcription)) {
-        subtitleArray = parsed.transcription
-      }
-    } catch (e) {
-      // Not a JSON string
-      console.warn('Subtitle is a string but not JSON', e)
-      return []
+    const parsed = JSON.parse(subtitleData)
+    if (Array.isArray(parsed)) {
+      subtitleArray = parsed
+    } else if (parsed?.transcription && Array.isArray(parsed.transcription)) {
+      subtitleArray = parsed.transcription
     }
   }
 
@@ -145,7 +140,6 @@ const loadSubtitles = async (): Promise<void> => {
   }
 
   // 2. Fetch if missing
-  try {
     let videoSubtitle: any = null
 
     if (props.videoType === 'edited' && props.videoId) {
@@ -158,7 +152,7 @@ const loadSubtitles = async (): Promise<void> => {
       // Only fetch if we really need to (e.g. subtitleData prop was empty)
       // If we have videoId, let's fetch to be safe in case props.subtitleData was stale or empty string
       if (props.videoId) {
-        const videos = await getVideosApi([props.videoId])
+        const videos = await getVideosApi({ ids: [props.videoId] })
         if (videos && videos.length > 0 && videos[0].subtitle) {
           videoSubtitle = videos[0].subtitle
         }
@@ -168,9 +162,7 @@ const loadSubtitles = async (): Promise<void> => {
     if (videoSubtitle) {
       subtitles.value = processSubtitleData(videoSubtitle)
     }
-  } catch (error) {
-    console.error('[VideoPlayer] Failed to load subtitles:', error)
-  }
+  
 }
 
 const formatSubtitleTime = (subtitle: SubtitleItem): string => {
@@ -195,10 +187,14 @@ watch(() => props.subtitleData, loadSubtitles)
 watch(
   () => props.path,
   () => {
-    // Reset if path changes
+    hasError.value = false
     currentTime.value = 0
   }
 )
+
+const onVideoError = (): void => {
+  hasError.value = true
+}
 </script>
 
 <template>
@@ -207,6 +203,7 @@ watch(
       <!-- Video Area -->
       <div class="video-box">
         <video
+          v-if="path"
           ref="videoRef"
           :src="getMediaUrl(path)"
           :autoplay="autoplay"
@@ -218,7 +215,14 @@ watch(
           @pause="isPlaying = false"
           @timeupdate="onTimeUpdate"
           @loadedmetadata="onLoadedMetadata"
+          @error="onVideoError"
         ></video>
+        <div
+          v-if="!path || hasError"
+          class="video-deleted-overlay"
+        >
+          <span class="video-deleted-label">视频已被删除</span>
+        </div>
       </div>
 
       <!-- Subtitle Panel -->
@@ -277,6 +281,7 @@ watch(
 
 .video-box {
   flex: 0 0 auto;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -285,6 +290,29 @@ watch(
   min-width: 300px;
   max-width: 800px;
   height: 100%;
+}
+
+.video-deleted-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 10;
+}
+
+.video-deleted-label {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.1);
+  border: 1px solid rgba(255, 77, 79, 0.4);
 }
 
 .main-video {

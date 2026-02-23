@@ -8,7 +8,7 @@ import {
 } from 'naive-ui'
 import { RouterView, useRouter } from 'vue-router'
 import { onMounted } from 'vue'
-import { useWebsocketStore } from './stores/websocket'
+import { useRealtimeStore } from './stores/realtime'
 import { setBaseUrl } from './utils/request'
 
 const themeOverrides: GlobalThemeOverrides = {
@@ -29,18 +29,18 @@ const themeOverrides: GlobalThemeOverrides = {
   }
 }
 
-const wsStore = useWebsocketStore()
+const rtStore = useRealtimeStore()
 const router = useRouter()
 
 const initConnection = (port: number): void => {
   console.log('[Renderer] Initializing connection with port:', port)
   const baseUrl = `http://127.0.0.1:${port}`
   setBaseUrl(baseUrl)
-  wsStore.setBaseUrl(`ws://127.0.0.1:${port}/api/ws`)
+  rtStore.setBaseUrl(baseUrl)
 
-  // 连接 WebSocket（不再需要 apiKey 检查）
-  wsStore.disconnect()
-  wsStore.connect()
+  // 连接 SSE
+  rtStore.disconnect()
+  rtStore.connect()
 }
 
 onMounted(async () => {

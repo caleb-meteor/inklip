@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { type PropType, computed } from 'vue'
-import { NIcon, NSpin } from 'naive-ui'
-import { CheckmarkCircleOutline, AlertCircleOutline } from '@vicons/ionicons5'
-import VideoPreviewPlayer from '../../VideoPreviewPlayer.vue'
-import { useWebsocketStore } from '../../../stores/websocket'
+import { type PropType } from 'vue'
+import { NIcon } from 'naive-ui'
+import { CheckmarkCircleOutline } from '@vicons/ionicons5'
+import UnifiedVideoPreview from '../../UnifiedVideoPreview.vue'
 
 defineProps({
   videos: {
@@ -11,12 +10,6 @@ defineProps({
     required: true
   }
 })
-
-const wsStore = useWebsocketStore()
-
-const getVideoStatus = (videoId: number) => {
-  return computed(() => wsStore.getVideoProgress(videoId))
-}
 </script>
 
 <template>
@@ -36,38 +29,12 @@ const getVideoStatus = (videoId: number) => {
     <div class="videos-grid">
       <div v-for="video in videos" :key="video.id" class="video-item">
         <div class="video-preview">
-          <VideoPreviewPlayer
-            :path="video.path"
-            :cover="video.cover"
-            :duration="video.duration"
-            aspect-ratio="9/16"
-            :video-id="video.id || 0"
+          <UnifiedVideoPreview
+            :video="video"
             video-type="material"
+            aspect-ratio="9/16"
             class="video-player"
           />
-
-          <div
-            v-if="
-              getVideoStatus(video.id).value &&
-              getVideoStatus(video.id).value?.status !== 'completed'
-            "
-            class="processing-overlay"
-          >
-            <div class="processing-content">
-              <n-spin v-if="getVideoStatus(video.id).value?.status !== 'failed'" size="small" />
-              <n-icon v-else size="20" color="#ef4444"><AlertCircleOutline /></n-icon>
-
-              <span class="processing-text">
-                {{
-                  getVideoStatus(video.id).value?.status === 'failed'
-                    ? '处理失败'
-                    : getVideoStatus(video.id).value?.status === 'transcribing'
-                      ? '转录中...'
-                      : '处理中...'
-                }}
-              </span>
-            </div>
-          </div>
         </div>
         <div class="video-info">
           <div class="video-name" :title="video.name">{{ video.name }}</div>
@@ -157,32 +124,6 @@ const getVideoStatus = (videoId: number) => {
 
 .video-info {
   padding: 8px;
-}
-
-.processing-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-  backdrop-filter: blur(2px);
-}
-
-.processing-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.processing-text {
-  font-size: 10px;
-  color: #fff;
 }
 
 .video-name {

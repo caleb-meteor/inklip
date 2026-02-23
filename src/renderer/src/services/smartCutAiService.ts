@@ -6,7 +6,7 @@ import { addAiChatMessageApi, updateAiChatMessageApi } from '../api/aiChat'
 import type { DictItem } from '../api/dict'
 import type { Message } from '../types/chat'
 import { aiChatStore } from './aiChatStore'
-import { useWebsocketStore, isUsageAvailable } from '../stores/websocket'
+import { isUsageAvailable, useRealtimeStore } from '../stores/realtime'
 
 // 导出类型以便在其他地方使用
 export type { AiChatTopic } from '../api/aiChat'
@@ -141,13 +141,9 @@ export class SmartCutAiService {
 
       // 更新数据库
       if (currentAiChatId) {
-        try {
-          await updateAiChatMessageApi(Number(taskCardMsg.id), {
-            payload: errorPayload
-          })
-        } catch (error) {
-          console.error('更新任务卡片到数据库失败:', error)
-        }
+        await updateAiChatMessageApi(Number(taskCardMsg.id), {
+          payload: errorPayload
+        })
       }
     }
 
@@ -163,16 +159,11 @@ export class SmartCutAiService {
         content: failureMessage,
         timestamp: new Date()
       })
-
-      try {
-        await addAiChatMessageApi({
-          ai_chat_id: currentAiChatId,
-          role: 'assistant',
-          content: failureMessage
-        })
-      } catch (error) {
-        console.error('记录失败信息到系统失败:', error)
-      }
+      await addAiChatMessageApi({
+        ai_chat_id: currentAiChatId,
+        role: 'assistant',
+        content: failureMessage
+      })
     }
   }
 
@@ -269,26 +260,13 @@ export class SmartCutAiService {
     // 同时更新数据库中的消息
     const currentAiChatId = aiChatStore.getCurrentAiChatId().value
     if (currentAiChatId) {
-      try {
-        await updateAiChatMessageApi(Number(data.msgId), {
-          payload: updatedConfirmPayload
-        })
-      } catch (error) {
-        console.error('更新确认消息到数据库失败:', error)
-      }
+      await updateAiChatMessageApi(Number(data.msgId), {
+        payload: updatedConfirmPayload
+      })
     }
 
-    try {
-      const currentAiChatId = aiChatStore.getCurrentAiChatId().value
-      const { videos: filteredVideos } = data
-
-      // 使用用户选中的视频，如果没有选择则使用所有视频
-      let selectedVideos = filteredVideos
-      if (selectedVideoIds && selectedVideoIds.length > 0) {
-        selectedVideos = filteredVideos.filter((v: any) => selectedVideoIds.includes(v.id))
-      }
-
-      const { minDuration = 80, maxDuration = 100 } = { ...data.options, ...durationOptions }
+    // selectedVideos 已在上方根据 selectedVideoIds 计算
+    const { minDuration = 80, maxDuration = 100 } = { ...data.options, ...durationOptions }
 
       // Step 1: 创建剪辑任务卡片（三个步骤）
       const clipTaskCardPayload = {
@@ -311,7 +289,8 @@ export class SmartCutAiService {
         ai_chat_id: currentAiChatId,
         role: 'assistant',
         content: '',
-        payload: clipTaskCardPayload
+        payload: clipTaskCardPayload,
+        is_read: false
       })
       const clipTaskCardMsgId = savedClipMessage.id.toString()
 
@@ -341,9 +320,11 @@ export class SmartCutAiService {
         data.productName!,
         minDuration,
         maxDuration,
-        ''
+        '',
+        undefined,
+        currentAiChatId ?? undefined
       )
-      const aiGenVideoId = res.id // WebSocket 会用这个 ID 来通知剪辑状态
+      const aiGenVideoId = res.id // 后端会用这个 ID 通过实时推送通知剪辑状态
 
       // Step 5: 更新任务卡片 - 步骤1完成（请求已发送），步骤2开始（等待AI结果）
       const updatedClipStep1Payload = {
@@ -359,7 +340,7 @@ export class SmartCutAiService {
             { label: '正在智能剪辑', status: 'pending' as const }
           ]
         },
-        aiGenVideoId, // 保存 aiGenVideoId 供 WebSocket 使用
+        aiGenVideoId, // 保存 aiGenVideoId 供实时推送使用
         videoCount: targetVideoIds.length,
         durationMin: minDuration,
         durationMax: maxDuration
@@ -369,44 +350,21 @@ export class SmartCutAiService {
 
       // 更新数据库（现在 clipTaskCardMsgId 已经是真实 ID）
       if (currentAiChatId) {
-        try {
-          await updateAiChatMessageApi(Number(clipTaskCardMsgId), {
-            payload: updatedClipStep1Payload
-          })
-        } catch (error) {
-          console.error('更新剪辑任务卡片失败:', error)
-        }
+        await updateAiChatMessageApi(Number(clipTaskCardMsgId), {
+          payload: updatedClipStep1Payload
+        })
       }
 
-      // 步骤2和步骤3的状态更新将由 WebSocket 在收到 AI 结果时完成
+      // 步骤2和步骤3的状态更新将由实时推送在收到 AI 结果时完成；未读标记由后端根据 ai_chat_id 处理
 
       this.state.chatSteps.value[2].state = 'finish'
       this.state.chatSteps.value[3].state = 'process'
 
-      // 不再立即创建剪辑结果消息，等待 WebSocket 通知剪辑完成后再创建
-      // 剪辑任务会在后台进行，完成后会通过 WebSocket 消息通知
+      // 不再立即创建剪辑结果消息，等待实时推送通知剪辑完成后再创建
+      // 剪辑任务会在后台进行，完成后会通过实时推送通知
 
-      // 清除待确认数据
       this.state.pendingConfirmationData.value = null
-    } catch (error) {
-      console.error('确认流程失败:', error)
-      const errStep = this.state.chatSteps.value.find((s) => s.state === 'process')
-      if (errStep) errStep.state = 'error'
-
-      const currentAiChatId = aiChatStore.getCurrentAiChatId().value
-      if (currentAiChatId) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        const formattedError = `⚠️ 流程出错\n\n错误信息: ${errorMessage}\n\n请检查日志或重新尝试。`
-
-        await addAiChatMessageApi({
-          ai_chat_id: currentAiChatId,
-          role: 'assistant',
-          content: formattedError
-        }).catch((err) => console.error('记录对话失败:', err))
-      }
-    } finally {
-      this.state.isProcessing.value = false
-    }
+    this.state.isProcessing.value = false
   }
 
   /**
@@ -437,13 +395,9 @@ export class SmartCutAiService {
     // 同时更新数据库中的消息
     const currentAiChatId = aiChatStore.getCurrentAiChatId().value
     if (currentAiChatId) {
-      try {
-        await updateAiChatMessageApi(Number(data.msgId), {
-          payload: cancelledPayload
-        })
-      } catch (error) {
-        console.error('更新取消状态到数据库失败:', error)
-      }
+      await updateAiChatMessageApi(Number(data.msgId), {
+        payload: cancelledPayload
+      })
     }
 
     // 添加取消消息到对话记录
@@ -459,15 +413,11 @@ export class SmartCutAiService {
         timestamp: new Date()
       })
 
-      try {
-        await addAiChatMessageApi({
-          ai_chat_id: currentAiChatId,
-          role: 'assistant',
-          content: cancelMessage
-        })
-      } catch (error) {
-        console.error('记录取消信息到系统失败:', error)
-      }
+      await addAiChatMessageApi({
+        ai_chat_id: currentAiChatId,
+        role: 'assistant',
+        content: cancelMessage
+      })
     }
 
     // 清除待确认数据和处理标志
@@ -486,8 +436,8 @@ export class SmartCutAiService {
     if (this.state.isProcessing.value) return
 
     // 检查 VIP 是否可用（是 VIP 且未过期）
-    const websocketStore = useWebsocketStore()
-    if (!isUsageAvailable(websocketStore.usageInfo)) {
+    const rtStore = useRealtimeStore()
+    if (!isUsageAvailable(rtStore.usageInfo)) {
       // 非会员，显示临时提示消息（不创建对话，不保存数据库）
       const assistantMessage = {
         id: `message_${Date.now()}`,
@@ -511,8 +461,7 @@ export class SmartCutAiService {
     aiChatStore.setCurrentChatProcessing(true)
     this.resetChatSteps()
 
-    try {
-      const sanitizedPrompt = prompt.trim()
+    const sanitizedPrompt = prompt.trim()
 
       // 重置对话：开始新剪辑时创建全新对话
       aiChatStore.newChat()
@@ -542,17 +491,12 @@ export class SmartCutAiService {
         })
       }
 
-      // 立即保存用户消息到数据库
       if (currentAiChatId) {
-        try {
-          await addAiChatMessageApi({
-            ai_chat_id: currentAiChatId,
-            role: 'user',
-            content: sanitizedPrompt
-          })
-        } catch (error) {
-          console.error('保存用户消息失败:', error)
-        }
+        await addAiChatMessageApi({
+          ai_chat_id: currentAiChatId,
+          role: 'user',
+          content: sanitizedPrompt
+        })
       }
 
       // Step 1: 创建筛选任务卡片消息
@@ -587,12 +531,7 @@ export class SmartCutAiService {
         payload: filterTaskPayload
       })
 
-      // ==========================================
       // 流程一：主播 -> 产品 -> 视频
-      // ==========================================
-
-      try {
-        // 1. 匹配主播
         this.state.chatSteps.value[0].state = 'process'
         const anchorRes = await getAnchorsApi({ all: true })
         const matchedAnchor = anchorRes.list.find((a) => sanitizedPrompt.includes(a.name))
@@ -733,70 +672,8 @@ export class SmartCutAiService {
         }
 
         this.state.isProcessing.value = false
+        aiChatStore.setCurrentChatProcessing(false)
         return
-      } catch (error: any) {
-        console.error('视频筛选流程失败:', error)
-
-        // 更新任务卡片为错误/未找到状态
-        const baseSteps = [
-          { label: '正在匹配主播', status: 'pending' as const },
-          { label: '正在匹配主播产品', status: 'pending' as const },
-          { label: '正在查询产品视频', status: 'pending' as const }
-        ]
-
-        // 根据当前思考步骤状态来确定哪个步骤失败了
-        const failedStepIndex = this.state.chatSteps.value.findIndex((s) => s.state === 'process')
-        if (failedStepIndex !== -1) {
-          // 将失败前的步骤标记为完成
-          for (let i = 0; i < failedStepIndex; i++) {
-            baseSteps[i].status = 'completed'
-          }
-          // 标记失败的步骤
-          baseSteps[failedStepIndex].status = 'error'
-          baseSteps[failedStepIndex].detail = error.message
-        } else {
-          // 如果找不到失败的步骤，标记第一个为错误
-          baseSteps[0].status = 'error'
-          baseSteps[0].detail = error.message
-        }
-
-        const errorPayload = {
-          type: 'video_filter_task',
-          steps: baseSteps
-        }
-
-        aiChatStore.updateMessage(taskCardMsgId, { payload: errorPayload })
-
-        // 更新思考步骤
-        const errStep = this.state.chatSteps.value.find((s) => s.state === 'process')
-        if (errStep) errStep.state = 'error'
-
-        // 发送一条友好的未找到提示
-        const errorContent = `抱歉，${error.message || '未找到对应的视频'}。请确认输入的信息是否正确。`
-        const errorMsg = await addAiChatMessageApi({
-          ai_chat_id: currentAiChatId,
-          role: 'assistant',
-          content: errorContent
-        })
-
-        aiChatStore.addMessage({
-          id: errorMsg.id.toString(),
-          role: 'assistant',
-          content: errorContent,
-          timestamp: new Date()
-        })
-
-        // 更新数据库
-        await updateAiChatMessageApi(Number(taskCardMsgId), {
-          payload: errorPayload
-        })
-      }
-    } catch (outerError: any) {
-      console.error('Smart Cut Error:', outerError)
-    } finally {
-      this.state.isProcessing.value = false
-      aiChatStore.setCurrentChatProcessing(false)
-    }
   }
 }
 

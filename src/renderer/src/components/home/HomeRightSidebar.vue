@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NIcon, NTooltip, NEllipsis, NProgress, useDialog, useMessage } from 'naive-ui'
+import { NIcon, NTooltip, NEllipsis, NProgress, useDialog } from 'naive-ui'
 import {
   ChatbubbleOutline,
   AddOutline,
@@ -11,12 +11,11 @@ import {
 } from '@vicons/ionicons5'
 import type { AiChatTopic } from '../../api/aiChat'
 import { getSmartCutsApi, deleteSmartCutApi, type SmartCutItem } from '../../api/video'
-import VideoPreviewPlayer from '../VideoPreviewPlayer.vue'
-import { useWebsocketStore } from '../../stores/websocket'
+import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
+import { useRealtimeStore } from '../../stores/realtime'
 import { aiChatStore } from '../../services/aiChatStore'
 
 const dialog = useDialog()
-const message = useMessage()
 
 const props = defineProps<{
   aiChats: AiChatTopic[]
@@ -54,11 +53,7 @@ const handleDeleteChat = (e: Event, chat: AiChatTopic) => {
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
-      try {
-        await aiChatStore.deleteAiChat(chat.id)
-      } catch {
-        message.error('删除失败')
-      }
+      await aiChatStore.deleteAiChat(chat.id)
     }
   })
 }
@@ -70,12 +65,8 @@ const handleDeleteClip = (item: SmartCutItem) => {
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
-      try {
-        await deleteSmartCutApi(item.id)
-        clipHistory.value = clipHistory.value.filter((i) => i.id !== item.id)
-      } catch {
-        message.error('删除失败')
-      }
+      await deleteSmartCutApi(item.id)
+      clipHistory.value = clipHistory.value.filter((i) => i.id !== item.id)
     }
   })
 }
@@ -83,28 +74,28 @@ const handleDeleteClip = (item: SmartCutItem) => {
 const fetchHistory = async () => {
   if (loadingHistory.value || !historyHasMore.value) return
   loadingHistory.value = true
-  try {
-    const anchorId = props.currentAnchor?.id
-    const res = await getSmartCutsApi(historyPage.value, 20, anchorId)
-    if (historyPage.value === 1) {
-      clipHistory.value = res.list
-    } else {
-      clipHistory.value.push(...res.list)
-    }
-    historyHasMore.value = clipHistory.value.length < res.total
-    if (historyHasMore.value) {
-      historyPage.value++
-    }
-  } catch (e) {
-    console.error('Failed to fetch clip history', e)
-  } finally {
-    loadingHistory.value = false
-  }
+  const anchorId = props.currentAnchor?.id
+  const res = await getSmartCutsApi(historyPage.value, 20, anchorId)
+  if (historyPage.value === 1) clipHistory.value = res.list
+  else clipHistory.value.push(...res.list)
+  historyHasMore.value = clipHistory.value.length < res.total
+  if (historyHasMore.value) historyPage.value++
+  loadingHistory.value = false
 }
 
+/** 重新拉取剪辑历史（用于休眠/长时间未操作后恢复） */
+const refreshClipHistory = (): void => {
+  historyPage.value = 1
+  historyHasMore.value = true
+  if (activeTab.value === 'history') fetchHistory()
+}
+
+defineExpose({ refreshClipHistory })
+
 watch(activeTab, (val) => {
-  if (val === 'history' && clipHistory.value.length === 0) {
+  if (val === 'history') {
     historyPage.value = 1
+    historyHasMore.value = true
     fetchHistory()
   }
 })
@@ -114,12 +105,10 @@ watch(
   () => {
     if (activeTab.value === 'history') {
       historyPage.value = 1
+      historyHasMore.value = true
       fetchHistory()
-    } else {
-      // Clear logic so next time we switch to history it refreshes?
-      // Or just let it be. Let's clear to force refresh when tab switched.
-      clipHistory.value = []
     }
+    // 切换主播时不清空剪辑历史，仅在实际请求成功时替换，失败时保留旧数据
   }
 )
 
@@ -156,8 +145,8 @@ const handleClipClick = (item: SmartCutItem) => {
   }
 }
 
-const websocketStore = useWebsocketStore()
-const { usageInfo, isVipAvailable } = storeToRefs(websocketStore)
+const rtStore = useRealtimeStore()
+const { usageInfo, isVipAvailable } = storeToRefs(rtStore)
 
 const hasMoreAiChats = aiChatStore.getHasMoreAiChats()
 
@@ -184,18 +173,13 @@ const formatDuration = (seconds?: number) => {
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '--'
-  try {
-    const date = new Date(dateStr)
-    const year = date.getFullYear()
-    const month = (date.getMonth() + 1).toString().padStart(2, '0')
-    const day = date.getDate().toString().padStart(2, '0')
-    return `${year}-${month}-${day}`
-  } catch {
-    return dateStr
-  }
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return dateStr
+  const year = date.getFullYear()
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const day = date.getDate().toString().padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
-
-const historyScrollRef = ref<HTMLElement | null>(null)
 
 const onHistoryScroll = (ev: Event) => {
   const el = ev.target as HTMLElement
@@ -273,6 +257,7 @@ const onRecentScroll = (ev: Event) => {
           >
             <n-icon size="16"><ChatbubbleOutline /></n-icon>
             <span class="history-title">{{ chat.topic || '未命名项目' }}</span>
+            <span v-if="(chat.unread_count ?? 0) > 0" class="unread-badge">{{ chat.unread_count! > 99 ? '99+' : chat.unread_count }}</span>
             <div class="item-actions">
               <n-tooltip trigger="hover" placement="top">
                 <template #trigger>
@@ -287,7 +272,7 @@ const onRecentScroll = (ev: Event) => {
         </div>
       </div>
 
-      <div v-else ref="historyScrollRef" class="tab-content" @scroll="onHistoryScroll">
+      <div v-else class="tab-content" @scroll="onHistoryScroll">
         <div v-if="clipHistory.length === 0" class="history-empty">
           <div class="empty-text">当前主播下暂无剪辑历史</div>
           <div v-if="currentAnchor" class="empty-subtext">({{ currentAnchor.name }})</div>
@@ -297,17 +282,15 @@ const onRecentScroll = (ev: Event) => {
             v-for="item in clipHistory"
             :key="item.id"
             class="clip-item"
-            :class="{ clickable: item.status === 1 }"
+            :class="{ clickable: item.status === 1 && (item.path || item.fileUrl) }"
             @dblclick="handleClipClick(item)"
           >
             <div class="clip-thumb">
-              <VideoPreviewPlayer
-                :path="item.path"
-                :cover="item.cover"
-                :duration="item.duration"
+              <UnifiedVideoPreview
+                :video="item"
+                video-type="edited"
                 aspect-ratio="9/16"
                 :disabled="item.status !== 1"
-                :subtitle-data="item.subtitle"
               />
             </div>
             <div class="clip-info">
@@ -550,6 +533,20 @@ const onRecentScroll = (ev: Event) => {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+
+.unread-badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  color: #fff;
+  background: var(--primary-color, #18a058);
+  border-radius: 9px;
+  margin-left: 6px;
 }
 
 .item-actions {

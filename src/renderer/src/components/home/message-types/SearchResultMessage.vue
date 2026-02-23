@@ -2,7 +2,7 @@
 import { type PropType, ref } from 'vue'
 import { NIcon, NCollapse, NCollapseItem } from 'naive-ui'
 import { VideocamOutline } from '@vicons/ionicons5'
-import VideoPreviewPlayer from '../../VideoPreviewPlayer.vue'
+import UnifiedVideoPreview from '../../UnifiedVideoPreview.vue'
 import type { VideoSearchResultItem } from '../../../api/video'
 
 defineProps({
@@ -24,11 +24,12 @@ const formatTime = (s: number) => {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
-const handleSegmentClick = (videoId: number, startTime: number, endTime: number) => {
-  const player = videoPlayers.value[videoId]
-  if (player) {
-    player.playAtTime(startTime, endTime)
-  }
+const isVideoDeleted = (v: any) => !v?.path && !v?.fileUrl
+
+const handleSegmentClick = (video: any, startTime: number, endTime: number) => {
+  if (isVideoDeleted(video)) return
+  const player = videoPlayers.value[video?.id]
+  if (player) player.playAtTime(startTime, endTime)
 }
 </script>
 
@@ -48,18 +49,15 @@ const handleSegmentClick = (videoId: number, startTime: number, endTime: number)
 
           <div class="video-row">
             <div class="video-preview-wrap">
-              <VideoPreviewPlayer
+              <UnifiedVideoPreview
                 :ref="
                   (el) => {
                     if (item.video?.id) videoPlayers[item.video.id] = el
                   }
                 "
-                :path="item.video?.path"
-                :cover="item.video?.cover"
-                :duration="item.video?.duration ?? 0"
-                aspect-ratio="9/16"
-                :video-id="item.video?.id ?? 0"
+                :video="item.video"
                 video-type="material"
+                aspect-ratio="9/16"
                 class="video-player"
               />
               <div class="video-info-below">
@@ -75,8 +73,9 @@ const handleSegmentClick = (videoId: number, startTime: number, endTime: number)
                   v-for="(seg, si) in item.segments"
                   :key="si"
                   class="segment-chip"
+                  :class="{ 'is-deleted': isVideoDeleted(item.video) }"
                   :title="seg.text"
-                  @click="handleSegmentClick(item.video?.id ?? 0, seg.start_s, seg.end_s)"
+                  @click="handleSegmentClick(item.video, seg.start_s, seg.end_s)"
                 >
                   <div class="segment-text">{{ seg.text }}</div>
                   <div class="segment-time">
@@ -218,10 +217,15 @@ const handleSegmentClick = (videoId: number, startTime: number, endTime: number)
   flex-shrink: 0;
 }
 
-.segment-chip:hover {
+.segment-chip:hover:not(.is-deleted) {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(26, 115, 232, 0.3);
   cursor: pointer;
+}
+
+.segment-chip.is-deleted {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .segment-time {

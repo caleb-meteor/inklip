@@ -115,7 +115,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div v-if="!disabled && text.trim().length === 0" class="input-hint">
+      <div v-if="!disabled" class="input-hint">
         <span><b>Enter</b> 发送</span>
         <span class="hint-divider"></span>
         <span><b>Shift + Enter</b> 换行</span>

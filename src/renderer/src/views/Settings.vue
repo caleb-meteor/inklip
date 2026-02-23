@@ -47,82 +47,46 @@ const maskedApiKey = computed(() => {
 })
 
 const loadVideoDataDirectory = async (): Promise<void> => {
-  try {
-    // 先从 Electron 获取当前配置
-    const dir = await window.api.getVideoDataDirectory()
-    videoDataDirectory.value = dir
-
-    // 然后从 Python 后端获取配置（如果存在）
-    try {
-      const config = await getConfig()
-      if (config.videoDataDirectory) {
-        videoDataDirectory.value = config.videoDataDirectory
-      }
-    } catch {
-      // 如果后端未启动或配置不存在，使用 Electron 的配置
-      console.debug('无法从后端获取配置，使用 Electron 配置')
-    }
-  } catch (error) {
-    console.error('Failed to load video data directory:', error)
-    message.error('加载视频数据目录失败')
-  }
+  const dir = await window.api.getVideoDataDirectory()
+  videoDataDirectory.value = dir
+  const config = await getConfig()
+  if (config.videoDataDirectory) videoDataDirectory.value = config.videoDataDirectory
 }
 
 const restarting = ref(false)
 
 const selectDirectory = async (): Promise<void> => {
-  try {
-    loading.value = true
-    migrating.value = false
-    migrateProgress.value = ''
+  loading.value = true
+  migrating.value = false
+  migrateProgress.value = ''
 
-    // 1. 选择目录（Electron 负责）
-    const result = await window.api.selectVideoDataDirectory()
-    if (!result.success || !result.directory) {
-      if (!result.canceled) {
-        message.error(result.error || '选择目录失败')
-      }
-      return
-    }
-
-    const newDir = result.directory
-    const oldDir = result.oldDirectory || videoDataDirectory.value
-
-    // 2. 如果目录不同，显示迁移提示
-    if (oldDir !== newDir) {
-      migrating.value = true
-      migrateProgress.value = '正在迁移文件并更新配置...'
-    }
-
-    // 3. 保存配置到 Python 后端（后端会自动处理文件迁移）
-    try {
-      await saveConfig({ videoDataDirectory: newDir })
-      console.log('[Settings] 配置已保存到后端')
-
-      if (oldDir !== newDir) {
-        migrateProgress.value = '文件迁移和配置更新完成'
-        message.success('视频数据目录已更新，文件已自动迁移')
-      } else {
-        message.success('配置已保存')
-      }
-    } catch (error) {
-      console.error('[Settings] 保存配置失败:', error)
-      message.error(`更新失败: ${(error as Error).message}`)
-      migrating.value = false
-      return
-    }
-
-    // 4. 更新本地显示
-    videoDataDirectory.value = newDir
-    migrating.value = false
-  } catch (error) {
-    console.error('Failed to select directory:', error)
-    message.error('选择目录失败')
-    restarting.value = false
-    migrating.value = false
-  } finally {
+  const result = await window.api.selectVideoDataDirectory()
+  if (!result.success || !result.directory) {
+    if (!result.canceled) message.error(result.error || '选择目录失败')
     loading.value = false
+    migrating.value = false
+    return
   }
+
+  const newDir = result.directory
+  const oldDir = result.oldDirectory || videoDataDirectory.value
+
+  if (oldDir !== newDir) {
+    migrating.value = true
+    migrateProgress.value = '正在迁移文件并更新配置...'
+  }
+
+  await saveConfig({ videoDataDirectory: newDir })
+  if (oldDir !== newDir) {
+    migrateProgress.value = '文件迁移和配置更新完成'
+    message.success('视频数据目录已更新，文件已自动迁移')
+  } else {
+    message.success('配置已保存')
+  }
+
+  videoDataDirectory.value = newDir
+  migrating.value = false
+  loading.value = false
 }
 
 const loadApiKey = async (): Promise<void> => {
@@ -132,21 +96,14 @@ const loadApiKey = async (): Promise<void> => {
     apiKey.value = ''
   } else {
     // 如果本地没有 apiKey，尝试从后端获取
-    try {
-      const response = await getApiKey()
-      if (response.api_key) {
-        // 保存到本地存储
-        localStorage.setItem('apiKey', response.api_key)
-        hasApiKey.value = true
-        apiKey.value = ''
-        console.log('[Settings] 从后端获取 API Key 成功')
-      } else {
-        hasApiKey.value = false
-        apiKey.value = ''
-      }
-    } catch (error) {
-      // 如果获取失败，则 apiKey 为空
-      console.debug('[Settings] 无法从后端获取 API Key:', error)
+    const response = await getApiKey()
+    if (response.api_key) {
+      // 保存到本地存储
+      localStorage.setItem('apiKey', response.api_key)
+      hasApiKey.value = true
+      apiKey.value = ''
+      console.log('[Settings] 从后端获取 API Key 成功')
+    } else {
       hasApiKey.value = false
       apiKey.value = ''
     }

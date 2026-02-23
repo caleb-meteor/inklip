@@ -152,6 +152,7 @@ export interface SmartCutResponse {
  * @param maxDuration Optional maximum duration of the output video in seconds
  * @param prompt Optional editing ideas or instructions
  * @param promptBuiltId Optional built-in prompt ID (0 for custom prompt)
+ * @param aiChatId Optional AI 对话 ID，后端用于完成/异常时标记该会话下任务卡片未读
  * @returns Promise with smart cut task response
  */
 export function smartCutApi(
@@ -162,21 +163,26 @@ export function smartCutApi(
   minDuration?: number,
   maxDuration?: number,
   prompt?: string,
-  promptBuiltId?: number
+  promptBuiltId?: number,
+  aiChatId?: number
 ): Promise<SmartCutResponse> {
+  const data: Record<string, unknown> = {
+    video_ids: videoIds,
+    anchor_id: anchorId,
+    product_id: productId,
+    product_name: productName,
+    min_duration: minDuration,
+    max_duration: maxDuration,
+    prompt_text: prompt,
+    prompt_built_id: promptBuiltId
+  }
+  if (aiChatId != null) {
+    data.ai_chat_id = aiChatId
+  }
   return request({
     url: '/api/smart-cut',
     method: 'post',
-    data: {
-      video_ids: videoIds,
-      anchor_id: anchorId,
-      product_id: productId,
-      product_name: productName,
-      min_duration: minDuration,
-      max_duration: maxDuration,
-      prompt_text: prompt,
-      prompt_built_id: promptBuiltId
-    },
+    data,
     timeout: 20 * 60 * 1000 // 20 minutes in milliseconds
   })
 }

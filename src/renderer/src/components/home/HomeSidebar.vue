@@ -13,7 +13,6 @@ import {
   type UploadFileInfo
 } from 'naive-ui'
 import {
-  VideocamOutline,
   ImagesOutline,
   FolderOpenOutline,
   CubeOutline,
@@ -47,8 +46,8 @@ import {
 import VideoUploadChatModal from './VideoUploadChatModal.vue'
 import RenameModal from '../RenameModal.vue'
 import DeleteModal from '../DeleteModal.vue'
-import { getMediaUrl } from '../../utils/media'
-import { useWebsocketStore } from '../../stores/websocket'
+import { useRealtimeStore } from '../../stores/realtime'
+import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
 
 defineProps<{
   collapsed: boolean
@@ -63,7 +62,7 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const dialog = useDialog()
-const wsStore = useWebsocketStore()
+const wsStore = useRealtimeStore()
 const anchors = ref<Anchor[]>([])
 const products = ref<Product[]>([])
 const videos = ref<VideoItem[]>([])
@@ -130,7 +129,7 @@ watch(
   { immediate: true }
 )
 
-// 监听 WebSocket 视频上传/解析状态：后端推送 video_upload / video_status 后更新左侧视频列表
+// 监听 SSE 推送的视频上传/解析状态：后端推送 video_upload / video_status 后更新左侧视频列表
 watch(
   () => wsStore.videoUploaded,
   async (ts) => {
@@ -144,30 +143,28 @@ const currentAnchorProducts = computed(() => {
   return products.value.filter((p) => p.anchor_id === selectedAnchorId.value)
 })
 
-onMounted(async () => {
-  try {
-    const [anchorsRes, productsRes] = await Promise.all([
-      getAnchorsApi({ all: true }),
-      getProductsApi({ all: true })
-    ])
-    anchors.value = anchorsRes.list
-    products.value = productsRes.list
-
-    // Load all videos
-    try {
-      videos.value = await getVideosApi()
-    } catch (e) {
-      console.error('Failed to load videos', e)
-    }
-
-    // 默认选择第一个主播
-    if (anchors.value.length > 0) {
+/** 加载主播、产品、视频列表（用于首屏加载与休眠/长时间未操作后恢复） */
+const loadAll = async (): Promise<void> => {
+  const [anchorsRes, productsRes, videosRes] = await Promise.allSettled([
+    getAnchorsApi({ all: true }),
+    getProductsApi({ all: true }),
+    getVideosApi()
+  ])
+  if (anchorsRes.status === 'fulfilled') {
+    anchors.value = anchorsRes.value.list
+    if (anchors.value.length > 0 && selectedAnchorId.value == null) {
       selectedAnchorId.value = anchors.value[0].id
     }
-  } catch (error) {
-    console.error('Failed to fetch resources:', error)
   }
+  if (productsRes.status === 'fulfilled') products.value = productsRes.value.list
+  if (videosRes.status === 'fulfilled') videos.value = videosRes.value
+}
+
+onMounted(() => {
+  loadAll()
 })
+
+defineExpose({ loadAll })
 
 const toggleAnchor = (id: number): void => {
   if (selectedAnchorId.value === id) {
@@ -190,25 +187,13 @@ const getProductVideos = (productId: number) => {
   return videos.value.filter((v) => v.product_id === productId)
 }
 
-/** 根据 WebSocket 消息刷新首页左侧视频列表（上传/解析状态变化时由 WS 触发） */
+/** 根据实时推送刷新首页左侧视频列表（上传/解析状态变化时由推送触发） */
 const refreshVideosFromApi = async () => {
-  try {
-    const list = await getVideosApi()
-    videos.value = list
-    // 已完成的视频从 WS 进度表移除，避免继续显示进度遮罩（task_status: 0=待执行, 1=执行中, 2=已完成, 3=失败）
-    list.forEach((v) => {
-      if (v.task_status === 2) wsStore.clearVideoProgress(v.id)
-    })
-  } catch (e) {
-    console.error('Failed to refresh videos from WS', e)
-  }
-}
-
-const formatDuration = (seconds?: number) => {
-  if (!seconds) return '00:00'
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  const list = await getVideosApi()
+  videos.value = list
+  list.forEach((v) => {
+    if (v.task_status === 2) wsStore.clearVideoProgress(v.id)
+  })
 }
 
 const openUploadModal = (product: Product) => {
@@ -217,12 +202,7 @@ const openUploadModal = (product: Product) => {
 }
 
 const handleUploadSuccess = async () => {
-  // Re-fetch all videos
-  try {
-    videos.value = await getVideosApi()
-  } catch (e) {
-    console.error('Failed to refresh videos', e)
-  }
+  videos.value = await getVideosApi()
 }
 
 const getAvatarColor = (name: string): string => {
@@ -277,7 +257,7 @@ const handleProductUploadChange = (data: { fileList: UploadFileInfo[] }) => {
   }
 }
 
-const handleAddAnchor = async () => {
+const handleAddAnchor = async (): Promise<boolean> => {
   if (anchors.value.length >= MAX_ANCHORS) {
     message.warning(`主播最多只能添加 ${MAX_ANCHORS} 个`)
     return false
@@ -287,31 +267,20 @@ const handleAddAnchor = async () => {
     return false
   }
 
-  loading.value = true
-  try {
-    const newAnchor = await createAnchorApi({
-      name: newAnchorName.value.trim(),
-      avatar: newAnchorAvatar.value
-    })
+  const newAnchor = await createAnchorApi({
+    name: newAnchorName.value.trim(),
+    avatar: newAnchorAvatar.value
+  })
 
-    anchors.value.push(newAnchor)
-    // 选中新添加的主播
-    selectedAnchorId.value = newAnchor.id
+  anchors.value.push(newAnchor)
+  // 选中新添加的主播
+  selectedAnchorId.value = newAnchor.id
 
-    // Reset inputs
-    newAnchorName.value = ''
-    newAnchorAvatar.value = ''
-    fileList.value = []
-
-    // message.success('添加主播成功')
-    return true
-  } catch (error) {
-    console.error('Failed to add anchor:', error)
-    message.error('添加主播失败')
-    return false
-  } finally {
-    loading.value = false
-  }
+  // Reset inputs
+  newAnchorName.value = ''
+  newAnchorAvatar.value = ''
+  fileList.value = []
+  return true
 }
 
 const handleAddProduct = async () => {
@@ -325,8 +294,7 @@ const handleAddProduct = async () => {
     return false
   }
 
-  loading.value = true
-  try {
+
     const newProduct = await createProductApi({
       name: newProductName.value.trim(),
       anchor_id: selectedAnchorId.value,
@@ -342,13 +310,6 @@ const handleAddProduct = async () => {
 
     // message.success('添加产品成功')
     return true
-  } catch (error) {
-    console.error('Failed to add product:', error)
-    message.error('添加产品失败')
-    return false
-  } finally {
-    loading.value = false
-  }
 }
 
 const handleContextMenu = (
@@ -425,38 +386,18 @@ const handleRenameVideoConfirm = async (newName: string) => {
     finalName += ext
   }
 
-  try {
-    const updatedVideo = await renameVideoApi(currentVideoForAction.value.id, finalName)
-
-    // Update local list
-    const index = videos.value.findIndex((v) => v.id === updatedVideo.id)
-    if (index !== -1) {
-      videos.value[index] = updatedVideo
-    }
-
-    // message.success('重命名成功')
-    showRenameModal.value = false
-  } catch (error) {
-    console.error('Failed to rename video:', error)
-    message.error('重命名失败')
-  }
+  const updatedVideo = await renameVideoApi(currentVideoForAction.value.id, finalName)
+  const index = videos.value.findIndex((v) => v.id === updatedVideo.id)
+  if (index !== -1) videos.value[index] = updatedVideo
+  showRenameModal.value = false
 }
 
 const handleDeleteVideoConfirm = async () => {
   if (!currentVideoForAction.value) return
 
-  try {
-    await deleteVideoApi(currentVideoForAction.value.id)
-
-    // Remove from local list
-    videos.value = videos.value.filter((v) => v.id !== currentVideoForAction.value!.id)
-
-    // message.success('删除视频成功')
-    showDeleteModal.value = false
-  } catch (error) {
-    console.error('Failed to delete video:', error)
-    message.error('删除视频失败')
-  }
+  await deleteVideoApi(currentVideoForAction.value.id)
+  videos.value = videos.value.filter((v) => v.id !== currentVideoForAction.value!.id)
+  showDeleteModal.value = false
 }
 
 const startEdit = (anchor: Anchor) => {
@@ -531,59 +472,30 @@ const handleUpdateAnchor = async () => {
   if (!editAnchorId.value || !editName.value.trim()) return
 
   loading.value = true
-  try {
-    const updated = await updateAnchorApi({
-      id: editAnchorId.value,
-      name: editName.value.trim(),
-      avatar: editAvatar.value
-    })
-
-    // Update local list
-    const index = anchors.value.findIndex((a) => a.id === updated.id)
-    if (index !== -1) {
-      anchors.value[index] = updated
-    }
-
-    // Update current selected if it was the one
-    if (selectedAnchorId.value === updated.id) {
-      // computed `currentAnchor` will automatically update
-    }
-
-    // message.success('更新成功')
-    editAnchorId.value = null // Close popconfirm
-  } catch (error) {
-    message.error('更新失败')
-    console.error(error)
-  } finally {
-    loading.value = false
-  }
+  const updated = await updateAnchorApi({
+    id: editAnchorId.value,
+    name: editName.value.trim(),
+    avatar: editAvatar.value
+  })
+  const index = anchors.value.findIndex((a) => a.id === updated.id)
+  if (index !== -1) anchors.value[index] = updated
+  editAnchorId.value = null
+  loading.value = false
 }
 
 const handleUpdateProduct = async () => {
   if (!editProductId.value || !editProductName.value.trim()) return
 
   loading.value = true
-  try {
-    const updated = await updateProductApi({
-      id: editProductId.value,
-      name: editProductName.value.trim(),
-      cover: editProductCover.value
-    })
-
-    // Update local list
-    const index = products.value.findIndex((p) => p.id === updated.id)
-    if (index !== -1) {
-      products.value[index] = updated
-    }
-
-    // message.success('更新成功')
-    editProductId.value = null
-  } catch (error) {
-    message.error('更新失败')
-    console.error(error)
-  } finally {
-    loading.value = false
-  }
+  const updated = await updateProductApi({
+    id: editProductId.value,
+    name: editProductName.value.trim(),
+    cover: editProductCover.value
+  })
+  const index = products.value.findIndex((p) => p.id === updated.id)
+  if (index !== -1) products.value[index] = updated
+  editProductId.value = null
+  loading.value = false
 }
 
 const confirmDeleteAnchor = (anchor: Anchor) => {
@@ -593,17 +505,9 @@ const confirmDeleteAnchor = (anchor: Anchor) => {
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
-      try {
-        await deleteAnchorApi(anchor.id)
-        anchors.value = anchors.value.filter((a) => a.id !== anchor.id)
-        if (selectedAnchorId.value === anchor.id) {
-          selectedAnchorId.value = null
-        }
-        // message.success('删除成功')
-      } catch (error) {
-        message.error('删除失败')
-        console.error(error)
-      }
+      await deleteAnchorApi(anchor.id)
+      anchors.value = anchors.value.filter((a) => a.id !== anchor.id)
+      if (selectedAnchorId.value === anchor.id) selectedAnchorId.value = null
     }
   })
 }
@@ -615,21 +519,10 @@ const confirmDeleteProduct = (product: Product) => {
     positiveText: '确定',
     negativeText: '取消',
     onPositiveClick: async () => {
-      try {
-        await deleteProductApi(product.id)
-        products.value = products.value.filter((p) => p.id !== product.id)
-
-        // Remove from expanded list if present
-        const expandIndex = expandedProductIds.value.indexOf(product.id)
-        if (expandIndex > -1) {
-          expandedProductIds.value.splice(expandIndex, 1)
-        }
-
-        // message.success('删除成功')
-      } catch (error) {
-        message.error('删除失败')
-        console.error(error)
-      }
+      await deleteProductApi(product.id)
+      products.value = products.value.filter((p) => p.id !== product.id)
+      const expandIndex = expandedProductIds.value.indexOf(product.id)
+      if (expandIndex > -1) expandedProductIds.value.splice(expandIndex, 1)
     }
   })
 }
@@ -1057,26 +950,12 @@ const confirmDeleteProduct = (product: Product) => {
                     @contextmenu="handleContextMenu($event, video, 'video')"
                   >
                     <div class="preview-placeholder">
-                      <img
-                        v-if="video.cover"
-                        :src="getMediaUrl(video.cover)"
-                        class="video-cover-img"
+                      <UnifiedVideoPreview
+                        :video="video"
+                        video-type="material"
+                        aspect-ratio="9/16"
+                        @dblclick="emit('play-video', video)"
                       />
-                      <n-icon v-else size="24" color="#fff"><VideocamOutline /></n-icon>
-                      <div class="video-duration">{{ formatDuration(video.duration) }}</div>
-                      <!-- WebSocket 解析进度：处理中时显示 -->
-                      <div v-if="wsStore.getVideoProgress(video.id)" class="video-parse-progress">
-                        <span
-                          v-if="wsStore.getVideoProgress(video.id)?.status === 'failed'"
-                          class="progress-failed"
-                          >失败</span
-                        >
-                        <template v-else>
-                          <span class="progress-text"
-                            >{{ wsStore.getVideoProgress(video.id)?.percentage ?? 0 }}%</span
-                          >
-                        </template>
-                      </div>
                     </div>
                     <div class="preview-name" :title="video.name">{{ video.name }}</div>
                   </div>

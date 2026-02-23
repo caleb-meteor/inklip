@@ -1,6 +1,6 @@
 /**
- * WebSocket 消息处理器
- * 处理不同类型的 WebSocket 消息
+ * 实时消息处理器（SSE）
+ * 处理不同类型的后端推送消息（与历史推送消息格式保持一致）
  */
 
 export interface MessageHandlers {
@@ -15,6 +15,7 @@ export interface MessageHandlers {
     task_status?: number
     ai_gen_video_status?: number
     ai_gen_video_id?: number
+    ai_chat_id?: number
   }) => void
   onVideoUploaded?: () => void
   onVideoStatus?: (data: {
@@ -40,7 +41,7 @@ export interface MessageHandlers {
   }) => void
 }
 
-export class WebSocketMessageHandler {
+export class RealtimeMessageHandler {
   private handlers: MessageHandlers = {}
 
   constructor(handlers: MessageHandlers = {}) {
@@ -79,20 +80,13 @@ export class WebSocketMessageHandler {
   }
 
   private handleParseVideo(data: any): void {
-    // 先处理进度更新
     this.handlers.onVideoProgress?.(data)
 
-    // 然后处理完成和失败状态
-    // 只有字幕解析完成（status === 'completed' 且 percentage === 100）时才显示通知
-    // 其他步骤完成时不会发送 parse_video 消息，所以不会触发通知
     if ((data.status === 'completed' || data.status === 4) && data.percentage === 100) {
-      // 字幕解析完成，显示通知
       this.handlers.onVideoCompleted?.(Number(data.video_id))
     } else if (data.status === 'failed' || data.status === 5) {
-      // 任何步骤失败，都显示通知
       this.handlers.onVideoFailed?.(Number(data.video_id), data.error || '解析过程中出现错误')
     }
-    // 其他情况（如 status === 'running' 或 'transcribing'）只更新进度，不显示通知
   }
 
   private handleSmartCut(data: any): void {
@@ -100,7 +94,8 @@ export class WebSocketMessageHandler {
     this.handlers.onSmartCutUpdated?.({
       task_status: data.task_status,
       ai_gen_video_status: data.ai_gen_video_status,
-      ai_gen_video_id: data.ai_gen_video_id
+      ai_gen_video_id: data.ai_gen_video_id,
+      ai_chat_id: data.ai_chat_id
     })
   }
 

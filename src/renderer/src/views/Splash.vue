@@ -9,43 +9,36 @@ const percentage = ref(0)
 const error = ref('')
 
 onMounted(async () => {
-  try {
-    // State tracking
-    const isBackendReady = ref(false)
+  let initInterval: ReturnType<typeof setInterval> | undefined
+  let statusInterval: ReturnType<typeof setInterval> | undefined
+  const isBackendReady = ref(false)
     const isResourcesReady = ref(false)
     const resourceStatusText = ref('正在校验资源文件...')
 
-    // Initial fake progress
-    const initInterval = setInterval(() => {
+    initInterval = setInterval(() => {
       if (percentage.value < 30) percentage.value += 5
     }, 100)
 
     window.api.onBackendStartFailed((err) => {
-      console.error('Backend Error:', err.message)
       error.value = `核心服务启动异常 (${err.code})`
       status.value = '启动失败'
       percentage.value = 100
-      clearInterval(statusInterval)
-      clearInterval(initInterval)
+      if (statusInterval) clearInterval(statusInterval)
+      if (initInterval) clearInterval(initInterval)
     })
 
-    // Check for startup error that might have occurred before this component mounted
     const startupError = await window.api.getBackendStartupError()
     if (startupError) {
-      console.error('Backend Error:', startupError.message)
       error.value = `核心服务启动异常 (${startupError.code})`
       status.value = '启动失败'
       percentage.value = 100
-      clearInterval(initInterval)
-      // Stop here, don't proceed to backend checks
+      if (initInterval) clearInterval(initInterval)
       return
     }
 
-    // Status Manager: Handles what text to display
-    // 0 = show backend status, 1 = show resource status
     const displayToggle = ref(0)
 
-    const statusInterval = setInterval(() => {
+    statusInterval = setInterval(() => {
       // Toggle priority
       displayToggle.value = displayToggle.value === 0 ? 1 : 0
 
@@ -142,10 +135,6 @@ onMounted(async () => {
     setTimeout(() => {
       router.push('/home')
     }, 500)
-  } catch (e) {
-    error.value = (e as Error).message
-    status.value = '初始化失败'
-  }
 })
 </script>
 

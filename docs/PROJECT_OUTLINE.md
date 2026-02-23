@@ -8,7 +8,7 @@
 
 - **产品名**：影氪 (Inklip)
 - **本仓库**：桌面壳（Electron 主进程 + 预加载 + 渲染进程 Vue 应用）
-- **核心能力**：素材管理、全文搜索、意图识别（搜索/剪辑）、智能剪辑流程（选视频 → 确认 → 成片）、AI 对话式交互；HTTP/WebSocket 直连 **inklip-base-go** 后端。
+- **核心能力**：素材管理、全文搜索、意图识别（搜索/剪辑）、智能剪辑流程（选视频 → 确认 → 成片）、AI 对话式交互；HTTP/SSE 直连 **inklip-base-go** 后端。
 
 ---
 
@@ -23,7 +23,8 @@
 | 路由 | Vue Router 4 (Hash) |
 | 状态 | Pinia（仅 websocket store）、自研 aiChatStore / SmartCutAiService |
 | 请求 | Axios（baseURL 由主进程下发后端端口） |
-| 后端 | 独立仓库 **inklip-base-go**，HTTP API + WebSocket，本应用主进程负责拉起后端进程 |
+| 实时 | SSE（`GET /api/sse`） |
+| 后端 | 独立仓库 **inklip-base-go**，HTTP API + SSE，本应用主进程负责拉起后端进程 |
 
 ---
 
@@ -42,7 +43,7 @@ src/
 └── renderer/                # 前端（Vue 应用）
     └── src/
         ├── main.ts
-        ├── App.vue           # 主题、初始化 baseURL/WebSocket、路由出口
+        ├── App.vue           # 主题、初始化 baseURL/SSE、路由出口
         ├── router/index.ts   # / → Splash, /home → Home, /settings → Settings
         ├── api/              # 后端 HTTP 接口封装
         │   ├── aiChat.ts     # AI 对话/消息
@@ -51,14 +52,14 @@ src/
         │   ├── anchor.ts / product.ts / dict.ts
         │   └── config.ts     # 配置、API Key
         ├── stores/
-        │   └── websocket.ts  # WebSocket 连接、消息分发、解析进度、用量
+        │   └── realtime.ts   # SSE 连接、消息分发、解析进度、用量
         ├── services/
         │   ├── aiChatStore.ts      # AI 对话列表与消息内存状态 + 持久化同步
         │   └── smartCutAiService.ts # 智能剪辑流程编排（意图→选视频→确认→剪辑→WS 更新）
         ├── composables/
         │   ├── useGlobalVideoPreview.ts  # 全局单例视频预览
         │   ├── useVideoUpload.ts         # 上传成功后的消息/对话处理
-        │   └── useWebSocketSync.ts       # WS 与消息状态同步（上传/剪辑状态）
+        │   └── useRealtimeSync.ts        # SSE 与消息状态同步（上传/剪辑状态）
         ├── utils/
         │   ├── request.ts    # Axios 实例、setBaseUrl、拦截器
         │   ├── media.ts      # getMediaUrl（path → media:// 或 http）
@@ -101,19 +102,19 @@ src/
 
 - **主进程**：创建窗口、注册 `media://` 协议、启动/管理 **inklip-base-go** 后端子进程，提供 IPC（如 `get-backend-port`、`select-video-folder`）。
 - **预加载**：通过 `window.api` 暴露安全 API（调用 IPC），通过 `window.electron` 暴露 Electron 工具。
-- **渲染进程**：Vue SPA。启动后通过 `window.api.getBackendPort()` 拿到端口，设置 `request.ts` 的 baseURL 和 WebSocket URL，所有 HTTP/WS **直连后端**。
+- **渲染进程**：Vue SPA。启动后通过 `window.api.getBackendPort()` 拿到端口，设置 `request.ts` 的 baseURL 与 SSE 基地址，所有 HTTP/SSE **直连后端**。
 
 ### 4.2 与后端的关系
 
 - 后端为独立可执行文件（**inklip-base-go** 编译产物），由主进程从 `resources/<platform-arch>/inklip-base/` 启动。
-- 后端提供 HTTP API（/api/videos、/api/ai_chat、/api/smart-cut 等）和 WebSocket（/api/ws），前端直接请求该地址。
+- 后端提供 HTTP API（/api/videos、/api/ai_chat、/api/smart-cut 等）和 SSE（/api/sse），前端直接请求该地址。
 
 ### 4.3 数据流（智能剪辑）
 
 1. 用户在 **ChatInput** 输入 → **Home.vue** 调用 `recognizeIntentApi`（意图：搜索 / 剪辑）。
 2. 剪辑意图 → **smartCutAiService.startSmartCut**：请求字典与视频、选品 → 写入 **aiChatStore** 消息，展示 **VideoSelectionMessage**（选视频、时长）。
 3. 用户确认 → **smartCutAiService.confirmAndProceed** → 调用 **smartCutApi**，后端创建任务。
-4. **WebSocket** 推送任务进度/结果 → **websocket-message-handler** 解析 → 更新 **aiChatStore** 中对应消息的 payload → **SmartCutResultMessage** 展示状态/导出。
+4. **SSE** 推送任务进度/结果 → **realtime-message-handler** 解析 → 更新 **aiChatStore** 中对应消息的 payload → **SmartCutResultMessage** 展示状态/导出。
 
 ---
 
@@ -122,10 +123,10 @@ src/
 | 模块 | 作用 |
 |------|------|
 | **api/*.ts** | 封装后端 REST，统一走 `request.ts`（baseURL 由主进程下发）。 |
-| **stores/websocket.ts** | 单例 WebSocket、重连、VideoParseProgress、UsageInfo、isUsageAvailable。 |
+| **stores/realtime.ts** | 单例 SSE、VideoParseProgress、UsageInfo、isUsageAvailable。 |
 | **services/aiChatStore.ts** | 当前对话 ID、消息列表、加载/创建/删除对话、与后端 ai_chat 同步。 |
 | **services/smartCutAiService.ts** | 智能剪辑全流程：意图→字典→视频筛选→用户确认→调用 smartCutApi→监听 WS 更新消息。 |
-| **composables/useWebSocketSync** | 根据 WS 事件刷新消息中的上传/剪辑状态并调用 updateAiChatMessageApi。 |
+| **composables/useRealtimeSync** | 根据 SSE 事件刷新消息中的上传/剪辑状态并调用 updateAiChatMessageApi。 |
 | **composables/useVideoUpload** | 上传成功后的新对话/消息写入与展示。 |
 | **composables/useGlobalVideoPreview** | 全局单例小窗预览（showPreview/hidePreview），避免多实例。 |
 | **types/chat.ts** | Message、MessagePayload、SmartCutTaskPayload、taskCard 步骤等，与后端和 UI 消息类型一致。 |
@@ -146,7 +147,7 @@ src/
 
 ## 7. 渲染进程与主进程/后端交互摘要
 
-- **拿后端端口**：`window.api.getBackendPort()` → 设置 `setBaseUrl('http://127.0.0.1:{port}')` 和 `wsStore.setBaseUrl('ws://...')`。
+- **拿后端端口**：`window.api.getBackendPort()` → 设置 `setBaseUrl('http://127.0.0.1:{port}')`，并让 `realtime` store 连接 `/api/sse`。
 - **选文件/目录**：`window.api.selectVideoFile()`、`selectVideoFolder()`、`selectVideoDataDirectory()`。
 - **下载视频**：`window.api.downloadVideo(sourcePath, fileName)`。
 - **其他**：`getVideoDataDirectory`、`getAppVersion`、`restartBackend`、`checkBackendHealth` 等见 `preload/index.d.ts`。
@@ -171,7 +172,7 @@ pnpm make         # 打包成安装包（含 make:win）
 
 ## 9. 相关
 
-- **后端仓库**：**inklip-base-go**（与前端通过 HTTP + WebSocket 通信）。
+- **后端仓库**：**inklip-base-go**（与前端通过 HTTP + SSE 通信）。
 - **本仓库配置**：`eslint.config.mjs`、`.prettierrc.yaml`、`electron.vite.config.ts`、`forge.config.ts`。
 
 ---
