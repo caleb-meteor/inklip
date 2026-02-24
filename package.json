@@ -55,9 +55,6 @@
       "macos-alias",
       "fs-xattr",
       "electron-winstaller"
-    ],
-    "patchedDependencies": {
-      "cross-zip@4.0.1": "patches/cross-zip@4.0.1.patch"
-    }
+    ]
   }
 }
