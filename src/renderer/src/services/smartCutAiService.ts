@@ -463,11 +463,17 @@ export class SmartCutAiService {
     // 检查 VIP 是否可用（是 VIP 且未过期）
     const rtStore = useRealtimeStore()
     if (!isUsageAvailable(rtStore.usageInfo)) {
-      // 非会员，显示临时提示消息（不创建对话，不保存数据库）
+      // 非会员或额度不足，显示临时提示消息（不创建对话，不保存数据库）
+      const info = rtStore.usageInfo
+      const isQuotaExhausted =
+        info?.isVip && (info?.dailyLimit ?? 0) > 0 && (info?.remainingSeconds ?? 0) <= 0
+      const tipContent = isQuotaExhausted
+        ? '今日额度已用完，请明日再试'
+        : '非会员暂不支持剪辑服务，请升级会员后再试'
       const assistantMessage = {
         id: `message_${Date.now()}`,
         role: 'assistant' as const,
-        content: '非会员暂不支持剪辑服务，请升级会员后再试',
+        content: tipContent,
         timestamp: new Date(),
         payload: {
           type: 'vip_upgrade_prompt'

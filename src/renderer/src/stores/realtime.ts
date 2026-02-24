@@ -21,11 +21,13 @@ export interface UsageInfo {
   expiredAt?: string
 }
 
-/** 判断余量是否可用：是 VIP 且未过期（无 expiredAt 或 expiredAt 大于当前时间） */
+/** 判断余量是否可用：是 VIP、未过期、且有剩余额度 */
 export function isUsageAvailable(info: UsageInfo | null | undefined): boolean {
   if (!info?.isVip) return false
-  if (!info.expiredAt) return true
-  return new Date(info.expiredAt) > new Date()
+  if (info.expiredAt && new Date(info.expiredAt) <= new Date()) return false
+  // dailyLimit > 0 时需检查剩余额度；dailyLimit === 0 表示无限制
+  if (info.dailyLimit > 0 && (info.remainingSeconds ?? 0) <= 0) return false
+  return true
 }
 
 const normalizeBaseUrl = (url: string): string => url.replace(/\/+$/, '')
