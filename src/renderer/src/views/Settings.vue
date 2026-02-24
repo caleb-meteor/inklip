@@ -58,33 +58,35 @@ const selectDirectory = async (): Promise<void> => {
   migrating.value = false
   migrateProgress.value = ''
 
-  const result = await window.api.selectVideoDataDirectory()
-  if (!result.success || !result.directory) {
-    if (!result.canceled) message.error(result.error || '选择目录失败')
-    loading.value = false
+  const doSelect = async (): Promise<void> => {
+    const result = await window.api.selectVideoDataDirectory()
+    if (!result.success || !result.directory) {
+      if (!result.canceled) message.error(result.error || '选择目录失败')
+      return
+    }
+
+    const newDir = result.directory
+    const oldDir = result.oldDirectory || videoDataDirectory.value
+
+    if (oldDir !== newDir) {
+      migrating.value = true
+      migrateProgress.value = '正在迁移文件并更新配置...'
+    }
+
+    await saveConfig({ videoDataDirectory: newDir })
+    if (oldDir !== newDir) {
+      migrateProgress.value = '文件迁移和配置更新完成'
+      message.success('视频数据目录已更新，文件已自动迁移')
+    } else {
+      message.success('配置已保存')
+    }
+
+    videoDataDirectory.value = newDir
+  }
+  await doSelect().finally(() => {
     migrating.value = false
-    return
-  }
-
-  const newDir = result.directory
-  const oldDir = result.oldDirectory || videoDataDirectory.value
-
-  if (oldDir !== newDir) {
-    migrating.value = true
-    migrateProgress.value = '正在迁移文件并更新配置...'
-  }
-
-  await saveConfig({ videoDataDirectory: newDir })
-  if (oldDir !== newDir) {
-    migrateProgress.value = '文件迁移和配置更新完成'
-    message.success('视频数据目录已更新，文件已自动迁移')
-  } else {
-    message.success('配置已保存')
-  }
-
-  videoDataDirectory.value = newDir
-  migrating.value = false
-  loading.value = false
+    loading.value = false
+  })
 }
 
 const loadApiKey = async (): Promise<void> => {

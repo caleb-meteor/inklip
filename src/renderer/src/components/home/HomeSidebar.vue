@@ -471,30 +471,38 @@ const handleUpdateAnchor = async () => {
   if (!editAnchorId.value || !editName.value.trim()) return
 
   loading.value = true
-  const updated = await updateAnchorApi({
-    id: editAnchorId.value,
-    name: editName.value.trim(),
-    avatar: editAvatar.value
+  const doUpdate = async () => {
+    const updated = await updateAnchorApi({
+      id: editAnchorId.value!,
+      name: editName.value.trim(),
+      avatar: editAvatar.value
+    })
+    const index = anchors.value.findIndex((a) => a.id === updated.id)
+    if (index !== -1) anchors.value[index] = updated
+    editAnchorId.value = null
+  }
+  await doUpdate().finally(() => {
+    loading.value = false
   })
-  const index = anchors.value.findIndex((a) => a.id === updated.id)
-  if (index !== -1) anchors.value[index] = updated
-  editAnchorId.value = null
-  loading.value = false
 }
 
 const handleUpdateProduct = async () => {
   if (!editProductId.value || !editProductName.value.trim()) return
 
   loading.value = true
-  const updated = await updateProductApi({
-    id: editProductId.value,
-    name: editProductName.value.trim(),
-    cover: editProductCover.value
+  const doUpdate = async () => {
+    const updated = await updateProductApi({
+      id: editProductId.value!,
+      name: editProductName.value.trim(),
+      cover: editProductCover.value
+    })
+    const index = products.value.findIndex((p) => p.id === updated.id)
+    if (index !== -1) products.value[index] = updated
+    editProductId.value = null
+  }
+  await doUpdate().finally(() => {
+    loading.value = false
   })
-  const index = products.value.findIndex((p) => p.id === updated.id)
-  if (index !== -1) products.value[index] = updated
-  editProductId.value = null
-  loading.value = false
 }
 
 const confirmDeleteAnchor = (anchor: Anchor) => {

@@ -106,12 +106,16 @@ const handleExport = async () => {
     ? completedVideoItem.value.name
     : `${completedVideoItem.value.name}.mp4`
   const loadingMsg = message.loading('正在准备...', { duration: 0 })
-  const result = await window.api.downloadVideo(filePath, fileName)
-  loadingMsg.destroy()
-  if (result.success) message.success(`已保存至: ${result.path}`)
-  else if (result.canceled) message.info('已取消导出')
-  else message.error(result.error || '导出失败')
-  isExporting.value = false
+  const doExport = async () => {
+    const result = await window.api.downloadVideo(filePath, fileName)
+    if (result.success) message.success(`已保存至: ${result.path}`)
+    else if (result.canceled) message.info('已取消导出')
+    else message.error(result.error || '导出失败')
+  }
+  await doExport().finally(() => {
+    loadingMsg.destroy()
+    isExporting.value = false
+  })
 }
 
 // Status 1 is Completed. Status 3, 4 are Errors.

@@ -97,12 +97,16 @@ export class AiChatStore {
   async loadAiChats(): Promise<void> {
     if (this.isLoadingAiChats.value) return
     this.isLoadingAiChats.value = true
-    const res = await getAiChatListApi(1, 20)
-    this.aiChats.value = res.list || []
-    this.aiChatPage = 1
-    this.hasMoreAiChats.value = this.aiChats.value.length < res.total
-    if (this.hasMoreAiChats.value) this.aiChatPage = 2
-    this.isLoadingAiChats.value = false
+    const doLoad = async () => {
+      const res = await getAiChatListApi(1, 20)
+      this.aiChats.value = res.list || []
+      this.aiChatPage = 1
+      this.hasMoreAiChats.value = this.aiChats.value.length < res.total
+      if (this.hasMoreAiChats.value) this.aiChatPage = 2
+    }
+    await doLoad().finally(() => {
+      this.isLoadingAiChats.value = false
+    })
   }
 
   /**
@@ -111,11 +115,15 @@ export class AiChatStore {
   async loadMoreAiChats(): Promise<void> {
     if (this.isLoadingAiChats.value || !this.hasMoreAiChats.value) return
     this.isLoadingAiChats.value = true
-    const res = await getAiChatListApi(this.aiChatPage, 20)
-    if (res.list.length > 0) this.aiChats.value = [...this.aiChats.value, ...res.list]
-    this.hasMoreAiChats.value = this.aiChats.value.length < res.total
-    if (this.hasMoreAiChats.value) this.aiChatPage++
-    this.isLoadingAiChats.value = false
+    const doLoad = async () => {
+      const res = await getAiChatListApi(this.aiChatPage, 20)
+      if (res.list.length > 0) this.aiChats.value = [...this.aiChats.value, ...res.list]
+      this.hasMoreAiChats.value = this.aiChats.value.length < res.total
+      if (this.hasMoreAiChats.value) this.aiChatPage++
+    }
+    await doLoad().finally(() => {
+      this.isLoadingAiChats.value = false
+    })
   }
 
   /**

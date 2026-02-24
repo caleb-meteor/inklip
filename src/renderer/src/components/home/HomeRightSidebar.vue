@@ -74,13 +74,17 @@ const handleDeleteClip = (item: SmartCutItem) => {
 const fetchHistory = async () => {
   if (loadingHistory.value || !historyHasMore.value) return
   loadingHistory.value = true
-  const anchorId = props.currentAnchor?.id
-  const res = await getSmartCutsApi(historyPage.value, 20, anchorId)
-  if (historyPage.value === 1) clipHistory.value = res.list
-  else clipHistory.value.push(...res.list)
-  historyHasMore.value = clipHistory.value.length < res.total
-  if (historyHasMore.value) historyPage.value++
-  loadingHistory.value = false
+  const doFetch = async () => {
+    const anchorId = props.currentAnchor?.id
+    const res = await getSmartCutsApi(historyPage.value, 20, anchorId)
+    if (historyPage.value === 1) clipHistory.value = res.list
+    else clipHistory.value.push(...res.list)
+    historyHasMore.value = clipHistory.value.length < res.total
+    if (historyHasMore.value) historyPage.value++
+  }
+  await doFetch().finally(() => {
+    loadingHistory.value = false
+  })
 }
 
 /** 重新拉取剪辑历史（用于休眠/长时间未操作后恢复） */

@@ -144,31 +144,40 @@ const handleConfirm = async (): Promise<void> => {
   }
 
   isUploading.value = true
-  let anchorId: number = 0
-  let productId: number = 0
+  const doUpload = async (): Promise<void> => {
+    let anchorId: number = 0
+    let productId: number = 0
 
-  if (props.preSelectedAnchor) anchorId = props.preSelectedAnchor.id
-  else if (formValue.value.anchor) anchorId = await getDictId(formValue.value.anchor, 'anchor')
+    if (props.preSelectedAnchor) anchorId = props.preSelectedAnchor.id
+    else if (formValue.value.anchor) anchorId = await getDictId(formValue.value.anchor, 'anchor')
 
-  if (props.preSelectedProduct) productId = props.preSelectedProduct.id
-  else if (formValue.value.product) productId = await getDictId(formValue.value.product, 'product')
+    if (props.preSelectedProduct) productId = props.preSelectedProduct.id
+    else if (formValue.value.product) productId = await getDictId(formValue.value.product, 'product')
 
-  const res = await uploadVideosBatchApi(videoPaths.value, subtitleFiles.value, anchorId, productId)
-  let uploadedVideos: any[] = []
-  if (Array.isArray(res)) uploadedVideos = res
-  else if (res && Array.isArray(res.videos)) uploadedVideos = res.videos
+    const res = await uploadVideosBatchApi(
+      videoPaths.value,
+      subtitleFiles.value,
+      anchorId,
+      productId
+    )
+    let uploadedVideos: any[] = []
+    if (Array.isArray(res)) uploadedVideos = res
+    else if (res && Array.isArray(res.videos)) uploadedVideos = res.videos
 
-  emit('success', uploadedVideos, {
-    anchor: props.preSelectedAnchor ? props.preSelectedAnchor.name : formValue.value.anchor,
-    product: props.preSelectedProduct ? props.preSelectedProduct.name : formValue.value.product
+    emit('success', uploadedVideos, {
+      anchor: props.preSelectedAnchor ? props.preSelectedAnchor.name : formValue.value.anchor,
+      product: props.preSelectedProduct ? props.preSelectedProduct.name : formValue.value.product
+    })
+    emit('update:show', false)
+    videoPaths.value = []
+    folderPath.value = ''
+    subtitleFiles.value = {}
+    formValue.value.anchor = null
+    formValue.value.product = null
+  }
+  await doUpload().finally(() => {
+    isUploading.value = false
   })
-  emit('update:show', false)
-  videoPaths.value = []
-  folderPath.value = ''
-  subtitleFiles.value = {}
-  formValue.value.anchor = null
-  formValue.value.product = null
-  isUploading.value = false
 }
 
 const handleClose = (): void => {
