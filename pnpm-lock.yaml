@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  cross-zip@4.0.1:
+    hash: 7b13cb06d8dbdb3837cd5f13957ed3afbeaa5e0f3b73a7a53968fc222ff52465
+    path: patches/cross-zip@4.0.1.patch
+
 importers:
 
   .:
@@ -3425,7 +3430,7 @@ snapshots:
     dependencies:
       '@electron-forge/maker-base': 7.11.1
       '@electron-forge/shared-types': 7.11.1
-      cross-zip: 4.0.1
+      cross-zip: 4.0.1(patch_hash=7b13cb06d8dbdb3837cd5f13957ed3afbeaa5e0f3b73a7a53968fc222ff52465)
       fs-extra: 10.1.0
       got: 11.8.6
     transitivePeerDependencies:
@@ -4784,7 +4789,7 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
-  cross-zip@4.0.1: {}
+  cross-zip@4.0.1(patch_hash=7b13cb06d8dbdb3837cd5f13957ed3afbeaa5e0f3b73a7a53968fc222ff52465): {}
 
   css-render@0.15.14:
     dependencies:

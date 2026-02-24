@@ -1,0 +1,25 @@
+diff --git a/index.js b/index.js
+index 94b61425f38d7f075ad41b6186905ab6d52dd994..0f4673ab468b724a25b1a0aa114aaab4d02b327f 100644
+--- a/index.js
++++ b/index.js
+@@ -44,9 +44,10 @@ function zip (inPath, outPath, cb) {
+   }
+ 
+   // Windows zip command does not overwrite existing files. So do it manually first.
++  // Node 22+ 移除了 fs.rmdir 的 recursive 选项，使用 fs.rm 代替
+   function doZip () {
+     if (process.platform === 'win32') {
+-      fs.rmdir(outPath, { recursive: true, maxRetries: 3 }, doZip2)
++      fs.rm(outPath, { recursive: true, force: true }, doZip2)
+     } else {
+       doZip2()
+     }
+@@ -72,7 +73,7 @@ function zipSync (inPath, outPath) {
+       fs.writeFileSync(path.join(tmpPath, path.basename(inPath)), inFile)
+       inPath = tmpPath
+     }
+-    fs.rmdirSync(outPath, { recursive: true, maxRetries: 3 })
++    fs.rmSync(outPath, { recursive: true, force: true })
+   }
+   const opts = {
+     cwd: path.dirname(inPath),
