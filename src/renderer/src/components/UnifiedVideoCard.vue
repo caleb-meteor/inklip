@@ -33,18 +33,21 @@ const emit = defineEmits<{
   (e: 'contextMenu', event: MouseEvent, video: UnifiedVideoSource): void
 }>()
 
-const isDeleted = computed(() => !normalizeVideo(props.video, props.videoType).path)
+const normalized = computed(() => normalizeVideo(props.video, props.videoType))
+const hasPath = computed(() => !!normalized.value.path)
+// 仅在成功完成状态下视为已删除（用于样式和 overlay）
+const isDeleted = computed(() => !hasPath.value && normalized.value.displayStatus === 'completed')
 
 const handleClick = () => {
-  if (!isDeleted.value) emit('select', props.video)
+  if (hasPath.value) emit('select', props.video)
 }
 
 const handleDblClick = () => {
-  if (!isDeleted.value) emit('open', props.video)
+  if (hasPath.value) emit('open', props.video)
 }
 
 const handleContextMenu = (e: MouseEvent) => {
-  if (!isDeleted.value) emit('contextMenu', e, props.video)
+  if (hasPath.value) emit('contextMenu', e, props.video)
 }
 </script>
 

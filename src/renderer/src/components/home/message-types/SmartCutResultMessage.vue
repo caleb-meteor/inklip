@@ -103,8 +103,8 @@ const handleExport = async () => {
   isExporting.value = true
   const filePath = completedVideoItem.value.path
   const fileName = completedVideoItem.value.name.endsWith('.mp4')
-    ? completedVideoFileItem.value.name
-    : `${completedVideoFileItem.value.name}.mp4`
+    ? completedVideoItem.value.name
+    : `${completedVideoItem.value.name}.mp4`
   const loadingMsg = message.loading('正在准备...', { duration: 0 })
   const result = await window.api.downloadVideo(filePath, fileName)
   loadingMsg.destroy()
@@ -288,7 +288,6 @@ onMounted(() => {
     dotInterval = setInterval(() => {
       dotAnimation.value = dotAnimation.value === '...' ? '.' : dotAnimation.value + '.'
     }, 400) // 点动画
-
     ;(async () => {
       const latestData = await getSmartCutApi(props.task.aiGenVideoId!)
       await updateMessageStatus(latestData)

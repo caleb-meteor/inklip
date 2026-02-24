@@ -129,9 +129,9 @@ const handleCancel = (): void => {
         }"
         @click="
           isInteractive &&
-            awaitingConfirmation &&
-            !isVideoDeleted(video) &&
-            toggleVideoSelection(video.id, video.duration)
+          awaitingConfirmation &&
+          !isVideoDeleted(video) &&
+          toggleVideoSelection(video.id, video.duration)
         "
       >
         <div v-if="awaitingConfirmation && isInteractive" class="video-selection-badge">
@@ -139,11 +139,7 @@ const handleCancel = (): void => {
             <span v-if="selectedVideos.has(video.id)">✓</span>
           </div>
         </div>
-        <UnifiedVideoPreview
-          :video="video"
-          video-type="material"
-          aspect-ratio="9/16"
-        />
+        <UnifiedVideoPreview :video="video" video-type="material" aspect-ratio="9/16" />
         <div class="compact-card-info">
           <div class="compact-name">{{ video.filename || video.name }}</div>
         </div>

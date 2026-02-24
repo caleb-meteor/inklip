@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
 import HomeSidebar from '../components/home/HomeSidebar.vue'
 import HomeRightSidebar from '../components/home/HomeRightSidebar.vue'
@@ -26,6 +26,7 @@ import type { VideoItem, SmartCutItem } from '../api/video'
 import { searchVideosApi } from '../api/video'
 
 const router = useRouter()
+const route = useRoute()
 const rtStore = useRealtimeStore()
 const appVersion = ref<string>('1.0.0')
 const showUploadModal = ref(false)
@@ -51,6 +52,7 @@ const currentSelectedAnchor = ref<any>(null)
 
 const homeSidebarRef = ref<InstanceType<typeof HomeSidebar> | null>(null)
 const homeRightSidebarRef = ref<InstanceType<typeof HomeRightSidebar> | null>(null)
+const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 let stopReconnectWatch: (() => void) | undefined
 
 const handlePlayVideo = (video: VideoItem | SmartCutItem) => {
@@ -74,14 +76,26 @@ const onVisibilityChange = (): void => {
   if (document.visibilityState === 'visible') refreshPageData()
 }
 
+/** 根据路由 query.chatId 定位到对应聊天（通知点击跳转用） */
+const selectChatFromRoute = async (): Promise<void> => {
+  const chatIdStr = route.query.chatId
+  if (!chatIdStr) return
+  const chatId = Number(chatIdStr)
+  if (!Number.isInteger(chatId)) return
+  await aiChatStore.loadAiChats()
+  const chat =
+    aiChatStore.getAiChats().value.find((c) => c.id === chatId) ?? ({ id: chatId } as AiChatTopic)
+  await aiChatStore.selectChat(chat)
+  router.replace({ path: '/home' })
+}
+
 onMounted(async () => {
   await aiChatStore.loadAiChats()
-  // const chats = aiChatStore.getAiChats().value
-  // if (chats.length > 0) {
-  //   await aiChatStore.selectChat(chats[0])
-  // } else {
-  //   aiChatStore.newChat()
-  // }
+  await selectChatFromRoute()
+
+  aiChatStore.setOnNewChatCallback(() => {
+    chatInputRef.value?.focus?.()
+  })
 
   document.addEventListener('visibilitychange', onVisibilityChange)
   // SSE 断线重连后同步一次数据，避免休眠期间数据丢失
@@ -91,6 +105,9 @@ onMounted(async () => {
       if (wasConnected === false && connected === true) refreshPageData()
     }
   )
+
+  // 通知点击跳转带 chatId 时定位到对应聊天
+  watch(() => route.query.chatId, selectChatFromRoute)
 
   // 获取应用版本号
   if (window.api?.getAppVersion) {
@@ -102,6 +119,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
+  aiChatStore.setOnNewChatCallback(null)
   if (stopReconnectWatch) stopReconnectWatch()
 })
 
@@ -155,11 +173,11 @@ const handleSend = async (val: string): Promise<void> => {
   })
   if (currentAiChatId) {
     await addAiChatMessageApi({
-        ai_chat_id: currentAiChatId,
-        role: 'user',
-        content: trimmed,
-        payload: intentPayload ?? undefined
-      })
+      ai_chat_id: currentAiChatId,
+      role: 'user',
+      content: trimmed,
+      payload: intentPayload ?? undefined
+    })
   }
 
   if (intent === INTENT_SEARCH) {
@@ -249,15 +267,12 @@ const handleNewChat = (): void => {
         <n-layout-content class="home-content">
           <div v-if="!currentPlayingVideo" class="chat-layout">
             <div class="messages-container">
-              <HomeChatMessages
-                :messages="messages"
-                @play-video="handlePlayVideo"
-              />
+              <HomeChatMessages :messages="messages" @play-video="handlePlayVideo" />
             </div>
 
             <div class="input-area-wrapper">
               <div class="input-area-container">
-                <ChatInput :disabled="isTaskRunning" @send="handleSend" />
+                <ChatInput ref="chatInputRef" :disabled="isTaskRunning" @send="handleSend" />
               </div>
             </div>
           </div>

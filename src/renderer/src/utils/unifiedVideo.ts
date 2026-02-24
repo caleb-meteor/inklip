@@ -1,7 +1,5 @@
 import type { VideoItem, SmartCutItem } from '../api/video'
 import type { FileItem } from '../types/video'
-import type { VideoParseProgress } from '../stores/realtime'
-
 /** 统一视频项：兼容上传素材与智能剪辑 */
 export type UnifiedVideoSource = VideoItem | SmartCutItem | FileItem | UnifiedVideoLike
 

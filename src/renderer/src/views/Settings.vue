@@ -53,8 +53,6 @@ const loadVideoDataDirectory = async (): Promise<void> => {
   if (config.videoDataDirectory) videoDataDirectory.value = config.videoDataDirectory
 }
 
-const restarting = ref(false)
-
 const selectDirectory = async (): Promise<void> => {
   loading.value = true
   migrating.value = false

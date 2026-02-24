@@ -58,8 +58,7 @@ export function useRealtimeSync() {
           const updatedPayload = { ...payload, videos: updatedVideos }
           aiChatStore.updateMessage(msg.id, { payload: updatedPayload })
           const msgIdNum = Number(msg.id)
-          if (!isNaN(msgIdNum))
-            await updateAiChatMessageApi(msgIdNum, { payload: updatedPayload })
+          if (!isNaN(msgIdNum)) await updateAiChatMessageApi(msgIdNum, { payload: updatedPayload })
         }
       }
     }

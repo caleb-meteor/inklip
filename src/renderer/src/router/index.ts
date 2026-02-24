@@ -18,6 +18,10 @@ const routes = [
     path: '/settings',
     name: 'Settings',
     component: Settings
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/home'
   }
 ]
 

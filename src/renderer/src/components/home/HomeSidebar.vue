@@ -294,22 +294,21 @@ const handleAddProduct = async () => {
     return false
   }
 
+  const newProduct = await createProductApi({
+    name: newProductName.value.trim(),
+    anchor_id: selectedAnchorId.value,
+    cover: newProductCover.value
+  })
 
-    const newProduct = await createProductApi({
-      name: newProductName.value.trim(),
-      anchor_id: selectedAnchorId.value,
-      cover: newProductCover.value
-    })
+  products.value.push(newProduct)
 
-    products.value.push(newProduct)
+  // Reset inputs
+  newProductName.value = ''
+  newProductCover.value = ''
+  productFileList.value = []
 
-    // Reset inputs
-    newProductName.value = ''
-    newProductCover.value = ''
-    productFileList.value = []
-
-    // message.success('添加产品成功')
-    return true
+  // message.success('添加产品成功')
+  return true
 }
 
 const handleContextMenu = (

@@ -34,9 +34,7 @@ const emit = defineEmits<{
 
 const rtStore = useRealtimeStore()
 
-const normalized = computed<NormalizedVideo>(() =>
-  normalizeVideo(props.video, props.videoType)
-)
+const normalized = computed<NormalizedVideo>(() => normalizeVideo(props.video, props.videoType))
 
 const videoId = computed(() => normalized.value.id)
 const parseProgress = computed(() => {
@@ -52,6 +50,12 @@ const overlayStatus = computed<VideoDisplayStatus | undefined>(() =>
 )
 
 const isDeleted = computed(() => !normalized.value.path)
+
+// 仅在成功完成状态下显示「已删除」，处理中/等待/失败时不显示
+const showPathMissing = computed(() => {
+  if (normalized.value.path) return false
+  return overlayStatus.value === 'completed'
+})
 
 const playerRef = ref<InstanceType<typeof VideoPreviewPlayer> | null>(null)
 
@@ -73,13 +77,14 @@ defineExpose({
       :video-id="videoId"
       :video-type="normalized.videoType"
       :subtitle-data="normalized.subtitle"
+      :show-deleted-overlay="showPathMissing"
       @dblclick="emit('dblclick')"
     />
     <VideoStatusOverlay
       v-if="showOverlay"
       :status="overlayStatus"
       :parse-progress="parseProgress"
-      :show-path-missing="!normalized.path"
+      :show-path-missing="showPathMissing"
       :video-status="(props.video as any)?.status"
     />
   </div>

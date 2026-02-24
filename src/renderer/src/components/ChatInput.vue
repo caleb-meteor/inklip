@@ -50,11 +50,15 @@ const handleKeyDown = (e: KeyboardEvent): void => {
   }
 }
 
+const focus = (): void => {
+  setTimeout(() => inputRef.value?.focus(), 100)
+}
+
+defineExpose({ focus })
+
 // Focus the input on mount
 onMounted(() => {
-  setTimeout(() => {
-    inputRef.value?.focus()
-  }, 300)
+  focus()
 })
 </script>
 

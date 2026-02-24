@@ -5,16 +5,21 @@ import { NIcon } from 'naive-ui'
 import { getMediaUrl } from '../utils/media'
 import { useGlobalVideoPreview } from '../composables/useGlobalVideoPreview'
 
-const props = defineProps<{
-  path?: string
-  cover?: string
-  duration?: number
-  aspectRatio?: string
-  disabled?: boolean
-  videoId?: number // Optional video ID for subtitle matching
-  subtitleData?: any // Optional subtitle data (array) passed directly
-  videoType?: 'material' | 'edited' // Distinction for backend subtitle fetching
-}>()
+const props = withDefaults(
+  defineProps<{
+    path?: string
+    cover?: string
+    duration?: number
+    aspectRatio?: string
+    disabled?: boolean
+    videoId?: number // Optional video ID for subtitle matching
+    subtitleData?: any // Optional subtitle data (array) passed directly
+    videoType?: 'material' | 'edited' // Distinction for backend subtitle fetching
+    /** 是否显示「已删除」状态，用于处理中不显示已删除。不传则按 isDeleted 自动判断 */
+    showDeletedOverlay?: boolean
+  }>(),
+  { showDeletedOverlay: undefined }
+)
 
 const emit = defineEmits<{
   (e: 'dblclick'): void
@@ -59,6 +64,8 @@ const isDeleted = computed(
     coverLoadError.value ||
     (!!props.path && isCurrentlyPreviewing(props.path) && hasError.value)
 )
+// 是否展示「已删除」UI：父组件可控制，处理中时传 false 以显示处理状态
+const shouldShowDeleted = computed(() => props.showDeletedOverlay !== false && isDeleted.value)
 
 const formatDuration = (seconds?: number): string => {
   if (!seconds) return ''
@@ -138,7 +145,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="video-preview-player"
-    :class="{ 'is-deleted': isDeleted }"
+    :class="{ 'is-deleted': shouldShowDeleted }"
     :style="{ aspectRatio: aspectRatio || '9/16' }"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
@@ -159,17 +166,12 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Duration Badge（被删除时不显示） -->
-      <div v-if="duration && !isDeleted" class="v-duration-badge">
+      <div v-if="duration && !shouldShowDeleted" class="v-duration-badge">
         {{ formatDuration(duration) }}
       </div>
 
-      <!-- 路径为空、封面/视频文件加载失败时显示 -->
-      <div
-        v-if="isDeleted"
-        class="deleted-overlay"
-        @click.stop
-        @dblclick.stop
-      >
+      <!-- 路径为空、封面/视频文件加载失败时显示（处理中不显示） -->
+      <div v-if="shouldShowDeleted" class="deleted-overlay" @click.stop @dblclick.stop>
         <span class="deleted-label">视频已被删除</span>
       </div>
     </div>
@@ -178,7 +180,7 @@ onBeforeUnmount(() => {
     <div
       ref="videoContainerRef"
       class="video-preview-container"
-      :class="{ active: isHovered && path && !disabled && !isDeleted }"
+      :class="{ active: isHovered && path && !disabled && !shouldShowDeleted }"
       @mouseenter.stop
       @mouseleave.stop
     >

@@ -17,7 +17,7 @@ const props = defineProps({
   messages: {
     type: Array as PropType<Message[]>,
     default: () => []
-  },
+  }
 })
 
 const emit = defineEmits<{
@@ -128,6 +128,7 @@ const getMessageContent = (msg: Message): string => {
 }
 </script>
 
+<!-- eslint-disable vue/no-v-html -->
 <template>
   <div class="chat-container">
     <div ref="scrollContainer" class="messages-viewport">

@@ -8,6 +8,7 @@
  * - major: 0.0.45 -> 1.0.0
  */
 
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
@@ -17,7 +18,7 @@ const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf-8'))
 
 const args = process.argv.slice(2)
 const noCommit = args.includes('--no-commit')
-const type = (args.find(a => !a.startsWith('--')) || 'patch').toLowerCase()
+const type = (args.find((a) => !a.startsWith('--')) || 'patch').toLowerCase()
 const validTypes = ['patch', 'minor', 'major']
 if (!validTypes.includes(type)) {
   console.error(`无效的版本类型: ${type}`)
@@ -25,6 +26,7 @@ if (!validTypes.includes(type)) {
   process.exit(1)
 }
 
+/* eslint-disable-next-line @typescript-eslint/explicit-function-return-type */
 function bumpVersion(version, type) {
   const [major = 0, minor = 0, patch = 0] = version.split('.').map(Number)
   switch (type) {
@@ -61,7 +63,7 @@ try {
   console.log(`   - package.json 已更新并提交`)
   console.log(`   - 已创建 tag: v${newVersion}`)
   console.log(`   - 已推送到远程`)
-} catch (e) {
+} catch {
   console.error('\n⚠️  Git 操作失败，可能工作区有未提交的更改')
   console.error('   版本已更新，请手动执行:')
   console.error(`   git add package.json`)

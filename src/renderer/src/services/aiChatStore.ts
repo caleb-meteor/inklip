@@ -25,6 +25,13 @@ export class AiChatStore {
   private isCurrentChatProcessing: Ref<boolean>
   private aiChatPage: number
 
+  /** 新建/创建聊天后的回调，用于 focus 输入框等 */
+  private onNewChatCallback: (() => void) | null = null
+
+  setOnNewChatCallback(cb: (() => void) | null): void {
+    this.onNewChatCallback = cb
+  }
+
   constructor() {
     this.aiChats = ref<AiChatTopic[]>([])
     this.currentAiChatId = ref<number | null>(null)
@@ -104,11 +111,11 @@ export class AiChatStore {
   async loadMoreAiChats(): Promise<void> {
     if (this.isLoadingAiChats.value || !this.hasMoreAiChats.value) return
     this.isLoadingAiChats.value = true
-      const res = await getAiChatListApi(this.aiChatPage, 20)
-      if (res.list.length > 0) this.aiChats.value = [...this.aiChats.value, ...res.list]
-      this.hasMoreAiChats.value = this.aiChats.value.length < res.total
-      if (this.hasMoreAiChats.value) this.aiChatPage++
-      this.isLoadingAiChats.value = false
+    const res = await getAiChatListApi(this.aiChatPage, 20)
+    if (res.list.length > 0) this.aiChats.value = [...this.aiChats.value, ...res.list]
+    this.hasMoreAiChats.value = this.aiChats.value.length < res.total
+    if (this.hasMoreAiChats.value) this.aiChatPage++
+    this.isLoadingAiChats.value = false
   }
 
   /**
@@ -140,6 +147,7 @@ export class AiChatStore {
     const aiTopic = await createAiChatApi(topic || '新建对话')
     this.aiChats.value = [aiTopic, ...this.aiChats.value]
     this.currentAiChatId.value = aiTopic.id
+    this.onNewChatCallback?.()
     return aiTopic
   }
 
@@ -176,11 +184,7 @@ export class AiChatStore {
     }
     this.messages.value.push(msg)
     // 仅智能剪辑未读消息计入列表未读数
-    if (
-      msg.role === 'assistant' &&
-      msg.isRead === false &&
-      this.currentAiChatId.value != null
-    ) {
+    if (msg.role === 'assistant' && msg.isRead === false && this.currentAiChatId.value != null) {
       const id = this.currentAiChatId.value
       this.aiChats.value = this.aiChats.value.map((c) =>
         c.id === id ? { ...c, unread_count: (c.unread_count ?? 0) + 1 } : c
@@ -338,6 +342,7 @@ export class AiChatStore {
     this.currentAiChatId.value = null
     this.isCurrentChatProcessing.value = false
     this.clearMessages()
+    this.onNewChatCallback?.()
   }
 
   /**

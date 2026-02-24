@@ -140,29 +140,28 @@ const loadSubtitles = async (): Promise<void> => {
   }
 
   // 2. Fetch if missing
-    let videoSubtitle: any = null
+  let videoSubtitle: any = null
 
-    if (props.videoType === 'edited' && props.videoId) {
-      const smartCut = await getSmartCutApi(props.videoId)
-      if (smartCut && smartCut.subtitle) {
-        videoSubtitle = smartCut.subtitle
-      }
-    } else {
-      // Default to material check
-      // Only fetch if we really need to (e.g. subtitleData prop was empty)
-      // If we have videoId, let's fetch to be safe in case props.subtitleData was stale or empty string
-      if (props.videoId) {
-        const videos = await getVideosApi({ ids: [props.videoId] })
-        if (videos && videos.length > 0 && videos[0].subtitle) {
-          videoSubtitle = videos[0].subtitle
-        }
+  if (props.videoType === 'edited' && props.videoId) {
+    const smartCut = await getSmartCutApi(props.videoId)
+    if (smartCut && smartCut.subtitle) {
+      videoSubtitle = smartCut.subtitle
+    }
+  } else {
+    // Default to material check
+    // Only fetch if we really need to (e.g. subtitleData prop was empty)
+    // If we have videoId, let's fetch to be safe in case props.subtitleData was stale or empty string
+    if (props.videoId) {
+      const videos = await getVideosApi({ ids: [props.videoId] })
+      if (videos && videos.length > 0 && videos[0].subtitle) {
+        videoSubtitle = videos[0].subtitle
       }
     }
+  }
 
-    if (videoSubtitle) {
-      subtitles.value = processSubtitleData(videoSubtitle)
-    }
-  
+  if (videoSubtitle) {
+    subtitles.value = processSubtitleData(videoSubtitle)
+  }
 }
 
 const formatSubtitleTime = (subtitle: SubtitleItem): string => {
@@ -221,10 +220,7 @@ const onVideoError = (): void => {
           @loadedmetadata="onLoadedMetadata"
           @error="onVideoError"
         ></video>
-        <div
-          v-if="!path || hasError"
-          class="video-deleted-overlay"
-        >
+        <div v-if="!path || hasError" class="video-deleted-overlay">
           <span class="video-deleted-label">视频已被删除</span>
         </div>
       </div>

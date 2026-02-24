@@ -12,129 +12,129 @@ onMounted(async () => {
   let initInterval: ReturnType<typeof setInterval> | undefined
   let statusInterval: ReturnType<typeof setInterval> | undefined
   const isBackendReady = ref(false)
-    const isResourcesReady = ref(false)
-    const resourceStatusText = ref('正在校验资源文件...')
+  const isResourcesReady = ref(false)
+  const resourceStatusText = ref('正在校验资源文件...')
 
-    initInterval = setInterval(() => {
-      if (percentage.value < 30) percentage.value += 5
-    }, 100)
+  initInterval = setInterval(() => {
+    if (percentage.value < 30) percentage.value += 5
+  }, 100)
 
-    window.api.onBackendStartFailed((err) => {
-      error.value = `核心服务启动异常 (${err.code})`
-      status.value = '启动失败'
-      percentage.value = 100
-      if (statusInterval) clearInterval(statusInterval)
-      if (initInterval) clearInterval(initInterval)
-    })
-
-    const startupError = await window.api.getBackendStartupError()
-    if (startupError) {
-      error.value = `核心服务启动异常 (${startupError.code})`
-      status.value = '启动失败'
-      percentage.value = 100
-      if (initInterval) clearInterval(initInterval)
-      return
-    }
-
-    const displayToggle = ref(0)
-
-    statusInterval = setInterval(() => {
-      // Toggle priority
-      displayToggle.value = displayToggle.value === 0 ? 1 : 0
-
-      const backendPending = !isBackendReady.value
-      const resourcesPending = !isResourcesReady.value
-
-      if (backendPending && resourcesPending) {
-        // Both pending: Alternate
-        if (displayToggle.value === 0) {
-          status.value = '正在启动后端服务...'
-        } else {
-          status.value = resourceStatusText.value
-        }
-      } else if (backendPending) {
-        // Only backend pending
-        status.value = '正在启动后端服务...'
-      } else if (resourcesPending) {
-        // Only resources pending
-        status.value = resourceStatusText.value
-      } else {
-        // All done
-        status.value = '准备就绪'
-      }
-    }, 2000) // Switch every 2 seconds
-
-    // Parallel Task 1: Wait for Backend
-    const waitForBackend = async (): Promise<number> => {
-      const p = await window.api.getBackendPort()
-      if (p) {
-        isBackendReady.value = true
-        return p
-      }
-      return new Promise((resolve) => {
-        window.api.onBackendPort((port) => {
-          isBackendReady.value = true
-          resolve(port)
-        })
-      })
-    }
-
-    // Parallel Task 2: Check and Download Resources
-    const checkAndDownloadResources = async (): Promise<void> => {
-      const resourcesExist = await window.api.checkResources()
-
-      if (!resourcesExist) {
-        resourceStatusText.value = '正在下载资源文件...'
-        window.api.onDownloadProgress((progress: any) => {
-          const formatSize = (bytes: number): string => {
-            if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
-            return `${(bytes / 1024).toFixed(1)}KB`
-          }
-
-          const currentText = formatSize(progress.current || 0)
-          const totalText = formatSize(progress.total || 0)
-
-          let speedText = ''
-          if (progress.speed !== undefined) {
-            const speed = progress.speed
-            if (speed >= 1024 * 1024) {
-              speedText = ` - ${(speed / (1024 * 1024)).toFixed(1)} MB/s`
-            } else {
-              speedText = ` - ${(speed / 1024).toFixed(1)} KB/s`
-            }
-          }
-
-          // Update the holding variable, not status directly
-          resourceStatusText.value = `正在下载资源文件... (${currentText} / ${totalText}) ${progress.percentage}%${speedText}`
-
-          // Update percentage directly as it's visual only
-          const downloadPhase = progress.percentage * 0.6
-          percentage.value = 30 + downloadPhase
-        })
-
-        await window.api.downloadResources()
-      } else {
-        // Resources exist
-        percentage.value = 80
-        resourceStatusText.value = '资源校验完成'
-      }
-      isResourcesReady.value = true
-    }
-
-    // Run both tasks in parallel
-    await Promise.all([waitForBackend(), checkAndDownloadResources()])
-
-    // Cleanup
-    clearInterval(initInterval)
-    clearInterval(statusInterval)
-
-    // Phase 3: Finalize
+  window.api.onBackendStartFailed((err) => {
+    error.value = `核心服务启动异常 (${err.code})`
+    status.value = '启动失败'
     percentage.value = 100
-    status.value = '准备就绪'
+    if (statusInterval) clearInterval(statusInterval)
+    if (initInterval) clearInterval(initInterval)
+  })
 
-    setTimeout(() => {
-      router.push('/home')
-    }, 500)
+  const startupError = await window.api.getBackendStartupError()
+  if (startupError) {
+    error.value = `核心服务启动异常 (${startupError.code})`
+    status.value = '启动失败'
+    percentage.value = 100
+    if (initInterval) clearInterval(initInterval)
+    return
+  }
+
+  const displayToggle = ref(0)
+
+  statusInterval = setInterval(() => {
+    // Toggle priority
+    displayToggle.value = displayToggle.value === 0 ? 1 : 0
+
+    const backendPending = !isBackendReady.value
+    const resourcesPending = !isResourcesReady.value
+
+    if (backendPending && resourcesPending) {
+      // Both pending: Alternate
+      if (displayToggle.value === 0) {
+        status.value = '正在启动后端服务...'
+      } else {
+        status.value = resourceStatusText.value
+      }
+    } else if (backendPending) {
+      // Only backend pending
+      status.value = '正在启动后端服务...'
+    } else if (resourcesPending) {
+      // Only resources pending
+      status.value = resourceStatusText.value
+    } else {
+      // All done
+      status.value = '准备就绪'
+    }
+  }, 2000) // Switch every 2 seconds
+
+  // Parallel Task 1: Wait for Backend
+  const waitForBackend = async (): Promise<number> => {
+    const p = await window.api.getBackendPort()
+    if (p) {
+      isBackendReady.value = true
+      return p
+    }
+    return new Promise((resolve) => {
+      window.api.onBackendPort((port) => {
+        isBackendReady.value = true
+        resolve(port)
+      })
+    })
+  }
+
+  // Parallel Task 2: Check and Download Resources
+  const checkAndDownloadResources = async (): Promise<void> => {
+    const resourcesExist = await window.api.checkResources()
+
+    if (!resourcesExist) {
+      resourceStatusText.value = '正在下载资源文件...'
+      window.api.onDownloadProgress((progress: any) => {
+        const formatSize = (bytes: number): string => {
+          if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+          return `${(bytes / 1024).toFixed(1)}KB`
+        }
+
+        const currentText = formatSize(progress.current || 0)
+        const totalText = formatSize(progress.total || 0)
+
+        let speedText = ''
+        if (progress.speed !== undefined) {
+          const speed = progress.speed
+          if (speed >= 1024 * 1024) {
+            speedText = ` - ${(speed / (1024 * 1024)).toFixed(1)} MB/s`
+          } else {
+            speedText = ` - ${(speed / 1024).toFixed(1)} KB/s`
+          }
+        }
+
+        // Update the holding variable, not status directly
+        resourceStatusText.value = `正在下载资源文件... (${currentText} / ${totalText}) ${progress.percentage}%${speedText}`
+
+        // Update percentage directly as it's visual only
+        const downloadPhase = progress.percentage * 0.6
+        percentage.value = 30 + downloadPhase
+      })
+
+      await window.api.downloadResources()
+    } else {
+      // Resources exist
+      percentage.value = 80
+      resourceStatusText.value = '资源校验完成'
+    }
+    isResourcesReady.value = true
+  }
+
+  // Run both tasks in parallel
+  await Promise.all([waitForBackend(), checkAndDownloadResources()])
+
+  // Cleanup
+  clearInterval(initInterval)
+  clearInterval(statusInterval)
+
+  // Phase 3: Finalize
+  percentage.value = 100
+  status.value = '准备就绪'
+
+  setTimeout(() => {
+    router.push('/home')
+  }, 500)
 })
 </script>
 

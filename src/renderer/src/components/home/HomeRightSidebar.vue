@@ -257,7 +257,9 @@ const onRecentScroll = (ev: Event) => {
           >
             <n-icon size="16"><ChatbubbleOutline /></n-icon>
             <span class="history-title">{{ chat.topic || '未命名项目' }}</span>
-            <span v-if="(chat.unread_count ?? 0) > 0" class="unread-badge">{{ chat.unread_count! > 99 ? '99+' : chat.unread_count }}</span>
+            <span v-if="(chat.unread_count ?? 0) > 0" class="unread-badge">{{
+              chat.unread_count! > 99 ? '99+' : chat.unread_count
+            }}</span>
             <div class="item-actions">
               <n-tooltip trigger="hover" placement="top">
                 <template #trigger>

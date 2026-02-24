@@ -157,13 +157,15 @@ export const useRealtimeStore = defineStore('realtime', () => {
           aiChatStore.incrementUnreadCountForChat(data.ai_chat_id)
         }
         if (data.task_status === 2 || data.ai_gen_video_status === 1) {
-          window.api.showNotification('智能剪辑完成', '点击查看最新剪辑结果', '/smart-editor')
+          const chatRoute = data.ai_chat_id != null ? `/home?chatId=${data.ai_chat_id}` : '/home'
+          window.api.showNotification('智能剪辑完成', '点击查看最新剪辑结果', chatRoute)
         } else if (
           data.task_status === 3 ||
           data.ai_gen_video_status === 3 ||
           data.ai_gen_video_status === 4
         ) {
-          window.api.showNotification('智能剪辑失败', '请检查任务详情', '/smart-editor')
+          const chatRoute = data.ai_chat_id != null ? `/home?chatId=${data.ai_chat_id}` : '/home'
+          window.api.showNotification('智能剪辑失败', '请检查任务详情', chatRoute)
         }
       },
       onVideoUploaded: () => {
