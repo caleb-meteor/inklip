@@ -13,7 +13,11 @@
     "build": "electron-vite build --outDir=dist",
     "package": "pnpm build && electron-forge package",
     "make": "pnpm build && electron-forge make",
-    "make:win": "pnpm build && electron-forge make --platform win32 --arch x64"
+    "make:win": "pnpm build && electron-forge make --platform win32 --arch x64",
+    "release": "node scripts/release.js",
+    "release:patch": "node scripts/release.js patch",
+    "release:minor": "node scripts/release.js minor",
+    "release:major": "node scripts/release.js major"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
