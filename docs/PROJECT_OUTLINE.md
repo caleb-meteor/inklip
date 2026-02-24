@@ -75,8 +75,8 @@ src/
         └── components/
             ├── AppStatusBar.vue
             ├── ChatInput.vue
-            ├── VideoPlayer.vue / VideoPreviewPlayer.vue / GlobalFullscreenPlayer.vue
-            ├── VideoCard.vue / VideoStatusOverlay.vue
+            ├── VideoPlayer.vue / VideoPreviewPlayer.vue / UnifiedVideoPreview.vue / UnifiedVideoCard.vue
+            ├── VideoStatusOverlay.vue
             ├── RenameModal.vue / DeleteModal.vue
             └── home/
                 ├── HomeSidebar.vue        # 左侧：锚点/产品/视频树、上传
