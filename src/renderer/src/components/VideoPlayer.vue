@@ -194,6 +194,10 @@ watch(
 
 const onVideoError = (): void => {
   hasError.value = true
+  // 清除 src，防止 404 后浏览器持续发送 Range 请求导致死循环
+  if (videoRef.value) {
+    videoRef.value.removeAttribute('src')
+  }
 }
 </script>
 

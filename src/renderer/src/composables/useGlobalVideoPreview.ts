@@ -107,6 +107,10 @@ export function useGlobalVideoPreview(): {
       videoElement.value.addEventListener('error', (e) => {
         hasError.value = true
         isLoading.value = false
+        // 立即清除 src，防止 404 后浏览器持续发送 Range 请求导致死循环
+        if (videoElement.value) {
+          videoElement.value.removeAttribute('src')
+        }
         const errorTimestamp = new Date().toISOString().split('T')[1]
         const target = e.target as HTMLVideoElement
         console.warn(`[${errorTimestamp}] [GlobalVideoPreview] Video load error:`, {

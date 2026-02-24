@@ -16,6 +16,10 @@ defineProps({
   }
 })
 
+const emit = defineEmits<{
+  (e: 'play-video', video: any): void
+}>()
+
 const videoPlayers = ref<Record<number, any>>({})
 
 const formatTime = (s: number) => {
@@ -30,6 +34,10 @@ const handleSegmentClick = (video: any, startTime: number, endTime: number) => {
   if (isVideoDeleted(video)) return
   const player = videoPlayers.value[video?.id]
   if (player) player.playAtTime(startTime, endTime)
+}
+
+const handlePlayVideo = (video: any) => {
+  if (!isVideoDeleted(video)) emit('play-video', video)
 }
 </script>
 
@@ -59,6 +67,7 @@ const handleSegmentClick = (video: any, startTime: number, endTime: number) => {
                 video-type="material"
                 aspect-ratio="9/16"
                 class="video-player"
+                @dblclick="handlePlayVideo(item.video)"
               />
               <div class="video-info-below">
                 <div class="video-header">

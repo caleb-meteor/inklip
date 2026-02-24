@@ -244,6 +244,7 @@ const getMessageContent = (msg: Message): string => {
                   v-if="msg.payload?.type === 'search_result' && msg.payload?.results"
                   :results="msg.payload.results"
                   :keywords="msg.payload.keywords || []"
+                  @play-video="(video) => emit('play-video', video)"
                 />
 
                 <VideoSelectionMessage

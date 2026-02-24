@@ -291,6 +291,7 @@ const onRecentScroll = (ev: Event) => {
                 video-type="edited"
                 aspect-ratio="9/16"
                 :disabled="item.status !== 1"
+                @dblclick="handleClipClick(item)"
               />
             </div>
             <div class="clip-info">
