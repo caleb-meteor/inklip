@@ -11,6 +11,14 @@ export interface VideoItem {
   width?: number
   height?: number
   subtitle: string | any // Backend may return parsed JSON object or string
+  feature?: {
+    main_content?: string
+    product_name?: string
+    pain_points?: string
+    selling_points?: string
+    price?: string
+    anchor_info?: string
+  } | null // 视频特征：字幕提取内容
   audio: string
   silent: string
   status: number
@@ -20,6 +28,8 @@ export interface VideoItem {
   parse_percentage?: number
   group_id?: number
   categories?: Array<{ id: number; name: string; type: string }>
+  anchor_id?: number
+  product_id?: number
   created_at: string
   updated_at: string
 }
@@ -35,18 +45,65 @@ export interface VideoUploadResponse {
   height?: number
   status?: number
   parse_percentage?: number
+  anchor_id?: number
+  product_id?: number
   created_at?: string
   updated_at: string
 }
 
 /**
- * Get all videos
+ * Get all videos or filter by IDs, anchor, or product
+ * @param params Optional filters
  * @returns Promise with list of videos
  */
-export function getVideosApi(): Promise<VideoItem[]> {
+export function getVideosApi(params?: {
+  ids?: number[]
+  anchor_id?: number
+  product_id?: number
+}): Promise<VideoItem[]> {
   return request({
     url: '/api/videos',
-    method: 'get'
+    method: 'get',
+    params: params
+  })
+}
+
+/** 全文搜索命中的字幕片段（带时间与相关度分） */
+export interface SearchSegment {
+  video_id: number
+  text: string
+  start_ms: number
+  end_ms: number
+  start_s: number
+  end_s: number
+  /** 字幕相关度分，越高越相关 */
+  score?: number
+}
+
+/** 全文搜索结果单项 */
+export interface VideoSearchResultItem {
+  video: VideoItem
+  segments: SearchSegment[]
+  match_in: string[]
+  score: number
+}
+
+export interface VideoSearchResponse {
+  intent: number
+  intent_label: string
+  keywords: string[]
+  results: VideoSearchResultItem[]
+}
+
+/**
+ * 全文搜索视频（字幕 + 名称，带关键词权重）
+ * 识别到搜索意图后调用，返回匹配视频及字幕片段（含时间）
+ */
+export function searchVideosApi(query: string, limit?: number): Promise<VideoSearchResponse> {
+  return request({
+    url: '/api/videos/search',
+    method: 'post',
+    data: { query: query.trim(), limit: limit ?? 5 }
   })
 }
 
@@ -59,8 +116,9 @@ export function getVideosApi(): Promise<VideoItem[]> {
  */
 export function uploadVideosBatchApi(
   paths: string[],
-  categoryIds?: number[],
-  subtitleFiles?: Record<string, string>
+  subtitleFiles?: Record<string, string>,
+  anchorId?: number,
+  productId?: number
 ): Promise<
   VideoUploadResponse[] | { videos: VideoUploadResponse[]; task_ids?: string[]; status?: string }
 > {
@@ -69,48 +127,62 @@ export function uploadVideosBatchApi(
     method: 'post',
     data: {
       video_paths: paths,
-      category_ids: categoryIds,
-      subtitle_files: subtitleFiles
+      subtitle_files: subtitleFiles,
+      anchor_id: anchorId,
+      product_id: productId
     },
     timeout: 10 * 60 * 1000 // 10 minutes in milliseconds
   })
 }
 
 export interface SmartCutResponse {
-  task_id: number
-  status: string
-  message: string
+  id: number // ai_gen_video 的 ID
+  task_id?: number
+  status?: string
+  message?: string
 }
 
 /**
  * Start smart cut processing for selected videos
  * @param videoIds Array of video IDs to process
- * @param prompt Optional editing ideas or instructions
+ * @param anchorId Anchor ID (required)
+ * @param productId Product ID (required)
+ * @param productName Product name (required)
  * @param minDuration Optional minimum duration of the output video in seconds
  * @param maxDuration Optional maximum duration of the output video in seconds
- * @param productName Optional product name
+ * @param prompt Optional editing ideas or instructions
  * @param promptBuiltId Optional built-in prompt ID (0 for custom prompt)
+ * @param aiChatId Optional AI 对话 ID，后端用于完成/异常时标记该会话下任务卡片未读
  * @returns Promise with smart cut task response
  */
 export function smartCutApi(
   videoIds: number[],
-  prompt?: string,
+  anchorId: number,
+  productId: number,
+  productName: string,
   minDuration?: number,
   maxDuration?: number,
-  productName?: string,
-  promptBuiltId?: number
+  prompt?: string,
+  promptBuiltId?: number,
+  aiChatId?: number
 ): Promise<SmartCutResponse> {
+  const data: Record<string, unknown> = {
+    video_ids: videoIds,
+    anchor_id: anchorId,
+    product_id: productId,
+    product_name: productName,
+    min_duration: minDuration,
+    max_duration: maxDuration,
+    prompt_text: prompt,
+    prompt_built_id: promptBuiltId
+  }
+  if (aiChatId != null) {
+    data.ai_chat_id = aiChatId
+  }
   return request({
     url: '/api/smart-cut',
     method: 'post',
-    data: {
-      video_ids: videoIds,
-      prompt_text: prompt,
-      prompt_built_id: promptBuiltId,
-      min_duration: minDuration,
-      max_duration: maxDuration,
-      product_name: productName
-    },
+    data,
     timeout: 20 * 60 * 1000 // 20 minutes in milliseconds
   })
 }
@@ -141,16 +213,37 @@ export interface SmartCutsResponse {
  * Get smart cut history with pagination
  * @param page Page number
  * @param pageSize Items per page
+ * @param anchorId Filter by anchor
+ * @param productId Filter by product
  * @returns Promise with paginated smart cut items
  */
-export function getSmartCutsApi(page: number, pageSize: number): Promise<SmartCutsResponse> {
+export function getSmartCutsApi(
+  page: number,
+  pageSize: number,
+  anchorId?: number,
+  productId?: number
+): Promise<SmartCutsResponse> {
   return request({
     url: '/api/smart-cuts',
     method: 'get',
     params: {
       page,
-      page_size: pageSize
+      page_size: pageSize,
+      anchor_id: anchorId,
+      product_id: productId
     }
+  })
+}
+
+/**
+ * Get single smart cut status by ID
+ * @param id Smart cut ID
+ * @returns Promise with smart cut item
+ */
+export function getSmartCutApi(id: number): Promise<any> {
+  return request({
+    url: `/api/smart-cut/${id}`,
+    method: 'get'
   })
 }
 
@@ -166,27 +259,6 @@ export function deleteSmartCutApi(id: number): Promise<void> {
     data: {
       id
     }
-  })
-}
-
-export interface PromptBuiltin {
-  id: string
-  name: string
-  description: string
-}
-
-export interface PromptBuiltinsResponse {
-  list: PromptBuiltin[]
-}
-
-/**
- * Get built-in prompts
- * @returns Promise with list of built-in prompts
- */
-export function getPromptBuiltinsApi(): Promise<PromptBuiltinsResponse> {
-  return request({
-    url: '/api/prompt-builtins',
-    method: 'get'
   })
 }
 
@@ -218,40 +290,6 @@ export function deleteVideoApi(id: number): Promise<void> {
     method: 'delete',
     data: {
       id
-    }
-  })
-}
-
-/**
- * Add video category
- * @param id Video ID
- * @param categoryId Category ID
- * @returns Promise with updated video response
- */
-export function addVideoCategoryApi(id: number, categoryId: number): Promise<VideoItem> {
-  return request({
-    url: '/api/video/category',
-    method: 'post',
-    data: {
-      id,
-      category_id: categoryId
-    }
-  })
-}
-
-/**
- * Remove video category
- * @param id Video ID
- * @param categoryId Category ID
- * @returns Promise with updated video response
- */
-export function removeVideoCategoryApi(id: number, categoryId: number): Promise<VideoItem> {
-  return request({
-    url: '/api/video/category',
-    method: 'delete',
-    data: {
-      id,
-      category_id: categoryId
     }
   })
 }

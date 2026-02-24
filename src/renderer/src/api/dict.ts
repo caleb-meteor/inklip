@@ -42,35 +42,14 @@ export function getDictsByTypeApi(type: string): Promise<DictItem[]> {
 }
 
 /**
- * Update dict item
- * @param id Dict id
- * @param name Optional new name
- * @param type Optional new type
- * @returns Promise with updated dict item
+ * Get dict items from sentence (matches dict names in the sentence)
+ * @param sentence Input sentence to analyze
+ * @returns Promise with list of matched dict items
  */
-export function updateDictApi(id: number, name?: string, type?: string): Promise<DictItem> {
+export function getDictsFromSentenceApi(sentence: string): Promise<DictItem[]> {
   return request({
-    url: '/api/dict',
-    method: 'put',
-    data: {
-      id,
-      name,
-      type
-    }
-  })
-}
-
-/**
- * Delete dict item
- * @param id Dict id
- * @returns Promise
- */
-export function deleteDictApi(id: number): Promise<void> {
-  return request({
-    url: '/api/dict',
-    method: 'delete',
-    data: {
-      id
-    }
+    url: '/api/dict/sentence',
+    method: 'post',
+    data: { sentence }
   })
 }

@@ -172,7 +172,10 @@ export function registerIpcHandlers(
       properties: ['openFile', 'multiSelections'],
       buttonLabel: '选择',
       filters: [
-        { name: '视频文件', extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'm4v'] }
+        {
+          name: '视频和字幕文件',
+          extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'm4v', 'srt']
+        }
       ]
     })
 
@@ -182,12 +185,16 @@ export function registerIpcHandlers(
 
     // 验证文件扩展名（大小写不敏感）
     const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v']
+    const subtitleExtensions = ['.srt']
     const validFilePaths: string[] = []
+    const validSubtitlePaths: string[] = []
 
     for (const filePath of result.filePaths) {
       const ext = path.extname(filePath).toLowerCase() // 转换为小写，实现大小写不敏感
       if (videoExtensions.includes(ext)) {
         validFilePaths.push(filePath)
+      } else if (subtitleExtensions.includes(ext)) {
+        validSubtitlePaths.push(filePath)
       } else {
         console.warn(`[IPC] 跳过后缀不支持的文件: ${filePath} (扩展名: ${path.extname(filePath)})`)
       }
@@ -196,14 +203,30 @@ export function registerIpcHandlers(
     if (validFilePaths.length === 0) {
       return {
         success: false,
-        error: '没有选择有效的视频文件（支持格式: mp4, webm, mov, avi, mkv, flv, wmv, m4v）'
+        error: '没有选择有效的视频文件'
       }
     }
+
+    // 尝试自动匹配字幕
+    const subtitleFiles: Record<string, string> = {}
+    validFilePaths.forEach((videoPath) => {
+      const videoBaseName = path.basename(videoPath, path.extname(videoPath)).toLowerCase()
+
+      const matchedSubtitle = validSubtitlePaths.find((subPath) => {
+        const subBaseName = path.basename(subPath, path.extname(subPath)).toLowerCase()
+        return subBaseName === videoBaseName
+      })
+
+      if (matchedSubtitle) {
+        subtitleFiles[videoPath] = matchedSubtitle
+      }
+    })
 
     // 统一返回 filePaths，单个或多个文件都使用批量上传
     return {
       success: true,
-      filePaths: validFilePaths
+      filePaths: validFilePaths,
+      subtitleFiles
     }
   })
 
@@ -227,7 +250,7 @@ export function registerIpcHandlers(
     // 扫描文件夹，查找视频文件和字幕文件
     // 使用小写扩展名列表，通过 toLowerCase() 实现大小写不敏感匹配
     const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv', '.wmv', '.m4v']
-    const subtitleExtensions = ['.srt', '.json']
+    const subtitleExtensions = ['.srt']
 
     const videoFiles: string[] = []
     const subtitleFiles: Record<string, string> = {} // 视频文件名 -> 字幕文件路径
@@ -293,6 +316,10 @@ export function registerIpcHandlers(
   ipcMain.handle('get-app-config', () => {
     // 注意：实际配置由 Python 后端管理，这里只返回默认值作为后备
     return { videoDataDirectory: app.getPath('userData') }
+  })
+
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion()
   })
 
   ipcMain.handle('restart-backend', () => {

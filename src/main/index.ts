@@ -359,14 +359,6 @@ async function handleMediaProtocol(request: Request): Promise<Response> {
   const pathPart = decodeUrlPath(request.url)
   let filePath = normalizeFilePath(pathPart)
 
-  // Log request (Chinese characters may appear as乱码 in console)
-  console.log('[Main] Media protocol request:', {
-    originalUrl: request.url,
-    decodedPath: pathPart,
-    normalizedPath: filePath,
-    exists: fs.existsSync(filePath)
-  })
-
   // Check if file exists, try alternatives if not
   if (!fs.existsSync(filePath)) {
     console.error('[Main] File not found:', filePath)

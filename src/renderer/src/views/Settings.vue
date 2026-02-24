@@ -11,9 +11,10 @@ import {
   useMessage,
   NAlert,
   NIcon,
-  NH2
+  NH2,
+  NInputGroup
 } from 'naive-ui'
-import { Settings as SettingsIcon } from '@vicons/ionicons5'
+import { ArrowBack, FolderOpenOutline, KeyOutline } from '@vicons/ionicons5'
 import { saveConfig, getConfig, setApiKey, getApiKey, validateApiKey } from '../api/config'
 
 const router = useRouter()
@@ -46,82 +47,46 @@ const maskedApiKey = computed(() => {
 })
 
 const loadVideoDataDirectory = async (): Promise<void> => {
-  try {
-    // 先从 Electron 获取当前配置
-    const dir = await window.api.getVideoDataDirectory()
-    videoDataDirectory.value = dir
-
-    // 然后从 Python 后端获取配置（如果存在）
-    try {
-      const config = await getConfig()
-      if (config.videoDataDirectory) {
-        videoDataDirectory.value = config.videoDataDirectory
-      }
-    } catch {
-      // 如果后端未启动或配置不存在，使用 Electron 的配置
-      console.debug('无法从后端获取配置，使用 Electron 配置')
-    }
-  } catch (error) {
-    console.error('Failed to load video data directory:', error)
-    message.error('加载视频数据目录失败')
-  }
+  const dir = await window.api.getVideoDataDirectory()
+  videoDataDirectory.value = dir
+  const config = await getConfig()
+  if (config.videoDataDirectory) videoDataDirectory.value = config.videoDataDirectory
 }
 
 const restarting = ref(false)
 
 const selectDirectory = async (): Promise<void> => {
-  try {
-    loading.value = true
-    migrating.value = false
-    migrateProgress.value = ''
+  loading.value = true
+  migrating.value = false
+  migrateProgress.value = ''
 
-    // 1. 选择目录（Electron 负责）
-    const result = await window.api.selectVideoDataDirectory()
-    if (!result.success || !result.directory) {
-      if (!result.canceled) {
-        message.error(result.error || '选择目录失败')
-      }
-      return
-    }
-
-    const newDir = result.directory
-    const oldDir = result.oldDirectory || videoDataDirectory.value
-
-    // 2. 如果目录不同，显示迁移提示
-    if (oldDir !== newDir) {
-      migrating.value = true
-      migrateProgress.value = '正在迁移文件并更新配置...'
-    }
-
-    // 3. 保存配置到 Python 后端（后端会自动处理文件迁移）
-    try {
-      await saveConfig({ videoDataDirectory: newDir })
-      console.log('[Settings] 配置已保存到后端')
-
-      if (oldDir !== newDir) {
-        migrateProgress.value = '文件迁移和配置更新完成'
-        message.success('视频数据目录已更新，文件已自动迁移')
-      } else {
-        message.success('配置已保存')
-      }
-    } catch (error) {
-      console.error('[Settings] 保存配置失败:', error)
-      message.error(`更新失败: ${(error as Error).message}`)
-      migrating.value = false
-      return
-    }
-
-    // 4. 更新本地显示
-    videoDataDirectory.value = newDir
-    migrating.value = false
-  } catch (error) {
-    console.error('Failed to select directory:', error)
-    message.error('选择目录失败')
-    restarting.value = false
-    migrating.value = false
-  } finally {
+  const result = await window.api.selectVideoDataDirectory()
+  if (!result.success || !result.directory) {
+    if (!result.canceled) message.error(result.error || '选择目录失败')
     loading.value = false
+    migrating.value = false
+    return
   }
+
+  const newDir = result.directory
+  const oldDir = result.oldDirectory || videoDataDirectory.value
+
+  if (oldDir !== newDir) {
+    migrating.value = true
+    migrateProgress.value = '正在迁移文件并更新配置...'
+  }
+
+  await saveConfig({ videoDataDirectory: newDir })
+  if (oldDir !== newDir) {
+    migrateProgress.value = '文件迁移和配置更新完成'
+    message.success('视频数据目录已更新，文件已自动迁移')
+  } else {
+    message.success('配置已保存')
+  }
+
+  videoDataDirectory.value = newDir
+  migrating.value = false
+  loading.value = false
 }
 
 const loadApiKey = async (): Promise<void> => {
@@ -131,21 +96,14 @@ const loadApiKey = async (): Promise<void> => {
     apiKey.value = ''
   } else {
     // 如果本地没有 apiKey，尝试从后端获取
-    try {
-      const response = await getApiKey()
-      if (response.api_key) {
-        // 保存到本地存储
-        localStorage.setItem('apiKey', response.api_key)
-        hasApiKey.value = true
-        apiKey.value = ''
-        console.log('[Settings] 从后端获取 API Key 成功')
-      } else {
-        hasApiKey.value = false
-        apiKey.value = ''
-      }
-    } catch (error) {
-      // 如果获取失败，则 apiKey 为空
-      console.debug('[Settings] 无法从后端获取 API Key:', error)
+    const response = await getApiKey()
+    if (response.api_key) {
+      // 保存到本地存储
+      localStorage.setItem('apiKey', response.api_key)
+      hasApiKey.value = true
+      apiKey.value = ''
+      console.log('[Settings] 从后端获取 API Key 成功')
+    } else {
       hasApiKey.value = false
       apiKey.value = ''
     }
@@ -196,150 +154,230 @@ onMounted(() => {
 
 <template>
   <n-message-provider>
-    <div class="settings-container">
-      <div class="header">
-        <n-space align="center">
-          <n-icon size="24" color="#63e2b7">
-            <SettingsIcon />
-          </n-icon>
-          <n-h2 style="margin: 0">
-            <n-text type="primary">设置</n-text>
-          </n-h2>
-        </n-space>
-        <n-button secondary @click="router.push('/home')">返回</n-button>
+    <div class="settings-page">
+      <div class="settings-header">
+        <n-button quaternary circle size="large" @click="router.push('/home')">
+          <template #icon>
+            <n-icon size="24"><ArrowBack /></n-icon>
+          </template>
+        </n-button>
+        <div class="header-title">
+          <n-h2 style="margin: 0; font-size: 24px; line-height: 1.2">设置</n-h2>
+          <n-text depth="3" class="header-subtitle">管理应用程序配置和首选项</n-text>
+        </div>
       </div>
 
-      <div class="content">
-        <n-card title="设置" class="settings-card">
-          <n-alert type="info" style="margin-bottom: 20px">
-            <div>
-              <strong> 修改目录后，系统会自动将原目录下的所有视频文件迁移到新目录。</strong>
-            </div>
-          </n-alert>
+      <div class="settings-content">
+        <n-space vertical size="large">
+          <!-- 存储设置 -->
+          <n-card :bordered="false" class="setting-card" title="存储设置">
+            <template #header-extra>
+              <n-icon size="20" depth="3"><FolderOpenOutline /></n-icon>
+            </template>
 
-          <div class="setting-item">
-            <div class="setting-label">
-              <n-text strong>API Key</n-text>
-            </div>
-            <n-space vertical style="width: 100%">
-              <div v-if="hasApiKey && !isEditingApiKey" class="api-key-display">
-                <n-input :value="maskedApiKey" readonly type="text" style="width: 100%" />
+            <n-alert type="info" class="mb-4" :show-icon="true" :bordered="false">
+              修改目录后，系统会自动将原目录下的所有视频文件迁移到新目录。
+            </n-alert>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-title">视频数据目录</div>
+                <div class="setting-desc">存储视频文件和相关数据的本地路径</div>
               </div>
-              <n-input
-                v-if="!hasApiKey || isEditingApiKey"
-                v-model:value="apiKey"
-                type="password"
-                placeholder="请输入 API Key"
-                show-password-on="click"
-                style="width: 100%"
-                @keyup.enter="saveApiKey"
-              />
-              <n-space>
-                <n-button
-                  v-if="!hasApiKey && !isEditingApiKey"
-                  type="primary"
-                  @click="isEditingApiKey = true"
+              <div class="setting-control">
+                <n-input v-model:value="videoDataDirectory" placeholder="视频数据目录路径" readonly>
+                  <template #suffix>
+                    <n-button
+                      text
+                      type="primary"
+                      :loading="loading || migrating"
+                      @click="selectDirectory"
+                    >
+                      {{ migrating ? '迁移中' : '更改' }}
+                    </n-button>
+                  </template>
+                </n-input>
+                <n-text
+                  v-if="migrateProgress"
+                  depth="3"
+                  style="font-size: 12px; margin-top: 8px; display: block"
                 >
-                  设置
-                </n-button>
-                <n-button
-                  v-if="isEditingApiKey"
-                  type="primary"
-                  :loading="loading"
-                  :disabled="!apiKey.trim()"
-                  @click="saveApiKey"
-                >
-                  保存
-                </n-button>
-                <n-button
-                  v-if="hasApiKey && !isEditingApiKey"
-                  type="primary"
-                  @click="isEditingApiKey = true"
-                >
-                  修改
-                </n-button>
-                <n-button
-                  v-if="isEditingApiKey"
-                  @click="
-                    () => {
-                      isEditingApiKey = false
-                      apiKey = ''
-                    }
-                  "
-                >
-                  取消
-                </n-button>
-              </n-space>
-              <n-text depth="3" style="font-size: 12px">
-                {{ hasApiKey && !isEditingApiKey ? '已保存 API Key' : '输入 API Key 后点击保存' }}
-              </n-text>
-            </n-space>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-label">
-              <n-text strong>视频数据目录</n-text>
-            </div>
-            <n-space vertical style="width: 100%">
-              <n-input
-                v-model:value="videoDataDirectory"
-                placeholder="视频数据目录路径"
-                readonly
-                style="width: 100%"
-              />
-              <n-space vertical style="width: 100%">
-                <n-button type="primary" :loading="loading || migrating" @click="selectDirectory">
-                  {{ migrating ? '正在迁移文件...' : '选择目录' }}
-                </n-button>
-                <n-text v-if="migrateProgress" depth="3" style="font-size: 12px">
                   {{ migrateProgress }}
                 </n-text>
-              </n-space>
-            </n-space>
-          </div>
-        </n-card>
+              </div>
+            </div>
+          </n-card>
+
+          <!-- API 设置 -->
+          <n-card :bordered="false" class="setting-card" title="API 配置">
+            <template #header-extra>
+              <n-icon size="20" depth="3"><KeyOutline /></n-icon>
+            </template>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-title">API Key</div>
+                <div class="setting-desc">用于访问云端服务的认证密钥</div>
+              </div>
+
+              <div class="setting-control">
+                <n-space vertical>
+                  <div v-if="hasApiKey && !isEditingApiKey" class="api-key-display">
+                    <n-input :value="maskedApiKey" readonly type="text">
+                      <template #suffix>
+                        <n-button text type="primary" @click="isEditingApiKey = true"
+                          >修改</n-button
+                        >
+                      </template>
+                    </n-input>
+                  </div>
+
+                  <n-input-group v-if="!hasApiKey || isEditingApiKey">
+                    <n-input
+                      v-model:value="apiKey"
+                      type="password"
+                      placeholder="请输入 API Key"
+                      show-password-on="click"
+                      @keyup.enter="saveApiKey"
+                    />
+                    <n-button
+                      type="primary"
+                      :loading="loading"
+                      :disabled="!apiKey.trim()"
+                      @click="saveApiKey"
+                    >
+                      保存
+                    </n-button>
+                    <n-button
+                      v-if="hasApiKey"
+                      @click="
+                        () => {
+                          isEditingApiKey = false
+                          apiKey = ''
+                        }
+                      "
+                    >
+                      取消
+                    </n-button>
+                  </n-input-group>
+
+                  <n-text depth="3" style="font-size: 12px">
+                    {{
+                      hasApiKey && !isEditingApiKey
+                        ? '您的 API Key 已安全保存'
+                        : '请输入有效的 API Key 以启用云端功能'
+                    }}
+                  </n-text>
+                </n-space>
+              </div>
+            </div>
+          </n-card>
+        </n-space>
       </div>
     </div>
   </n-message-provider>
 </template>
 
 <style scoped>
-.settings-container {
+.settings-page {
   height: 100vh;
   width: 100%;
-  padding: 40px;
-  background: #1a1a1a;
+  background: #101014;
   color: #fff;
-  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.settings-header {
+  padding: 24px 40px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: #18181c;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  flex-shrink: 0;
+}
+
+.header-title {
   display: flex;
   flex-direction: column;
 }
 
-.header {
+.header-subtitle {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.settings-content {
+  flex: 1;
+  padding: 32px 40px;
+  overflow-y: auto;
+  min-width: 600px;
+  max-width: 1000px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.setting-card {
+  background: #18181c;
+  border-radius: 8px;
+}
+
+.mb-4 {
+  margin-bottom: 20px;
+}
+
+.setting-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 40px;
+  align-items: flex-start;
+  gap: 40px;
+  padding: 8px 0;
 }
 
-.content {
+.setting-info {
+  flex: 0 0 240px;
+}
+
+.setting-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 6px;
+}
+
+.setting-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.5;
+}
+
+.setting-control {
   flex: 1;
-  max-width: 800px;
-  width: 100%;
+  max-width: 480px;
 }
 
-.settings-card {
-  background: #262626;
-  border-color: #333;
+/* Custom scrollbar */
+.settings-content::-webkit-scrollbar {
+  width: 6px;
+}
+.settings-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.settings-content::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
 }
 
-.setting-item {
-  margin-bottom: 24px;
+:deep(.n-card-header) {
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 20px;
 }
 
-.setting-label {
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
+:deep(.n-card__content) {
+  padding-top: 0;
 }
 </style>

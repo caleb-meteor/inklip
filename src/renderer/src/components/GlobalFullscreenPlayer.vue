@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { CloseOutline } from '@vicons/ionicons5'
 import { getMediaUrl } from '../utils/media'
 import { NIcon, NModal } from 'naive-ui'
-import { getVideosApi, type VideoItem } from '../api/video'
+import { getVideosApi, getSmartCutApi, type VideoItem } from '../api/video'
 
 interface SubtitleItem {
   text: string
@@ -23,6 +23,7 @@ const props = defineProps<{
   name: string
   videoId?: number // Optional video ID for direct matching
   subtitleData?: any // Optional subtitle data (array) passed directly
+  videoType?: 'material' | 'edited' // Distinction between source materials and AI generated videos
 }>()
 
 const emit = defineEmits(['close'])
@@ -132,27 +133,30 @@ const loadSubtitles = async (): Promise<void> => {
 
   // If subtitle data is passed directly (from props), use it
   if (props.subtitleData) {
-    subtitles.value = processSubtitleData(props.subtitleData)
-    return
+    const processed = processSubtitleData(props.subtitleData)
+    if (processed.length > 0) {
+      subtitles.value = processed
+      return
+    }
   }
 
-  try {
-    // Load from video list API
-    const videos = await getVideosApi()
-    let video: VideoItem | undefined = undefined
+  let videoSubtitle: any = null
 
-    // Find video by ID (preferred) or path
+  if (props.videoType === 'edited' && props.videoId) {
+    const smartCut = await getSmartCutApi(props.videoId)
+    if (smartCut?.subtitle) videoSubtitle = smartCut.subtitle
+  } else {
+    const videos = await getVideosApi()
+    let video: VideoItem | undefined
     if (props.videoId) {
       video = videos.find((v) => v.id === props.videoId)
     } else if (props.path) {
-      const normalizePath = (path: string): string => {
-        if (!path) return ''
-        return path
+      const normalizePath = (p: string) =>
+        (p || '')
           .replace(/^media:\/\//, '')
           .replace(/^file:\/\//, '')
           .replace(/\\/g, '/')
           .toLowerCase()
-      }
       const targetPath = normalizePath(props.path)
       video = videos.find((v) => {
         const videoPath = normalizePath(v.path)
@@ -163,17 +167,14 @@ const loadSubtitles = async (): Promise<void> => {
         )
       })
     }
-
-    if (!video || !video.subtitle) {
-      subtitles.value = []
-      return
-    }
-
-    // Process subtitle from video API response (JSON data)
-    subtitles.value = processSubtitleData(video.subtitle)
-  } catch {
-    subtitles.value = []
+    if (video?.subtitle) videoSubtitle = video.subtitle
   }
+
+  if (!videoSubtitle) {
+    subtitles.value = []
+    return
+  }
+  subtitles.value = processSubtitleData(videoSubtitle)
 }
 
 // Watch for visibility changes to load subtitles
@@ -389,6 +390,8 @@ onUnmounted(() => {
   display: flex;
   gap: 0;
   overflow: hidden;
+  justify-content: center;
+  align-items: center;
 }
 
 .player-header {
@@ -418,19 +421,21 @@ onUnmounted(() => {
 }
 
 .video-box {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   background: #000;
   overflow: hidden;
-  min-width: 0; /* Allow flexbox to shrink */
+  min-width: 300px;
+  max-width: 800px;
+  height: 100%;
 }
 
 .main-video {
   max-width: 100%;
   max-height: 100%;
-  width: 100%;
+  width: auto;
   height: 100%;
   object-fit: contain;
 }

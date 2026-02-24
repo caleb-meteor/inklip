@@ -1,0 +1,1016 @@
+<script setup lang="ts">
+import { ref, watch, nextTick, computed, type PropType } from 'vue'
+import { NIcon } from 'naive-ui'
+import { SparklesOutline, FolderOpenOutline, VideocamOutline } from '@vicons/ionicons5'
+import VideoSelectionMessage from './message-types/VideoSelectionMessage.vue'
+import VideoUploadMessage from './message-types/VideoUploadMessage.vue'
+import SmartCutResultMessage from './message-types/SmartCutResultMessage.vue'
+import ThinkingStepsMessage from './message-types/ThinkingStepsMessage.vue'
+import TaskCardMessage from './message-types/TaskCardMessage.vue'
+import VideoFilteringTaskMessage from './message-types/VideoFilteringTaskMessage.vue'
+import SearchResultMessage from './message-types/SearchResultMessage.vue'
+import type { Message } from '../../types/chat'
+import { smartCutAiService } from '../../services/smartCutAiService'
+import { aiChatStore } from '../../services/aiChatStore'
+
+const props = defineProps({
+  messages: {
+    type: Array as PropType<Message[]>,
+    default: () => []
+  },
+})
+
+const emit = defineEmits<{
+  (e: 'play-video', video: any): void
+}>()
+
+const scrollContainer = ref<HTMLElement | null>(null)
+const messageList = computed(() => props.messages)
+
+const typedMessageIds = new Set<string>()
+watch(
+  messageList,
+  async (newList) => {
+    if (!newList.length) return
+
+    for (const msg of newList) {
+      const isNewMessage = msg.id.startsWith('new_message_')
+
+      if (
+        msg.role === 'assistant' &&
+        !typedMessageIds.has(msg.id) &&
+        !msg.isTyping &&
+        isNewMessage &&
+        typeof msg.content === 'string' &&
+        msg.content.length > 0 &&
+        (!msg.displayedContent || msg.displayedContent.length === 0)
+      ) {
+        typedMessageIds.add(msg.id)
+        await typeMessage(String(msg.id), msg.content, 20)
+      }
+    }
+  },
+  { immediate: true, deep: true }
+)
+
+const scrollToBottom = async (): Promise<void> => {
+  await nextTick()
+  if (scrollContainer.value) {
+    scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+  }
+}
+
+watch(
+  messageList,
+  () => {
+    scrollToBottom()
+  },
+  { deep: true }
+)
+
+const handleConfirmVideos = async (
+  msgId: string,
+  videoIds: number[],
+  minTime: number,
+  maxTime: number
+): Promise<void> => {
+  await smartCutAiService.confirmAndProceed(msgId, videoIds, {
+    minDuration: minTime,
+    maxDuration: maxTime
+  })
+}
+
+const handleCancelVideos = async (_msgId: string): Promise<void> => {
+  await smartCutAiService.cancelConfirmation()
+}
+
+// Optimized typeMessage for faster/fluid output 'like AI'
+const typeMessage = async (
+  _msgId: string,
+  fullContent: string,
+  speed: number = 20
+): Promise<void> => {
+  const idx = messageList.value.findIndex((m) => m.id === _msgId)
+  if (idx === -1) return
+
+  const msg = { ...messageList.value[idx] }
+  msg.isTyping = true
+  // 开始打字时设置处理状态
+  aiChatStore.setCurrentChatProcessing(true)
+
+  msg.displayedContent = ''
+  messageList.value.splice(idx, 1, { ...msg })
+
+  // Faster typing without forced layout reflows every char if possible, but vue reactivity handles it.
+  // Reduce speed delay or make it dynamic.
+  const step = 2 // chars per tick
+  for (let i = 0; i < fullContent.length; i += step) {
+    msg.displayedContent = fullContent.substring(0, i + step)
+    messageList.value.splice(idx, 1, { ...msg })
+    // Use requestAnimationFrame or very small timeout for "token" feel
+    await new Promise((resolve) => setTimeout(resolve, speed))
+  }
+
+  // Ensure full content matches at end
+  msg.displayedContent = fullContent
+  msg.isTyping = false
+  messageList.value.splice(idx, 1, { ...msg })
+
+  // 打字结束时检查是否还有其他正在打字的消息
+  const hasOtherTyping = messageList.value.some((m) => m.id !== _msgId && m.isTyping)
+  if (!hasOtherTyping) {
+    aiChatStore.setCurrentChatProcessing(false)
+  }
+}
+
+const getMessageContent = (msg: Message): string => {
+  return msg.isTyping ? msg.displayedContent || '' : msg.content
+}
+</script>
+
+<template>
+  <div class="chat-container">
+    <div ref="scrollContainer" class="messages-viewport">
+      <div v-if="messageList.length === 0" class="empty-state">
+        <div class="greeting-container">
+          <h1 class="greeting-text">
+            <span class="gradient-text">你好，创作者</span>
+          </h1>
+          <p class="greeting-sub">
+            把繁琐交给 <span class="highlight-text">影氪</span>，剪辑从未如此
+            <span class="highlight-text">快乐</span>
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">
+              <n-icon size="24" color="#4facfe">
+                <FolderOpenOutline />
+              </n-icon>
+            </div>
+            <div class="feature-content">
+              <h3>素材智能管理</h3>
+              <p>秒级定位素材，让管理井井有条。</p>
+            </div>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">
+              <n-icon size="24" color="#00f2fe">
+                <VideocamOutline />
+              </n-icon>
+            </div>
+            <div class="feature-content">
+              <h3>极速智能剪辑</h3>
+              <p>
+                你只管表达创意，繁琐的筛选与粗剪交给
+                影氪。一键提取精华片段并自动成片，剪辑从未如此高效。
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="messages-list">
+        <div v-for="msg in messageList" :key="msg.id" :class="['message-row', msg.role]">
+          <div class="message-body">
+            <div
+              class="message-bubble"
+              :class="{ 'vip-upgrade-bubble': msg.payload?.type === 'vip_upgrade_prompt' }"
+            >
+              <div class="message-text">
+                <!-- VIP 升级提示 -->
+                <div v-if="msg.payload?.type === 'vip_upgrade_prompt'" class="vip-upgrade-message">
+                  <div class="vip-icon-wrapper">
+                    <!-- 使用更专业的钻石图标替代皇冠 -->
+                    <svg
+                      class="vip-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M6 4h12l4 6-10 10L2 10l4-6z" />
+                      <path d="M2 10h20M12 20V10" />
+                    </svg>
+                    <div class="vip-glow-effect"></div>
+                  </div>
+                  <div class="vip-content">
+                    <span class="vip-title">解锁会员权益</span>
+                    <span class="vip-desc">{{ msg.content }}</span>
+                  </div>
+                  <div class="vip-action-arrow">
+                    <n-icon size="16"><sparkles-outline /></n-icon>
+                  </div>
+                </div>
+
+                <div
+                  v-else-if="msg.content && !msg.payload?.taskCard"
+                  class="text-content"
+                  v-html="getMessageContent(msg)"
+                ></div>
+
+                <!-- Thinking steps or other interactive elements here -->
+                <ThinkingStepsMessage
+                  v-if="msg.role === 'assistant' && msg.payload?.steps && !msg.payload?.type"
+                  :steps="msg.payload.steps"
+                />
+
+                <VideoFilteringTaskMessage
+                  v-if="msg.payload?.type === 'video_filter_task' && msg.payload?.steps"
+                  :steps="msg.payload.steps"
+                />
+
+                <!-- TaskCardMessage is already rendered inside SmartCutResultMessage if aiGenVideoId exists -->
+                <TaskCardMessage
+                  v-if="
+                    msg.payload?.type === 'task_card' &&
+                    msg.payload?.taskCard?.steps &&
+                    !msg.payload?.aiGenVideoId
+                  "
+                  :steps="msg.payload.taskCard.steps"
+                />
+
+                <!-- ... existing interactive components ... -->
+                <VideoUploadMessage
+                  v-if="msg.payload?.type === 'video_upload' && msg.payload?.videos"
+                  :videos="msg.payload.videos"
+                />
+
+                <SearchResultMessage
+                  v-if="msg.payload?.type === 'search_result' && msg.payload?.results"
+                  :results="msg.payload.results"
+                  :keywords="msg.payload.keywords || []"
+                  @play-video="(video) => emit('play-video', video)"
+                />
+
+                <VideoSelectionMessage
+                  v-if="
+                    msg.payload?.videos &&
+                    msg.payload.videos.length > 0 &&
+                    msg.payload?.type !== 'video_upload'
+                  "
+                  :message-id="msg.id"
+                  :videos="msg.payload.videos"
+                  :hide-title="!!msg.payload?.taskCard"
+                  :awaiting-confirmation="msg.payload?.awaitingConfirmation || false"
+                  :is-interactive="msg.payload?.isInteractive !== false"
+                  :cancelled="msg.payload?.cancelled || false"
+                  @confirm="
+                    (videoIds, minTime, maxTime) =>
+                      handleConfirmVideos(msg.id, videoIds, minTime, maxTime)
+                  "
+                  @cancel="() => handleCancelVideos(msg.id)"
+                />
+
+                <SmartCutResultMessage
+                  v-if="msg.payload?.aiGenVideoId"
+                  :msg-id="msg.id"
+                  :task="msg.payload"
+                  @play-video="(video) => emit('play-video', video)"
+                />
+
+                <!-- Match APPLIED CHANGES UI from screenshot -->
+                <div
+                  v-if="msg.role === 'assistant' && msg.payload?.smartCutTask"
+                  class="applied-changes-card"
+                >
+                  <div class="changes-header">APPLIED CHANGES</div>
+                  <ul class="changes-list">
+                    <li><span class="check">✓</span> Jump cut @ 00:40.5</li>
+                    <li><span class="check">✓</span> Word-level sync</li>
+                  </ul>
+                  <button class="apply-variation-btn">APPLY VARIATION 1</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0a0b10;
+  color: #e0e0e0;
+}
+
+.session-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.session-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-icon {
+  width: 36px;
+  height: 36px;
+  background: rgba(26, 115, 232, 0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.session-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.session-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+}
+
+.session-status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+}
+
+.logs-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.messages-viewport {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 0; /* Vertical padding only */
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.message-row {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+}
+
+.message-row.user {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+  /* User messages can be constrained if desired, but let's leave it 100% container and constrain content */
+}
+
+.avatar-cell {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.role-avatar {
+  width: 32px;
+  height: 32px;
+  background: #1a73e8;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.user-avatar {
+  background: #202124;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.message-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0; /* Important for text truncation inside flex items */
+}
+
+/* Assistant: Full width body, items stretch */
+.message-row.assistant .message-body {
+  width: 100%;
+  align-items: stretch;
+}
+
+/* User: Adaptive width, items align to end */
+.message-row.user .message-body {
+  align-items: flex-end;
+}
+
+.message-meta {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.message-row.user .message-meta {
+  text-align: right;
+  margin-right: 4px;
+}
+
+.message-bubble {
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.message-row.user .message-bubble {
+  background: #1a3a63;
+  border-radius: 12px 0 12px 12px;
+}
+
+.applied-changes-card {
+  margin-top: 16px;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  border: 1px solid rgba(26, 115, 232, 0.2);
+}
+
+.changes-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+
+.changes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 18px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.changes-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #10b981;
+}
+
+.changes-list li .check {
+  width: 16px;
+  height: 16px;
+  background: rgba(16, 185, 129, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+.apply-variation-btn {
+  width: 100%;
+  background: rgba(26, 115, 232, 0.1);
+  border: 1px solid rgba(26, 115, 232, 0.3);
+  color: #1a73e8;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.apply-variation-btn:hover {
+  background: rgba(26, 115, 232, 0.2);
+}
+
+.empty-state {
+  margin-top: 15vh;
+  text-align: center;
+}
+
+.shadow-glow {
+  box-shadow: 0 0 15px rgba(26, 115, 232, 0.2);
+}
+
+.gradient-text {
+  background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.highlight-text {
+  font-weight: 700;
+  padding: 0 4px;
+  background: linear-gradient(to right, #6a11cb 0%, #2575fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.messages-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.greeting-text {
+  font-size: 56px;
+  font-weight: 700;
+}
+
+.greeting-sub {
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.messages-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+  gap: 32px; /* Increased gap */
+}
+
+.message-row {
+  display: flex;
+  width: 100%;
+}
+
+.message-row.user {
+  justify-content: flex-end;
+}
+
+.message-row.assistant {
+  justify-content: flex-start;
+}
+
+.message-content-wrapper {
+  max-width: 100%;
+}
+
+.message-row.user .message-content-wrapper {
+  width: auto;
+  max-width: 80%; /* Limit user message width for readability */
+}
+
+.message-row.assistant .message-content-wrapper {
+  width: 100%;
+}
+
+/* User Message Bubble - Gradient border or solid theme color */
+.message-row.user .message-bubble {
+  background: linear-gradient(135deg, #2d2d30 0%, #1e1e20 100%);
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 18px;
+  border-bottom-right-radius: 4px;
+  border: 1px solid rgba(79, 172, 254, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Assistant Message */
+.message-row.assistant .message-bubble {
+  background: transparent;
+  color: #efeff1;
+  padding: 0;
+}
+
+.text-content {
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  color: #ececed;
+  letter-spacing: 0.3px;
+  word-spacing: 2px;
+}
+
+/* VIP 升级提示样式 */
+.message-bubble.vip-upgrade-bubble {
+  background: linear-gradient(135deg, rgba(40, 30, 60, 0.6) 0%, rgba(20, 20, 30, 0.8) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+  margin-top: 8px;
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.message-bubble.vip-upgrade-bubble::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.5), transparent);
+}
+
+.message-bubble.vip-upgrade-bubble:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(168, 85, 247, 0.25);
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+.vip-upgrade-message {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.05) 0%, rgba(139, 92, 246, 0.01) 100%);
+}
+
+.vip-icon-wrapper {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 160, 0, 0.05));
+  border-radius: 12px;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.vip-icon {
+  width: 24px;
+  height: 24px;
+  color: #fdb931;
+  z-index: 2;
+  animation: gentle-bounce 3s ease-in-out infinite;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.vip-glow-effect {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, transparent 70%);
+  animation: pulse-glow 2s infinite;
+}
+
+.vip-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vip-title {
+  font-size: 14px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ffd700 0%, #fdb931 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.vip-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.4;
+}
+
+.vip-action-arrow {
+  color: #fdb931;
+  opacity: 0.8;
+  transition: transform 0.3s ease;
+  display: flex;
+  align-items: center;
+}
+
+.message-bubble.vip-upgrade-bubble:hover .vip-action-arrow {
+  transform: translateX(4px) rotate(15deg);
+  opacity: 1;
+}
+
+@keyframes gentle-bounce {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.05);
+  }
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.2);
+  }
+}
+
+.timeline-segment {
+  margin-top: 16px;
+  background: rgba(24, 24, 27, 0.4);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(79, 172, 254, 0.1);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.segment-label {
+  font-size: 13px;
+  font-weight: 700;
+  background: linear-gradient(to right, #4facfe, #00f2fe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dict-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dict-tag {
+  background: #18181b;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+.dict-tag:hover {
+  border-color: rgba(79, 172, 254, 0.5);
+  transform: translateY(-1px);
+}
+
+.dict-type-badge {
+  font-size: 11px;
+  background: rgba(79, 172, 254, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #4facfe;
+  font-weight: 600;
+}
+
+.videos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.video-card {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.video-card:hover {
+  border-color: #00f2fe;
+  transform: scale(1.02) translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 242, 254, 0.15);
+}
+
+.video-info {
+  padding: 10px;
+  background: #18181b;
+}
+
+.video-name {
+  font-size: 12px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.video-duration {
+  font-size: 11px;
+  color: #71717a;
+}
+
+.analyzing-card {
+  margin-top: 16px;
+  background: rgba(24, 24, 27, 0.4);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(79, 172, 254, 0.2);
+  border-radius: 16px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  animation: cardFadeIn 0.5s ease-out;
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.analyzing-icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  background: rgba(79, 172, 254, 0.1);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4facfe;
+}
+
+.pulse-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  border: 2px solid #4facfe;
+  animation: iconPulse 2s infinite;
+}
+
+@keyframes iconPulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+.analyzing-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analyzing-text {
+  font-size: 15px;
+  font-weight: 700;
+  background: linear-gradient(to right, #4facfe, #00f2fe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.analyzing-sub {
+  font-size: 12px;
+  color: #71717a;
+}
+
+.loader-dot {
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(to right, #4facfe, #00f2fe);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.5);
+}
+
+.error-block {
+  margin-top: 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+}
+
+/* Features Grid in Empty State */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 900px;
+  margin: 40px auto 0;
+  padding: 0 16px;
+}
+
+.feature-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(79, 172, 254, 0.1) 0%, rgba(0, 242, 254, 0.1) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  border: 1px solid rgba(79, 172, 254, 0.1);
+}
+
+.feature-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feature-content h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.feature-content p {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.5;
+}
+
+/* Update greeting container for better spacing with cards */
+.greeting-container {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Scrollbar hidden for cleanest look, but functional */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+</style>

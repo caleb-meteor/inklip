@@ -1,132 +1,419 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { NButton, NSpace, NH1, NText, NCard, NGrid, NGi, NIcon } from 'naive-ui'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Videocam, Cut, Settings } from '@vicons/ionicons5'
+import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
+import HomeSidebar from '../components/home/HomeSidebar.vue'
+import HomeRightSidebar from '../components/home/HomeRightSidebar.vue'
+import HomeChatMessages from '../components/home/HomeChatMessages.vue'
+import HomeVideoPlayer from '../components/home/HomeVideoPlayer.vue'
+import ChatInput from '../components/ChatInput.vue'
+import VideoUploadChatModal from '../components/home/VideoUploadChatModal.vue'
+import AppStatusBar from '../components/AppStatusBar.vue'
+import { smartCutAiService, type AiChatTopic } from '../services/smartCutAiService'
+import { aiChatStore } from '../services/aiChatStore'
+import { addAiChatMessageApi } from '../api/aiChat'
+import { recognizeIntentApi, type IntentType } from '../api/intent'
+
+/** 意图：1=搜索 2=剪辑，其余为未支持 */
+const INTENT_SEARCH = 1
+const INTENT_CLIP = 2
+
+const UNSUPPORTED_INTENT_TIP = `我可能还没有完全理解你的意思，可以再详细说明一下吗？`
+import { useRealtimeSync } from '../composables/useRealtimeSync'
+import { useVideoUpload } from '../composables/useVideoUpload'
+import { useRealtimeStore } from '../stores/realtime'
+import type { VideoItem, SmartCutItem } from '../api/video'
+import { searchVideosApi } from '../api/video'
 
 const router = useRouter()
+const rtStore = useRealtimeStore()
+const appVersion = ref<string>('1.0.0')
+const showUploadModal = ref(false)
+const leftSidebarCollapsed = ref(false)
+const rightSidebarCollapsed = ref(true)
 
-const DEFAULT_API_KEY = 'f9a3d6c2b8e4kqwxml5r0h1yvupnjsiotgafm8e6c2d9b7a4'
+// 使用 composables
+useRealtimeSync()
+const { handleUploadSuccess } = useVideoUpload()
 
-const hasApiKey = ref(!!localStorage.getItem('apiKey'))
+// 获取共享的 AI 对话存储
+const messages = computed(() => aiChatStore.getMessages().value)
+const aiChats = computed(() => aiChatStore.getAiChats().value)
+const isLoadingAiChats = computed(() => aiChatStore.getIsLoadingAiChats().value)
 
-// 判断是否使用了有效的 API Key（不是默认值）
-const hasValidApiKey = computed(() => {
-  const apiKey = localStorage.getItem('apiKey')
-  return apiKey && apiKey !== DEFAULT_API_KEY
+// 检查是否有任务正在进行中
+const isTaskRunning = computed(() => {
+  return aiChatStore.getIsCurrentChatProcessing().value
 })
 
-const checkApiKey = (): void => {
-  hasApiKey.value = !!localStorage.getItem('apiKey')
+const currentPlayingVideo = ref<VideoItem | SmartCutItem | null>(null)
+const currentSelectedAnchor = ref<any>(null)
+
+const homeSidebarRef = ref<InstanceType<typeof HomeSidebar> | null>(null)
+const homeRightSidebarRef = ref<InstanceType<typeof HomeRightSidebar> | null>(null)
+let stopReconnectWatch: (() => void) | undefined
+
+const handlePlayVideo = (video: VideoItem | SmartCutItem) => {
+  currentPlayingVideo.value = video
 }
 
-// 监听自定义事件，以便在 Settings 页面更新 apiKey 时也能响应
-const handleApiKeyChanged = (): void => {
-  checkApiKey()
+const handleClosePlayer = () => {
+  currentPlayingVideo.value = null
 }
 
-onMounted(() => {
-  checkApiKey()
-  window.addEventListener('apiKeyChanged', handleApiKeyChanged)
+/** 长时间未操作/休眠恢复后：重新拉取主播、产品、视频、聊天列表、当前对话消息、剪辑历史，避免信息丢失 */
+const refreshPageData = (): void => {
+  homeSidebarRef.value?.loadAll?.()
+  aiChatStore.loadAiChats()
+  const chatId = aiChatStore.getCurrentAiChatId().value
+  if (chatId != null) aiChatStore.loadAiChatMessages(chatId)
+  homeRightSidebarRef.value?.refreshClipHistory?.()
+}
+
+const onVisibilityChange = (): void => {
+  if (document.visibilityState === 'visible') refreshPageData()
+}
+
+onMounted(async () => {
+  await aiChatStore.loadAiChats()
+  // const chats = aiChatStore.getAiChats().value
+  // if (chats.length > 0) {
+  //   await aiChatStore.selectChat(chats[0])
+  // } else {
+  //   aiChatStore.newChat()
+  // }
+
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  // SSE 断线重连后同步一次数据，避免休眠期间数据丢失
+  stopReconnectWatch = watch(
+    () => rtStore.connected,
+    (connected, wasConnected) => {
+      if (wasConnected === false && connected === true) refreshPageData()
+    }
+  )
+
+  // 获取应用版本号
+  if (window.api?.getAppVersion) {
+    window.api.getAppVersion().then((version: string) => {
+      appVersion.value = version
+    })
+  }
 })
 
-onUnmounted(() => {
-  window.removeEventListener('apiKeyChanged', handleApiKeyChanged)
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (stopReconnectWatch) stopReconnectWatch()
 })
 
 const navigateTo = (path: string): void => {
   router.push(path)
 }
+
+const handleSend = async (val: string): Promise<void> => {
+  const trimmed = val.trim()
+  if (!trimmed) return
+
+  // 用户输入后先调用 jieba 意图识别
+  let intentPayload:
+    | {
+        intent: number
+        intent_label: string
+        keywords: string[]
+        keyword_weights?: { word: string; weight: number }[]
+      }
+    | undefined
+  const intentResult = await recognizeIntentApi(trimmed)
+  intentPayload = {
+    intent: intentResult.intent,
+    intent_label: intentResult.intent_label,
+    keywords: intentResult.keywords,
+    keyword_weights: intentResult.keyword_weights
+  }
+
+  // 识别到剪辑意图后，直接进入智能剪辑流程（会创建对话、添加用户消息并执行剪辑）
+  const intent = intentPayload?.intent as IntentType | undefined
+  if (intent === INTENT_CLIP) {
+    await smartCutAiService.startSmartCut(trimmed)
+    return
+  }
+
+  // 如果没有当前对话，才创建新对话
+  let currentAiChatId = aiChatStore.getCurrentAiChatId().value
+  if (!currentAiChatId) {
+    const topic = trimmed.length > 30 ? trimmed.slice(0, 30) + '…' : trimmed
+    await aiChatStore.createAiChat(topic || '新对话')
+    currentAiChatId = aiChatStore.getCurrentAiChatId().value
+  }
+
+  const userMsgId = `new_message_${Date.now()}`
+  aiChatStore.addMessage({
+    id: userMsgId,
+    role: 'user',
+    content: trimmed,
+    timestamp: new Date(),
+    payload: intentPayload ?? undefined
+  })
+  if (currentAiChatId) {
+    await addAiChatMessageApi({
+        ai_chat_id: currentAiChatId,
+        role: 'user',
+        content: trimmed,
+        payload: intentPayload ?? undefined
+      })
+  }
+
+  if (intent === INTENT_SEARCH) {
+    const searchRes = await searchVideosApi(trimmed, 5)
+    const summary =
+      searchRes.results.length > 0
+        ? `共找到 ${searchRes.results.length} 个相关视频`
+        : '未找到匹配的视频，可换个描述词试试'
+    const assistantMsgId = `assistant_${Date.now()}`
+    const searchPayload = {
+      type: 'search_result',
+      results: searchRes.results,
+      keywords: searchRes.keywords
+    }
+    aiChatStore.addMessage({
+      id: assistantMsgId,
+      role: 'assistant',
+      content: summary,
+      timestamp: new Date(),
+      payload: searchPayload
+    })
+    if (currentAiChatId) {
+      await addAiChatMessageApi({
+        ai_chat_id: currentAiChatId,
+        role: 'assistant',
+        content: summary,
+        payload: searchPayload
+      })
+    }
+    return
+  }
+
+  // 非搜索/剪辑意图时，提示用户当前仅支持搜索与剪辑（intent 为 0 或 undefined）
+  const isSupported =
+    intentPayload?.intent === INTENT_SEARCH || intentPayload?.intent === INTENT_CLIP
+  if (intentPayload != null && !isSupported) {
+    const assistantMsgId = `assistant_${Date.now()}`
+    aiChatStore.addMessage({
+      id: assistantMsgId,
+      role: 'assistant',
+      content: UNSUPPORTED_INTENT_TIP,
+      timestamp: new Date()
+    })
+    if (currentAiChatId) {
+      addAiChatMessageApi({
+        ai_chat_id: currentAiChatId,
+        role: 'assistant',
+        content: UNSUPPORTED_INTENT_TIP
+      })
+    }
+  }
+}
+
+const handleSelectChat = async (chat: AiChatTopic): Promise<void> => {
+  currentPlayingVideo.value = null
+  await aiChatStore.selectChat(chat)
+}
+
+const handleNewChat = (): void => {
+  currentPlayingVideo.value = null
+  aiChatStore.newChat()
+}
 </script>
 
 <template>
-  <div class="home-container">
-    <div class="header">
-      <n-h1> <n-text type="primary">影氪</n-text> 工作台 </n-h1>
-      <n-space>
-        <n-button secondary size="small" @click="navigateTo('/settings')">
-          <template #icon>
-            <n-icon><Settings /></n-icon>
-          </template>
-          设置
-        </n-button>
-      </n-space>
+  <div class="app-container">
+    <div class="main-layout-wrapper">
+      <n-layout has-sider class="home-layout">
+        <n-layout-sider
+          width="240"
+          collapse-mode="width"
+          :collapsed-width="48"
+          :collapsed="leftSidebarCollapsed"
+          bordered
+          class="home-sider"
+        >
+          <HomeSidebar
+            ref="homeSidebarRef"
+            :collapsed="leftSidebarCollapsed"
+            @navigate="navigateTo"
+            @toggle-left-collapse="leftSidebarCollapsed = !leftSidebarCollapsed"
+            @play-video="handlePlayVideo"
+            @update:selected-anchor="currentSelectedAnchor = $event"
+          />
+        </n-layout-sider>
+
+        <n-layout-content class="home-content">
+          <div v-if="!currentPlayingVideo" class="chat-layout">
+            <div class="messages-container">
+              <HomeChatMessages
+                :messages="messages"
+                @play-video="handlePlayVideo"
+              />
+            </div>
+
+            <div class="input-area-wrapper">
+              <div class="input-area-container">
+                <ChatInput :disabled="isTaskRunning" @send="handleSend" />
+              </div>
+            </div>
+          </div>
+
+          <HomeVideoPlayer
+            v-else
+            :video="currentPlayingVideo"
+            @close="handleClosePlayer"
+            @open-chat="handleNewChat"
+          />
+
+          <VideoUploadChatModal v-model:show="showUploadModal" @success="handleUploadSuccess" />
+        </n-layout-content>
+
+        <n-layout-sider
+          width="280"
+          collapse-mode="width"
+          :collapsed-width="48"
+          :collapsed="rightSidebarCollapsed"
+          class="home-right-sider"
+          bordered
+        >
+          <HomeRightSidebar
+            ref="homeRightSidebarRef"
+            :ai-chats="aiChats"
+            :is-loading-ai-chats="isLoadingAiChats"
+            :collapsed="rightSidebarCollapsed"
+            :current-anchor="currentSelectedAnchor"
+            @select-chat="handleSelectChat"
+            @new-chat="handleNewChat"
+            @toggle="rightSidebarCollapsed = !rightSidebarCollapsed"
+            @play-video="handlePlayVideo"
+          />
+        </n-layout-sider>
+      </n-layout>
     </div>
 
-    <div class="content">
-      <n-grid x-gap="24" y-gap="24" :cols="hasValidApiKey ? 2 : 1">
-        <n-gi>
-          <n-card hoverable class="feature-card" @click="navigateTo('/video-manager')">
-            <template #header>
-              <n-space align="center">
-                <n-icon size="30" color="#63e2b7">
-                  <Videocam />
-                </n-icon>
-                <span class="card-title">视频管理</span>
-              </n-space>
-            </template>
-            <p>管理您的本地视频素材，支持批量导入与整理。</p>
-          </n-card>
-        </n-gi>
-        <n-gi v-if="hasValidApiKey">
-          <n-card hoverable class="feature-card" @click="navigateTo('/smart-editor')">
-            <template #header>
-              <n-space align="center">
-                <n-icon size="30" color="#63e2b7">
-                  <Cut />
-                </n-icon>
-                <span class="card-title">智能剪辑</span>
-              </n-space>
-            </template>
-            <p>基于 AI 的智能剪辑工具，快速生成精彩视频。</p>
-          </n-card>
-        </n-gi>
-      </n-grid>
-    </div>
+    <AppStatusBar :app-version="appVersion" @navigate-to-settings="navigateTo('/settings')" />
   </div>
 </template>
 
 <style scoped>
-.home-container {
+.app-container {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
-  width: 100%;
-  padding: 40px;
-  background: #1a1a1a;
-  color: #fff;
-  box-sizing: border-box;
+  width: 100vw;
+  overflow: hidden;
+  background: #09090b;
+}
+
+.main-layout-wrapper {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 60px;
+.home-layout {
+  height: 100%;
+  background: #0f0f0f;
 }
 
-.content {
+.home-sider {
+  background: #09090b; /* Very dark, almost black */
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.home-right-sider {
+  background: #09090b;
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* 右侧栏：禁止 sider 自身滚动，让内部 .tab-content 滚动，这样滚动翻页才能触发 */
+.home-right-sider :deep(.n-layout-sider-scroll-container) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-layout {
   flex: 1;
   display: flex;
+  flex-direction: column;
+  background: #0f0f0f;
+  background: radial-gradient(circle at 50% 10%, #1a1a1a 0%, #0f0f0f 60%);
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 140px; /* Make space for fixed input */
+  min-height: 0;
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* 优化消息容器的滚动条 */
+.messages-container::-webkit-scrollbar {
+  display: none;
+}
+
+.input-area-wrapper {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  padding-bottom: 24px;
+  background: linear-gradient(to top, #0f0f0f 80%, transparent 100%); /* Fade out background */
+  z-index: 100;
+  display: flex;
   justify-content: center;
-  align-items: flex-start;
 }
 
-.feature-card {
-  cursor: pointer;
-  height: 200px;
-  transition: transform 0.3s ease;
-  background: #262626;
-  border-color: #333;
+.input-area-container {
+  width: 100%;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.feature-card:hover {
-  transform: translateY(-5px);
-  border-color: #63e2b7;
+/* 全局滚动条样式（用于其他区域） */
+:deep(*::-webkit-scrollbar) {
+  width: 6px;
+  height: 6px;
 }
 
-.card-title {
-  font-size: 1.2rem;
-  font-weight: bold;
+:deep(*::-webkit-scrollbar-track) {
+  background: transparent;
+}
+
+:deep(*::-webkit-scrollbar-thumb) {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+:deep(*::-webkit-scrollbar-thumb:hover) {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Hide sider scrollbar */
+:deep(.n-layout-sider .n-scrollbar-rail) {
+  display: none;
 }
 </style>

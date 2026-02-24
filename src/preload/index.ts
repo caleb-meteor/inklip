@@ -26,7 +26,8 @@ const api = {
   restartBackend: () => electronAPI.ipcRenderer.invoke('restart-backend'),
   checkBackendHealth: () => electronAPI.ipcRenderer.invoke('check-backend-health'),
   selectVideoFile: () => electronAPI.ipcRenderer.invoke('select-video-file'),
-  selectVideoFolder: () => electronAPI.ipcRenderer.invoke('select-video-folder')
+  selectVideoFolder: () => electronAPI.ipcRenderer.invoke('select-video-folder'),
+  getAppVersion: () => electronAPI.ipcRenderer.invoke('get-app-version')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

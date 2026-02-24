@@ -6,11 +6,10 @@ import {
   darkTheme,
   type GlobalThemeOverrides
 } from 'naive-ui'
-import { RouterView, useRouter, useRoute } from 'vue-router'
+import { RouterView, useRouter } from 'vue-router'
 import { onMounted } from 'vue'
-import { useWebsocketStore } from './stores/websocket'
+import { useRealtimeStore } from './stores/realtime'
 import { setBaseUrl } from './utils/request'
-import Footer from './components/Footer.vue'
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
@@ -30,19 +29,18 @@ const themeOverrides: GlobalThemeOverrides = {
   }
 }
 
-const wsStore = useWebsocketStore()
+const rtStore = useRealtimeStore()
 const router = useRouter()
-const route = useRoute()
 
 const initConnection = (port: number): void => {
   console.log('[Renderer] Initializing connection with port:', port)
   const baseUrl = `http://127.0.0.1:${port}`
   setBaseUrl(baseUrl)
-  wsStore.setBaseUrl(`ws://127.0.0.1:${port}/api/ws`)
+  rtStore.setBaseUrl(baseUrl)
 
-  // 连接 WebSocket（不再需要 apiKey 检查）
-  wsStore.disconnect()
-  wsStore.connect()
+  // 连接 SSE
+  rtStore.disconnect()
+  rtStore.connect()
 }
 
 onMounted(async () => {
@@ -70,7 +68,6 @@ onMounted(async () => {
       <n-dialog-provider>
         <div class="app-wrapper">
           <RouterView />
-          <Footer v-if="route.name !== 'Splash'" />
         </div>
       </n-dialog-provider>
     </n-message-provider>

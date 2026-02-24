@@ -70,39 +70,3 @@ export function getMediaUrl(path: string | undefined | null): string {
   // Fallback: return as-is
   return path
 }
-
-/**
- * Get the appropriate protocol for local file access
- * In Electron, we use custom 'media://' protocol
- * In browser, we might use different approaches
- *
- * @param filePath Local file path
- * @returns Protocol-prefixed path
- */
-export function getLocalFileUrl(filePath: string): string {
-  if (!filePath) return ''
-
-  // Already has a protocol
-  if (filePath.includes('://')) {
-    return getMediaUrl(filePath)
-  }
-
-  // Assume it's a local absolute path, add file:// then convert
-  return getMediaUrl(`file:///${filePath.replace(/^\/+/, '')}`)
-}
-
-/**
- * Check if a path is a remote URL
- */
-export function isRemoteUrl(path: string | undefined | null): boolean {
-  if (!path) return false
-  return path.startsWith('http://') || path.startsWith('https://')
-}
-
-/**
- * Check if a path is a local file
- */
-export function isLocalFile(path: string | undefined | null): boolean {
-  if (!path) return false
-  return path.startsWith('file://') || path.startsWith('media://')
-}

@@ -39,9 +39,7 @@ const config: ForgeConfig = {
     ]
   },
   rebuildConfig: {},
-  makers: [
-    new MakerZIP({}, ['darwin', 'win32'])
-  ],
+  makers: [new MakerZIP({}, ['darwin', 'win32'])],
   hooks: {
     postPackage: async (forgeConfig, options) => {
       console.log('开始清理语言包文件...')

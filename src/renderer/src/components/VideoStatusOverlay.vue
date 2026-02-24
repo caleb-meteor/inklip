@@ -78,7 +78,7 @@ const getProcessingText = (): string => {
 
   <!-- Path Missing Overlay -->
   <div v-if="showPathMissing" class="status-overlay missing" @click.stop @dblclick.stop>
-    <div class="status-label">视频不存在</div>
+    <div class="status-label">视频已被删除</div>
   </div>
 </template>
 

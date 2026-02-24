@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { FilmOutline, SyncOutline } from '@vicons/ionicons5'
 import { NIcon } from 'naive-ui'
 import { getMediaUrl } from '../utils/media'
-import GlobalFullscreenPlayer from './GlobalFullscreenPlayer.vue'
 import { useGlobalVideoPreview } from '../composables/useGlobalVideoPreview'
 
 const props = defineProps<{
@@ -14,22 +13,52 @@ const props = defineProps<{
   disabled?: boolean
   videoId?: number // Optional video ID for subtitle matching
   subtitleData?: any // Optional subtitle data (array) passed directly
+  videoType?: 'material' | 'edited' // Distinction for backend subtitle fetching
 }>()
 
 const emit = defineEmits<{
   (e: 'dblclick'): void
 }>()
 
-const showFullscreen = ref(false)
 const videoContainerRef = ref<HTMLElement | null>(null)
 const isHovered = ref(false)
+const coverLoadError = ref(false)
+
+watch(
+  () => props.cover,
+  () => {
+    coverLoadError.value = false
+  }
+)
 let hoverTimer: ReturnType<typeof setTimeout> | null = null
 let leaveTimer: ReturnType<typeof setTimeout> | null = null
 
 const { isLoading, hasError, showPreview, hidePreview, isCurrentlyPreviewing } =
   useGlobalVideoPreview()
 
+const playAtTime = (startTime: number, endTime?: number): void => {
+  if (!props.path || props.disabled || !videoContainerRef.value) return
+  isHovered.value = true
+  showPreview(props.path, videoContainerRef.value, startTime, false, endTime)
+}
+
+defineExpose({
+  playAtTime
+})
+
 const coverUrl = computed(() => getMediaUrl(props.cover))
+
+const onCoverError = (): void => {
+  coverLoadError.value = true
+}
+
+// 被删除：路径为空、封面加载失败或视频加载失败
+const isDeleted = computed(
+  () =>
+    !props.path ||
+    coverLoadError.value ||
+    (!!props.path && isCurrentlyPreviewing(props.path) && hasError.value)
+)
 
 const formatDuration = (seconds?: number): string => {
   if (!seconds) return ''
@@ -39,16 +68,13 @@ const formatDuration = (seconds?: number): string => {
 }
 
 const handleDblClick = (e: MouseEvent): void => {
-  if (!props.path || props.disabled) {
-    return
-  }
+  if (isDeleted.value || props.disabled) return
   e.stopPropagation()
-  showFullscreen.value = true
   emit('dblclick')
 }
 
 const handleMouseEnter = (): void => {
-  if (!props.path || props.disabled) return
+  if (isDeleted.value || props.disabled) return
 
   if (leaveTimer) {
     clearTimeout(leaveTimer)
@@ -112,6 +138,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="video-preview-player"
+    :class="{ 'is-deleted': isDeleted }"
     :style="{ aspectRatio: aspectRatio || '9/16' }"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
@@ -119,16 +146,31 @@ onBeforeUnmount(() => {
   >
     <!-- Background Area: Cover Image -->
     <div class="thumbnail-area">
-      <img v-if="coverUrl" :src="coverUrl" class="video-cover" />
+      <img
+        v-if="coverUrl && !coverLoadError"
+        :src="coverUrl"
+        class="video-cover"
+        @error="onCoverError"
+      />
       <div v-else class="icon-placeholder-bg">
         <n-icon size="48" color="#444">
           <FilmOutline />
         </n-icon>
       </div>
 
-      <!-- Duration Badge -->
-      <div v-if="duration" class="v-duration-badge">
+      <!-- Duration Badge（被删除时不显示） -->
+      <div v-if="duration && !isDeleted" class="v-duration-badge">
         {{ formatDuration(duration) }}
+      </div>
+
+      <!-- 路径为空、封面/视频文件加载失败时显示 -->
+      <div
+        v-if="isDeleted"
+        class="deleted-overlay"
+        @click.stop
+        @dblclick.stop
+      >
+        <span class="deleted-label">视频已被删除</span>
       </div>
     </div>
 
@@ -136,7 +178,7 @@ onBeforeUnmount(() => {
     <div
       ref="videoContainerRef"
       class="video-preview-container"
-      :class="{ active: isHovered && path && !disabled }"
+      :class="{ active: isHovered && path && !disabled && !isDeleted }"
       @mouseenter.stop
       @mouseleave.stop
     >
@@ -154,17 +196,6 @@ onBeforeUnmount(() => {
         </div>
       </Transition>
     </div>
-
-    <!-- Fullscreen Player -->
-    <GlobalFullscreenPlayer
-      v-if="showFullscreen"
-      :visible="showFullscreen"
-      :path="path || ''"
-      :name="'视频播放'"
-      :video-id="videoId"
-      :subtitle-data="subtitleData"
-      @close="showFullscreen = false"
-    />
   </div>
 </template>
 
@@ -183,6 +214,10 @@ onBeforeUnmount(() => {
 
 .video-preview-player:hover {
   z-index: 10;
+}
+
+.video-preview-player.is-deleted {
+  cursor: default;
 }
 
 .video-preview-container {
@@ -267,6 +302,29 @@ onBeforeUnmount(() => {
   font-size: 11px;
   font-weight: 500;
   z-index: 6;
+}
+
+.deleted-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 5;
+}
+
+.deleted-label {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.1);
+  border: 1px solid rgba(255, 77, 79, 0.4);
 }
 
 .fade-enter-active,
