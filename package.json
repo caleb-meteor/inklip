@@ -1,7 +1,7 @@
 {
   "name": "inklip",
   "productName": "影氪",
-  "version": "0.0.48",
+  "version": "0.0.49",
   "description": "智能视频剪辑工具",
   "main": "./dist/main/index.js",
   "author": "caleb",
