@@ -102,6 +102,16 @@ jobs:
             echo "✅ inklip-base (darwin-arm64) 已复制到 resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/"
           fi
 
+      - name: Copy gojieba dict to resources
+        shell: bash
+        run: |
+          JIEBA_DIR=$(cd inklip-base-go && go list -m -f '{{.Dir}}' github.com/yanyiwu/gojieba)
+          DICT_SRC="${JIEBA_DIR}/deps/cppjieba/dict"
+          DICT_DST="resources/${{ matrix.platform }}-${{ matrix.arch }}/jieba-dict"
+          mkdir -p "$DICT_DST"
+          cp "${DICT_SRC}/jieba.dict.utf8" "${DICT_SRC}/hmm_model.utf8" "${DICT_SRC}/user.dict.utf8" "${DICT_SRC}/idf.utf8" "${DICT_SRC}/stop_words.utf8" "$DICT_DST/"
+          echo "✅ gojieba 词典已复制到 $DICT_DST"
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
