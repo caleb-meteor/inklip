@@ -50,18 +50,19 @@ jobs:
         shell: bash
         run: |
           cd inklip-base-go
+          # -tags sqlite_fts5 启用 SQLite FTS5 全文检索（视频/字幕搜索依赖）
           if [ "${{ matrix.platform }}" = "win32" ]; then
             echo "🔨 构建 Windows 版本..."
             mkdir -p dist/win32-x64
-            GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" -o dist/win32-x64/inklip-base.exe .
+            GOOS=windows GOARCH=amd64 go build -tags sqlite_fts5 -ldflags "-s -w" -o dist/win32-x64/inklip-base.exe .
           elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "x64" ]; then
             echo "🔨 构建 Mac Intel 版本..."
             mkdir -p dist/darwin-x64
-            GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -o dist/darwin-x64/inklip-base .
+            GOOS=darwin GOARCH=amd64 go build -tags sqlite_fts5 -ldflags "-s -w" -o dist/darwin-x64/inklip-base .
           elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
             echo "🔨 构建 Mac ARM 版本..."
             mkdir -p dist/darwin-arm64
-            GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -o dist/darwin-arm64/inklip-base .
+            GOOS=darwin GOARCH=arm64 go build -tags sqlite_fts5 -ldflags "-s -w" -o dist/darwin-arm64/inklip-base .
           fi
 
       - name: Download and extract platform resources
