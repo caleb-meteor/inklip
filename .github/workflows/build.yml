@@ -139,7 +139,7 @@ jobs:
         shell: bash
         run: |
           echo "=== Build output structure ==="
-          find out -type f -name "*.zip" || echo "No artifacts found"
+          find out -type f \( -name "*.zip" -o -name "*.dmg" \) || echo "No artifacts found"
           echo "=== Complete out/ directory ==="
           ls -R out/ || echo "out/ directory is empty"
 
@@ -150,8 +150,8 @@ jobs:
           
           # 查找所有构建产物
           if [ "${{ matrix.platform }}" = "darwin" ]; then
-            # macOS: 查找 ZIP 文件 (Electron Forge MakerZIP 输出)
-            find out/make -type f -name "*.zip" -exec cp {} collected-artifacts/ \;
+            # macOS: 查找 DMG 文件 (Electron Forge MakerDMG 输出)
+            find out/make -type f -name "*.dmg" -exec cp {} collected-artifacts/ \;
           elif [ "${{ matrix.platform }}" = "win32" ]; then
             # Windows: 查找 ZIP, MSI 和 EXE 文件
             find out/make -type f \( -name "*.zip" -o -name "*.msi" -o -name "*.exe" \) -exec cp {} collected-artifacts/ \;
@@ -208,10 +208,19 @@ jobs:
               # 例如: build-darwin-arm64 -> darwin-arm64
               platform_arch=$(basename "$artifact_dir" | sed 's/^build-//')
               
-              # 复制所有 ZIP 文件并重命名
+              # 复制所有 ZIP 文件并重命名 (Windows 等)
               for file in "$artifact_dir"*.zip; do
                 if [ -f "$file" ]; then
                   new_filename="Inklip-${VERSION}-${platform_arch}.zip"
+                  cp "$file" "release-files/$new_filename"
+                  echo "Prepared: $new_filename"
+                fi
+              done
+              
+              # 复制所有 DMG 文件并重命名 (macOS)
+              for file in "$artifact_dir"*.dmg; do
+                if [ -f "$file" ]; then
+                  new_filename="Inklip-${VERSION}-${platform_arch}.dmg"
                   cp "$file" "release-files/$new_filename"
                   echo "Prepared: $new_filename"
                 fi

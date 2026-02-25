@@ -1,4 +1,5 @@
 import type { ForgeConfig } from '@electron-forge/shared-types'
+import { MakerDMG } from '@electron-forge/maker-dmg'
 import { MakerZIP } from '@electron-forge/maker-zip'
 import path from 'path'
 import fs from 'fs-extra'
@@ -39,7 +40,10 @@ const config: ForgeConfig = {
     ]
   },
   rebuildConfig: {},
-  makers: [new MakerZIP({}, ['darwin', 'win32'])],
+  makers: [
+    new MakerDMG({}, ['darwin']), // Mac 打包为 dmg
+    new MakerZIP({}, ['win32']) // Windows 保持 zip
+  ],
   hooks: {
     postPackage: async (forgeConfig, options) => {
       console.log('开始清理语言包文件...')
