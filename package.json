@@ -23,11 +23,11 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@vicons/ionicons5": "^0.13.0",
-    "axios": "^1.13.2",
-    "electron-updater": "^6.7.3",
+    "axios": "^1.13.5",
+    "electron-updater": "^6.8.3",
     "naive-ui": "^2.43.2",
     "pinia": "^3.0.4",
-    "vue-router": "^4.6.4"
+    "vue-router": "^5.0.3"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.11.1",
@@ -39,19 +39,19 @@
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron/fuses": "^2.0.0",
-    "@types/node": "^22.19.7",
-    "@vitejs/plugin-vue": "^6.0.3",
+    "@types/node": "^25.3.0",
+    "@vitejs/plugin-vue": "^6.0.4",
     "cross-env": "^10.1.0",
-    "electron": "^39.3.0",
+    "electron": "^40.6.1",
     "electron-vite": "^5.0.0",
-    "eslint": "^9.39.2",
-    "eslint-plugin-vue": "^10.7.0",
+    "eslint": "^10.0.2",
+    "eslint-plugin-vue": "^10.8.0",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
-    "vue": "^3.5.27",
-    "vue-eslint-parser": "^10.2.0",
-    "vue-tsc": "^3.2.3"
+    "vue": "^3.5.29",
+    "vue-eslint-parser": "^10.4.0",
+    "vue-tsc": "^3.2.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
