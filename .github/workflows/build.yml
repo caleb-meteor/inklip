@@ -199,49 +199,40 @@ jobs:
       - name: Prepare Release Files
         run: |
           mkdir -p release-files
-          VERSION=${GITHUB_REF#refs/tags/v}
+          # 文件名不包含版本号，便于统一更新（每次发布覆盖同平台文件）
+          # 例如: Inklip-darwin-arm64.dmg, Inklip-win32-x64.zip
           
-          # 遍历所有下载的 artifact 目录
           for artifact_dir in artifacts/*/; do
             if [ -d "$artifact_dir" ]; then
-              # 从目录名提取平台和架构信息
-              # 例如: build-darwin-arm64 -> darwin-arm64
               platform_arch=$(basename "$artifact_dir" | sed 's/^build-//')
               
-              # 复制所有 ZIP 文件并重命名 (Windows 等)
               for file in "$artifact_dir"*.zip; do
                 if [ -f "$file" ]; then
-                  new_filename="Inklip-${VERSION}-${platform_arch}.zip"
+                  new_filename="Inklip-${platform_arch}.zip"
                   cp "$file" "release-files/$new_filename"
                   echo "Prepared: $new_filename"
                 fi
               done
               
-              # 复制所有 DMG 文件并重命名 (macOS)
               for file in "$artifact_dir"*.dmg; do
                 if [ -f "$file" ]; then
-                  new_filename="Inklip-${VERSION}-${platform_arch}.dmg"
+                  new_filename="Inklip-${platform_arch}.dmg"
                   cp "$file" "release-files/$new_filename"
                   echo "Prepared: $new_filename"
                 fi
               done
               
-              # 复制所有 MSI 文件并重命名 (Windows 平台)
               for file in "$artifact_dir"*.msi; do
                 if [ -f "$file" ]; then
-                  new_filename="Inklip-${VERSION}-${platform_arch}.msi"
+                  new_filename="Inklip-${platform_arch}.msi"
                   cp "$file" "release-files/$new_filename"
                   echo "Prepared: $new_filename"
                 fi
               done
 
-              # 复制所有 EXE 文件并重命名 (Windows 平台)
               for file in "$artifact_dir"*.exe; do
                 if [ -f "$file" ]; then
-                  # EXE 文件通常是 setup.exe，但也可能是 "Inklip Setup.exe"
-                  # 我们统一命名为 Inklip-{version}-{arch}.exe
-                  # 或者保留原来的名字，这里选择统一格式以保持一致性
-                  new_filename="Inklip-${VERSION}-${platform_arch}.exe"
+                  new_filename="Inklip-${platform_arch}.exe"
                   cp "$file" "release-files/$new_filename"
                   echo "Prepared: $new_filename"
                 fi
