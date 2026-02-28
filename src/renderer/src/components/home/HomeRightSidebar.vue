@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NIcon, NTooltip, NEllipsis, NProgress, useDialog } from 'naive-ui'
+import { NIcon, NTooltip, NEllipsis, NProgress } from 'naive-ui'
 import {
   ChatbubbleOutline,
   AddOutline,
@@ -10,12 +10,10 @@ import {
   TrashOutline
 } from '@vicons/ionicons5'
 import type { AiChatTopic } from '../../api/aiChat'
-import { getSmartCutsApi, deleteSmartCutApi, type SmartCutItem } from '../../api/video'
+import { getSmartCutsApi, deleteSmartCutApi, getSmartCutApi, type SmartCutItem } from '../../api/video'
 import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
 import { useRealtimeStore } from '../../stores/realtime'
 import { aiChatStore } from '../../services/aiChatStore'
-
-const dialog = useDialog()
 
 const props = defineProps<{
   aiChats: AiChatTopic[]
@@ -45,30 +43,14 @@ const handleNewChat = (): void => {
   emit('new-chat')
 }
 
-const handleDeleteChat = (e: Event, chat: AiChatTopic) => {
+const handleDeleteChat = async (e: Event, chat: AiChatTopic) => {
   e.stopPropagation()
-  dialog.warning({
-    title: '删除记录',
-    content: '确定要删除这条对话记录吗？',
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await aiChatStore.deleteAiChat(chat.id)
-    }
-  })
+  await aiChatStore.deleteAiChat(chat.id)
 }
 
-const handleDeleteClip = (item: SmartCutItem) => {
-  dialog.warning({
-    title: '删除剪辑',
-    content: '确定要删除这条剪辑历史吗？',
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await deleteSmartCutApi(item.id)
-      clipHistory.value = clipHistory.value.filter((i) => i.id !== item.id)
-    }
-  })
+const handleDeleteClip = async (item: SmartCutItem) => {
+  await deleteSmartCutApi(item.id)
+  clipHistory.value = clipHistory.value.filter((i) => i.id !== item.id)
 }
 
 const fetchHistory = async () => {
@@ -95,6 +77,49 @@ const refreshClipHistory = (): void => {
 }
 
 defineExpose({ refreshClipHistory })
+
+// 当有智能剪辑状态更新（SSE smart_cut）时，若当前在「剪辑历史」页签，尝试增量刷新对应条目
+const rtStore = useRealtimeStore()
+watch(
+  () => rtStore.smartCutUpdated,
+  async () => {
+    if (activeTab.value !== 'history' || clipHistory.value.length === 0) return
+
+    // 从 realtime store 或 aiChatStore 中获取最近的 smartCutTask，提取 aiGenVideoId
+    const currentMessages = aiChatStore.getMessages().value
+    const lastMsg = currentMessages[currentMessages.length - 1]
+    const payload: any = lastMsg?.payload
+    const aiGenVideoId =
+      payload?.smartCutTask?.aiGenVideoId || payload?.aiGenVideoId || payload?.id
+
+    if (!aiGenVideoId) return
+
+    try {
+      const latest = await getSmartCutApi(aiGenVideoId)
+      const idx = clipHistory.value.findIndex((item) => item.id === latest.id)
+      if (idx >= 0) {
+        // 更新已有条目（状态/封面/时长等）
+        clipHistory.value[idx] = {
+          ...clipHistory.value[idx],
+          status: latest.status,
+          cover: latest.cover ?? clipHistory.value[idx].cover,
+          duration: latest.duration ?? clipHistory.value[idx].duration,
+          path: latest.path ?? clipHistory.value[idx].path,
+          name: latest.name ?? clipHistory.value[idx].name
+        }
+      } else {
+        // 若当前页中暂时还没有这条记录，但属于当前主播，则插入到最前面
+        const anchorId = props.currentAnchor?.id
+        if (!anchorId || latest.anchor_id === anchorId) {
+          clipHistory.value = [latest as SmartCutItem, ...clipHistory.value]
+        }
+      }
+    } catch (e) {
+      // 拉取单条剪辑状态失败时忽略，不影响其他逻辑
+      console.warn('[HomeRightSidebar] Failed to sync smart cut history item', e)
+    }
+  }
+)
 
 watch(activeTab, (val) => {
   if (val === 'history') {
@@ -149,7 +174,6 @@ const handleClipClick = (item: SmartCutItem) => {
   }
 }
 
-const rtStore = useRealtimeStore()
 const { usageInfo, isVipAvailable } = storeToRefs(rtStore)
 
 const hasMoreAiChats = aiChatStore.getHasMoreAiChats()
@@ -167,7 +191,13 @@ const usagePercentage = computed(() => {
 const isExpired = computed(() => {
   const expiredAt = currentUsage.value?.expiredAt
   if (!expiredAt) return false
-  return new Date(expiredAt).getTime() < Date.now()
+  
+  const now = new Date()
+  const exp = new Date(expiredAt)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const expDate = new Date(exp.getFullYear(), exp.getMonth(), exp.getDate()).getTime()
+  
+  return today > expDate
 })
 
 const formatDuration = (seconds?: number) => {
@@ -347,7 +377,7 @@ const onRecentScroll = (ev: Event) => {
             color="#f87171"
             rail-color="#34d399"
             :height="6"
-            style="margin: 4px 0 8px 0"
+            style="margin: 4px 0 8px 0; transform: scaleX(-1);"
           />
         </div>
         <div v-if="currentUsage?.expiredAt" class="usage-row">
@@ -602,22 +632,26 @@ const onRecentScroll = (ev: Event) => {
   cursor: pointer;
   transition: all 0.2s;
   border: 1px solid rgba(255, 255, 255, 0.03);
+  overflow: hidden;
 }
 
 .clip-actions {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s;
-  flex-shrink: 0;
-  pointer-events: none;
-  margin-left: 4px;
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.9) 10%, rgba(0, 0, 0, 1) 100%);
+  transform: translateX(100%);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 5;
 }
 
 .clip-item:hover .clip-actions {
-  opacity: 1;
-  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .clip-thumb {

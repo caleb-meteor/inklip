@@ -23,6 +23,10 @@ export function getNetworkErrorMessage(error: unknown): string {
 const { message } = createDiscreteApi(['message'], {
   configProviderProps: {
     theme: darkTheme
+  },
+  messageProviderProps: {
+    duration: 5000,
+    keepAliveOnHover: true
   }
 })
 

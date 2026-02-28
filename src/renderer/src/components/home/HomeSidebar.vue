@@ -9,7 +9,6 @@ import {
   NDropdown,
   NTooltip,
   useMessage,
-  useDialog,
   type UploadFileInfo
 } from 'naive-ui'
 import {
@@ -45,7 +44,6 @@ import {
 } from '../../api/product'
 import VideoUploadChatModal from './VideoUploadChatModal.vue'
 import RenameModal from '../RenameModal.vue'
-import DeleteModal from '../DeleteModal.vue'
 import { useRealtimeStore } from '../../stores/realtime'
 import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
 
@@ -61,7 +59,6 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
-const dialog = useDialog()
 const wsStore = useRealtimeStore()
 const anchors = ref<Anchor[]>([])
 const products = ref<Product[]>([])
@@ -99,7 +96,6 @@ const dropdownOptions = [
 
 // Video Action State
 const showRenameModal = ref(false)
-const showDeleteModal = ref(false)
 const currentVideoForAction = ref<VideoItem | null>(null)
 
 // Edit Anchor State
@@ -359,12 +355,12 @@ const handleSelectDropdown = (key: string) => {
     }
   } else if (key === 'delete') {
     if (contextMenuType.value === 'anchor' && contextMenuAnchor.value) {
-      confirmDeleteAnchor(contextMenuAnchor.value)
+      doDeleteAnchor(contextMenuAnchor.value)
     } else if (contextMenuType.value === 'product' && contextMenuProduct.value) {
-      confirmDeleteProduct(contextMenuProduct.value)
+      doDeleteProduct(contextMenuProduct.value)
     } else if (contextMenuType.value === 'video' && contextMenuVideo.value) {
       currentVideoForAction.value = contextMenuVideo.value
-      showDeleteModal.value = true
+      handleDeleteVideoConfirm()
     }
   }
 }
@@ -396,7 +392,7 @@ const handleDeleteVideoConfirm = async () => {
 
   await deleteVideoApi(currentVideoForAction.value.id)
   videos.value = videos.value.filter((v) => v.id !== currentVideoForAction.value!.id)
-  showDeleteModal.value = false
+  currentVideoForAction.value = null
 }
 
 const startEdit = (anchor: Anchor) => {
@@ -505,33 +501,17 @@ const handleUpdateProduct = async () => {
   })
 }
 
-const confirmDeleteAnchor = (anchor: Anchor) => {
-  dialog.warning({
-    title: '确认删除',
-    content: `确定要删除主播 "${anchor.name}" 吗？此操作不可恢复。`,
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await deleteAnchorApi(anchor.id)
-      anchors.value = anchors.value.filter((a) => a.id !== anchor.id)
-      if (selectedAnchorId.value === anchor.id) selectedAnchorId.value = null
-    }
-  })
+const doDeleteAnchor = async (anchor: Anchor) => {
+  await deleteAnchorApi(anchor.id)
+  anchors.value = anchors.value.filter((a) => a.id !== anchor.id)
+  if (selectedAnchorId.value === anchor.id) selectedAnchorId.value = null
 }
 
-const confirmDeleteProduct = (product: Product) => {
-  dialog.warning({
-    title: '确认删除',
-    content: `确定要删除产品 "${product.name}" 吗？此操作不可恢复。`,
-    positiveText: '确定',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await deleteProductApi(product.id)
-      products.value = products.value.filter((p) => p.id !== product.id)
-      const expandIndex = expandedProductIds.value.indexOf(product.id)
-      if (expandIndex > -1) expandedProductIds.value.splice(expandIndex, 1)
-    }
-  })
+const doDeleteProduct = async (product: Product) => {
+  await deleteProductApi(product.id)
+  products.value = products.value.filter((p) => p.id !== product.id)
+  const expandIndex = expandedProductIds.value.indexOf(product.id)
+  if (expandIndex > -1) expandedProductIds.value.splice(expandIndex, 1)
 }
 </script>
 
@@ -1062,13 +1042,6 @@ const confirmDeleteProduct = (product: Product) => {
       v-model:show="showRenameModal"
       :video-name="currentVideoForAction.name"
       @confirm="handleRenameVideoConfirm"
-    />
-
-    <DeleteModal
-      v-if="currentVideoForAction"
-      v-model:show="showDeleteModal"
-      :video-name="currentVideoForAction.name"
-      @confirm="handleDeleteVideoConfirm"
     />
   </div>
 </template>

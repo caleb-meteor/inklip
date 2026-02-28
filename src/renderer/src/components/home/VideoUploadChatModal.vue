@@ -6,7 +6,8 @@ import {
   FolderOutline,
   CloseOutline,
   DocumentTextOutline,
-  VideocamOutline
+  VideocamOutline,
+  InformationCircleOutline
 } from '@vicons/ionicons5'
 import { getDictsByTypeApi, createDictApi } from '../../api/dict'
 import { uploadVideosBatchApi } from '../../api/video'
@@ -244,6 +245,10 @@ const handleClose = (): void => {
               选择文件夹
             </n-button>
           </n-space>
+          <div class="upload-tip">
+            <n-icon size="14"><InformationCircleOutline /></n-icon>
+            支持上传视频与同名 SRT 字幕文件，系统会自动匹配
+          </div>
         </div>
 
         <div v-if="folderPath" class="folder-info">
@@ -309,6 +314,15 @@ const handleClose = (): void => {
 
 .action-buttons {
   margin-bottom: 16px;
+}
+
+.upload-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #63e2b7;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .folder-info {

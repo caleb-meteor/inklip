@@ -7,6 +7,7 @@ import type { DictItem } from '../api/dict'
 import type { Message, MessagePayload } from '../types/chat'
 import { aiChatStore } from './aiChatStore'
 import { isUsageAvailable, useRealtimeStore } from '../stores/realtime'
+import { videosForMessagePayload } from '../utils/videoPayload'
 
 // 导出类型以便在其他地方使用
 export type { AiChatTopic } from '../api/aiChat'
@@ -249,8 +250,8 @@ export class SmartCutAiService {
       awaitingConfirmation: false,
       selectedVideoIds: selectedVideoIds,
       isInteractive: false,
-      // 更新视频列表为用户实际选择的视频
-      videos: selectedVideos
+      // 更新视频列表为用户实际选择的视频（不保存字幕等大字段）
+      videos: videosForMessagePayload(selectedVideos)
     }
 
     aiChatStore.updateMessage(data.msgId, {
@@ -768,7 +769,7 @@ export class SmartCutAiService {
 
     const selectionPayload = {
       type: 'video_selection',
-      videos,
+      videos: videosForMessagePayload(videos),
       awaitingConfirmation: true,
       isInteractive: true,
       options: {

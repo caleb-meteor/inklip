@@ -64,7 +64,7 @@ onMounted(async () => {
 
 <template>
   <n-config-provider :theme="darkTheme" :theme-overrides="themeOverrides">
-    <n-message-provider>
+    <n-message-provider :duration="5000" keep-alive-on-hover>
       <n-dialog-provider>
         <div class="app-wrapper">
           <RouterView />
