@@ -202,6 +202,12 @@ export interface SmartCutItem {
   updated_at: string
 }
 
+/** 首页播放载荷：区分素材/智能剪辑，以便无字幕时正确拉取字幕接口 */
+export type HomePlayPayload = {
+  video: VideoItem | SmartCutItem
+  videoType: 'material' | 'edited'
+}
+
 export interface SmartCutsResponse {
   list: SmartCutItem[]
   total: number

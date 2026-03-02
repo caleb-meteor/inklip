@@ -10,7 +10,7 @@ import {
   TrashOutline
 } from '@vicons/ionicons5'
 import type { AiChatTopic } from '../../api/aiChat'
-import { getSmartCutsApi, deleteSmartCutApi, getSmartCutApi, type SmartCutItem } from '../../api/video'
+import { getSmartCutsApi, deleteSmartCutApi, getSmartCutApi, type SmartCutItem, type HomePlayPayload } from '../../api/video'
 import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
 import { useRealtimeStore } from '../../stores/realtime'
 import { aiChatStore } from '../../services/aiChatStore'
@@ -26,7 +26,7 @@ const emit = defineEmits<{
   (e: 'select-chat', chat: AiChatTopic): void
   (e: 'new-chat'): void
   (e: 'toggle'): void
-  (e: 'play-video', video: SmartCutItem): void
+  (e: 'play-video', payload: HomePlayPayload): void
 }>()
 
 const activeTab = ref<'recent' | 'history'>('recent')
@@ -170,7 +170,7 @@ const getStatusText = (status: number) => {
 
 const handleClipClick = (item: SmartCutItem) => {
   if (item.status === 1 && item.path) {
-    emit('play-video', item)
+    emit('play-video', { video: item, videoType: 'edited' })
   }
 }
 

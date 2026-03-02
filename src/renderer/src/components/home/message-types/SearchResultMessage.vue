@@ -37,7 +37,7 @@ const handleSegmentClick = (video: any, startTime: number, endTime: number) => {
 }
 
 const handlePlayVideo = (video: any) => {
-  if (!isVideoDeleted(video)) emit('play-video', video)
+  if (!isVideoDeleted(video)) emit('play-video', { video, videoType: 'material' })
 }
 </script>
 

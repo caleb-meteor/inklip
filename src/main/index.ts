@@ -166,6 +166,12 @@ function createWindow(): void {
 // 必须在 app.whenReady() 之前设置，以确保文件选择对话框等系统对话框显示中文
 app.commandLine.appendSwitch('lang', 'zh-CN')
 app.setName('inklip')
+
+// 仅 Windows 打包版：从受保护目录运行时 Chromium 会报 "Unable to move the cache: 拒绝访问"，将缓存强制放到 userData
+if (app.isPackaged && process.platform === 'win32') {
+  app.commandLine.appendSwitch('disk-cache-dir', path.join(app.getPath('userData'), 'Cache'))
+  app.commandLine.appendSwitch('gpu-cache-dir', path.join(app.getPath('userData'), 'GPUCache'))
+}
 app.whenReady().then(() => {
   // Set app icon for macOS dock
   if (process.platform === 'darwin' && app.dock) {

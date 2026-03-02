@@ -22,7 +22,7 @@ const UNSUPPORTED_INTENT_TIP = `我可能还没有完全理解你的意思，可
 import { useRealtimeSync } from '../composables/useRealtimeSync'
 import { useVideoUpload } from '../composables/useVideoUpload'
 import { useRealtimeStore } from '../stores/realtime'
-import type { VideoItem, SmartCutItem } from '../api/video'
+import type { HomePlayPayload, VideoItem, SmartCutItem } from '../api/video'
 import { searchVideosApi } from '../api/video'
 
 const router = useRouter()
@@ -47,7 +47,7 @@ const isTaskRunning = computed(() => {
   return aiChatStore.getIsCurrentChatProcessing().value
 })
 
-const currentPlayingVideo = ref<VideoItem | SmartCutItem | null>(null)
+const currentPlayingVideo = ref<HomePlayPayload | null>(null)
 const currentSelectedAnchor = ref<any>(null)
 
 const homeSidebarRef = ref<InstanceType<typeof HomeSidebar> | null>(null)
@@ -55,8 +55,8 @@ const homeRightSidebarRef = ref<InstanceType<typeof HomeRightSidebar> | null>(nu
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 let stopReconnectWatch: (() => void) | undefined
 
-const handlePlayVideo = (video: VideoItem | SmartCutItem) => {
-  currentPlayingVideo.value = video
+const handlePlayVideo = (payload: HomePlayPayload) => {
+  currentPlayingVideo.value = payload
 }
 
 const handleClosePlayer = () => {
@@ -279,7 +279,7 @@ const handleNewChat = (): void => {
 
           <HomeVideoPlayer
             v-else
-            :video="currentPlayingVideo"
+            :payload="currentPlayingVideo"
             @close="handleClosePlayer"
             @open-chat="handleNewChat"
           />

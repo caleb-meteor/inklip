@@ -2,10 +2,11 @@
 import { NButton, NIcon } from 'naive-ui'
 import { CloseOutline } from '@vicons/ionicons5'
 import VideoPlayer from '../VideoPlayer.vue'
-import type { VideoItem, SmartCutItem } from '../../api/video'
+import type { HomePlayPayload } from '../../api/video'
 
 interface Props {
-  video: VideoItem | SmartCutItem | null
+  /** 首页播放载荷：含 video 与 videoType，用于无字幕时按类型拉取字幕 */
+  payload: HomePlayPayload | null
 }
 
 defineProps<Props>()
@@ -16,18 +17,19 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div v-if="video" class="video-player-container">
+  <div v-if="payload" class="video-player-container">
     <div class="player-header">
-      <h2 class="video-title">{{ video.name }}</h2>
+      <h2 class="video-title">{{ payload.video.name }}</h2>
       <n-button quaternary circle class="close-btn" @click="emit('close')">
         <n-icon size="24"><CloseOutline /></n-icon>
       </n-button>
     </div>
     <div class="player-content">
       <VideoPlayer
-        :path="video.path"
-        :video-id="video.id"
-        :subtitle-data="video.subtitle"
+        :path="payload.video.path"
+        :video-id="payload.video.id"
+        :subtitle-data="payload.video.subtitle"
+        :video-type="payload.videoType"
         autoplay
       />
     </div>

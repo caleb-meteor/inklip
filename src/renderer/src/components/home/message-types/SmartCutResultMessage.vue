@@ -137,9 +137,9 @@ const isFailed = computed(() => {
   return s === 3 || s === 4
 })
 
-// 处理视频播放 - 使用首页播放器
+// 处理视频播放 - 使用首页播放器（智能剪辑需传 videoType 以便无字幕时拉取 getSmartCutApi）
 const handlePlayVideo = (file: any) => {
-  emit('play-video', file)
+  emit('play-video', { video: file, videoType: 'edited' })
 }
 
 const failureMessage = computed(() => {

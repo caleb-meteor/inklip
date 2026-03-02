@@ -27,7 +27,7 @@ import {
   LibraryOutline,
   AddCircleOutline
 } from '@vicons/ionicons5'
-import { getVideosApi, deleteVideoApi, renameVideoApi, type VideoItem } from '../../api/video'
+import { getVideosApi, deleteVideoApi, renameVideoApi, type VideoItem, type HomePlayPayload } from '../../api/video'
 import {
   getAnchorsApi,
   createAnchorApi,
@@ -54,7 +54,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'navigate', path: string): void
   (e: 'toggle-left-collapse'): void
-  (e: 'play-video', video: VideoItem): void
+  (e: 'play-video', payload: HomePlayPayload): void
   (e: 'update:selected-anchor', anchor: Anchor | null): void
 }>()
 
@@ -933,7 +933,7 @@ const doDeleteProduct = async (product: Product) => {
                     )"
                     :key="video.id"
                     class="video-preview-card"
-                    @dblclick="emit('play-video', video)"
+                    @dblclick="emit('play-video', { video, videoType: 'material' })"
                     @contextmenu="handleContextMenu($event, video, 'video')"
                   >
                     <div class="preview-placeholder">
@@ -941,7 +941,7 @@ const doDeleteProduct = async (product: Product) => {
                         :video="video"
                         video-type="material"
                         aspect-ratio="9/16"
-                        @dblclick="emit('play-video', video)"
+                        @dblclick="emit('play-video', { video, videoType: 'material' })"
                       />
                     </div>
                     <div class="preview-name" :title="video.name">{{ video.name }}</div>
