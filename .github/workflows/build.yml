@@ -46,23 +46,29 @@ jobs:
           cd inklip-base-go
           go mod download
 
+      - name: Prepare jieba embeddict (no CGO, dict not in repo)
+        shell: bash
+        run: |
+          cd inklip-base-go
+          go run ./tools/copy_jieba_embed.go
+
       - name: Build inklip-base-go
         shell: bash
         run: |
           cd inklip-base-go
-          # -tags sqlite_fts5 启用 SQLite FTS5 全文检索（视频/字幕搜索依赖）
+          # glebarez/sqlite 纯 Go 驱动内置 FTS5；-tags embeddict 将结巴词典打入二进制（词典不提交 Git）
           if [ "${{ matrix.platform }}" = "win32" ]; then
             echo "🔨 构建 Windows 版本..."
             mkdir -p dist/win32-x64
-            GOOS=windows GOARCH=amd64 go build -tags sqlite_fts5 -ldflags "-s -w" -o dist/win32-x64/inklip-base.exe .
+            CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags embeddict -ldflags "-s -w" -o dist/win32-x64/inklip-base.exe .
           elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "x64" ]; then
             echo "🔨 构建 Mac Intel 版本..."
             mkdir -p dist/darwin-x64
-            GOOS=darwin GOARCH=amd64 go build -tags sqlite_fts5 -ldflags "-s -w" -o dist/darwin-x64/inklip-base .
+            CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags embeddict -ldflags "-s -w" -o dist/darwin-x64/inklip-base .
           elif [ "${{ matrix.platform }}" = "darwin" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
             echo "🔨 构建 Mac ARM 版本..."
             mkdir -p dist/darwin-arm64
-            GOOS=darwin GOARCH=arm64 go build -tags sqlite_fts5 -ldflags "-s -w" -o dist/darwin-arm64/inklip-base .
+            CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags embeddict -ldflags "-s -w" -o dist/darwin-arm64/inklip-base .
           fi
 
       - name: Download and extract platform resources
@@ -102,15 +108,7 @@ jobs:
             echo "✅ inklip-base (darwin-arm64) 已复制到 resources/${{ matrix.platform }}-${{ matrix.arch }}/inklip-base/"
           fi
 
-      - name: Copy gojieba dict to resources
-        shell: bash
-        run: |
-          JIEBA_DIR=$(cd inklip-base-go && go list -m -f '{{.Dir}}' github.com/yanyiwu/gojieba)
-          DICT_SRC="${JIEBA_DIR}/deps/cppjieba/dict"
-          DICT_DST="resources/${{ matrix.platform }}-${{ matrix.arch }}/jieba-dict"
-          mkdir -p "$DICT_DST"
-          cp "${DICT_SRC}/jieba.dict.utf8" "${DICT_SRC}/hmm_model.utf8" "${DICT_SRC}/user.dict.utf8" "${DICT_SRC}/idf.utf8" "${DICT_SRC}/stop_words.utf8" "$DICT_DST/"
-          echo "✅ gojieba 词典已复制到 $DICT_DST"
+      # 结巴词典已通过 -tags embeddict 打入 inklip-base 二进制，无需再复制 jieba-dict 到 resources
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
