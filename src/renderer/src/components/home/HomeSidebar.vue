@@ -119,7 +119,7 @@ const editProductFileList = ref<UploadFileInfo[]>([])
 // 首页左侧数量限制（与后端 consts 保持一致）
 const MAX_ANCHORS = 3
 const MAX_PRODUCTS_PER_ANCHOR = 100
-const MAX_VIDEOS_PER_PRODUCT = 6
+const MAX_VIDEOS_PER_PRODUCT = 18
 
 const currentAnchor = computed(() => anchors.value.find((a) => a.id === selectedAnchorId.value))
 

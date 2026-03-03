@@ -305,7 +305,8 @@ export class AiChatStore {
           fileUrl: latestData.path,
           duration: latestData.duration,
           cover: latestData.cover,
-          name: latestData.name
+          name: latestData.name,
+          payload: latestData.payload
         }
       } else {
         updatedPayload.status = latestData.status
@@ -313,6 +314,7 @@ export class AiChatStore {
         updatedPayload.duration = latestData.duration
         updatedPayload.cover = latestData.cover
         updatedPayload.name = latestData.name
+        updatedPayload.payload = latestData.payload
       }
       if (updatedPayload.taskCard?.steps) {
         const steps = updatedPayload.taskCard.steps

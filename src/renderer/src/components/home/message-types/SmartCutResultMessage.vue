@@ -22,6 +22,7 @@ interface SmartCutTask {
   duration?: number
   cover?: string
   name?: string
+  payload?: any
   taskCard?: {
     steps: Array<{
       label: string
@@ -166,6 +167,20 @@ const completedVideoItem = computed(() => {
   }
 })
 
+// 解析 payload，支持字符串形式的 JSON
+const parsedPayload = computed(() => {
+  const p = props.task.payload
+  if (!p) return null
+  if (typeof p === 'string') {
+    try {
+      return JSON.parse(p)
+    } catch {
+      return null
+    }
+  }
+  return p
+})
+
 // 处理中的友好提示
 const processingTips = [
   '⏳ 正在分析视频内容...',
@@ -196,7 +211,8 @@ const updateMessageStatus = async (latestData: any) => {
         fileUrl: latestData.path,
         duration: latestData.duration,
         cover: latestData.cover,
-        name: latestData.name
+        name: latestData.name,
+        payload: latestData.payload
       }
     } else {
       updatedPayload.status = latestData.status
@@ -204,6 +220,7 @@ const updateMessageStatus = async (latestData: any) => {
       updatedPayload.duration = latestData.duration
       updatedPayload.cover = latestData.cover
       updatedPayload.name = latestData.name
+      updatedPayload.payload = latestData.payload
     }
 
     // 确保 aiGenVideoId 总是存在
@@ -439,6 +456,18 @@ onBeforeUnmount(() => {
                   @open="handlePlayVideo"
                 />
               </div>
+            </div>
+          </div>
+          
+          <!-- 剪辑思路展示 -->
+          <div v-if="parsedPayload?.title || parsedPayload?.main_content" class="payload-info-card">
+            <div v-if="parsedPayload.title" class="payload-title">
+              <span class="title-icon">📝</span>
+              <span class="title-text">{{ parsedPayload.title }}</span>
+            </div>
+            <div v-if="parsedPayload.main_content" class="payload-content">
+              <div class="content-label">剪辑思路：</div>
+              <div class="content-text">{{ parsedPayload.main_content }}</div>
             </div>
           </div>
         </div>
@@ -824,7 +853,51 @@ onBeforeUnmount(() => {
 
 .main-display-area {
   display: flex;
+  gap: 16px;
   width: 100%;
+}
+
+.payload-info-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.payload-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.4;
+}
+
+.title-icon {
+  font-size: 16px;
+}
+
+.payload-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.content-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.content-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .video-preview-container {

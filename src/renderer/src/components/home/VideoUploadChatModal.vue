@@ -12,13 +12,13 @@ import {
 import { getDictsByTypeApi, createDictApi } from '../../api/dict'
 import { uploadVideosBatchApi } from '../../api/video'
 
-const MAX_VIDEOS_PER_PRODUCT = 6
+const MAX_VIDEOS_PER_PRODUCT = 18
 
 interface Props {
   show: boolean
   preSelectedAnchor?: { id: number; name: string }
   preSelectedProduct?: { id: number; name: string }
-  /** 从首页产品入口打开时，该产品当前已有视频数量，用于限制每个产品最多 6 个视频 */
+  /** 从首页产品入口打开时，该产品当前已有视频数量，用于限制每个产品最多 18 个视频 */
   preSelectedProductVideoCount?: number
 }
 
