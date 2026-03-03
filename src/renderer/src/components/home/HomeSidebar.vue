@@ -1,18 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, h, watch } from 'vue'
+import { NIcon, NAvatar, NPopconfirm, NInput, NDropdown, NTooltip, useMessage } from 'naive-ui'
 import {
-  NIcon,
-  NAvatar,
-  NPopconfirm,
-  NInput,
-  NUpload,
-  NDropdown,
-  NTooltip,
-  useMessage,
-  type UploadFileInfo
-} from 'naive-ui'
-import {
-  ImagesOutline,
   FolderOpenOutline,
   CubeOutline,
   ChevronForwardOutline,
@@ -74,13 +63,9 @@ const expandedProductIds = ref<number[]>([])
 
 // Anchor State
 const newAnchorName = ref('')
-const newAnchorAvatar = ref<string>('')
-const fileList = ref<UploadFileInfo[]>([])
 
 // Product State
 const newProductName = ref('')
-const newProductCover = ref<string>('')
-const productFileList = ref<UploadFileInfo[]>([])
 
 const loading = ref(false)
 const showUploadModal = ref(false)
@@ -107,14 +92,10 @@ const currentVideoForAction = ref<VideoItem | null>(null)
 // Edit Anchor State
 const editAnchorId = ref<number | null>(null)
 const editName = ref('')
-const editAvatar = ref('')
-const editFileList = ref<UploadFileInfo[]>([])
 
 // Edit Product State
 const editProductId = ref<number | null>(null)
 const editProductName = ref('')
-const editProductCover = ref('')
-const editProductFileList = ref<UploadFileInfo[]>([])
 
 // 首页左侧数量限制（与后端 consts 保持一致）
 const MAX_ANCHORS = 3
@@ -231,34 +212,6 @@ const getAvatarColor = (name: string): string => {
   return colors[Math.abs(hash) % colors.length]
 }
 
-const handleUploadChange = (data: { fileList: UploadFileInfo[] }) => {
-  fileList.value = data.fileList
-  if (data.fileList.length > 0 && data.fileList[0].file) {
-    const file = data.fileList[0].file
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => {
-      newAnchorAvatar.value = reader.result as string
-    }
-  } else {
-    newAnchorAvatar.value = ''
-  }
-}
-
-const handleProductUploadChange = (data: { fileList: UploadFileInfo[] }) => {
-  productFileList.value = data.fileList
-  if (data.fileList.length > 0 && data.fileList[0].file) {
-    const file = data.fileList[0].file
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => {
-      newProductCover.value = reader.result as string
-    }
-  } else {
-    newProductCover.value = ''
-  }
-}
-
 const handleAddAnchor = async (): Promise<boolean> => {
   if (anchors.value.length >= MAX_ANCHORS) {
     message.warning(`主播最多只能添加 ${MAX_ANCHORS} 个`)
@@ -270,8 +223,7 @@ const handleAddAnchor = async (): Promise<boolean> => {
   }
 
   const newAnchor = await createAnchorApi({
-    name: newAnchorName.value.trim(),
-    avatar: newAnchorAvatar.value
+    name: newAnchorName.value.trim()
   })
 
   anchors.value.push(newAnchor)
@@ -280,8 +232,6 @@ const handleAddAnchor = async (): Promise<boolean> => {
 
   // Reset inputs
   newAnchorName.value = ''
-  newAnchorAvatar.value = ''
-  fileList.value = []
   return true
 }
 
@@ -298,16 +248,13 @@ const handleAddProduct = async () => {
 
   const newProduct = await createProductApi({
     name: newProductName.value.trim(),
-    anchor_id: selectedAnchorId.value,
-    cover: newProductCover.value
+    anchor_id: selectedAnchorId.value
   })
 
   products.value.push(newProduct)
 
   // Reset inputs
   newProductName.value = ''
-  newProductCover.value = ''
-  productFileList.value = []
 
   // message.success('添加产品成功')
   return true
@@ -404,61 +351,11 @@ const handleDeleteVideoConfirm = async () => {
 const startEdit = (anchor: Anchor) => {
   editAnchorId.value = anchor.id
   editName.value = anchor.name
-  editAvatar.value = anchor.avatar
-  editFileList.value = anchor.avatar
-    ? [
-        {
-          id: '1',
-          name: 'avatar',
-          status: 'finished',
-          url: anchor.avatar
-        }
-      ]
-    : []
 }
 
 const startEditProduct = (product: Product) => {
   editProductId.value = product.id
   editProductName.value = product.name
-  editProductCover.value = product.cover
-  editProductFileList.value = product.cover
-    ? [
-        {
-          id: '1',
-          name: 'cover',
-          status: 'finished',
-          url: product.cover
-        }
-      ]
-    : []
-}
-
-const handleEditUploadChange = (data: { fileList: UploadFileInfo[] }) => {
-  editFileList.value = data.fileList
-  if (data.fileList.length > 0 && data.fileList[0].file) {
-    const file = data.fileList[0].file
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => {
-      editAvatar.value = reader.result as string
-    }
-  } else if (data.fileList.length === 0) {
-    editAvatar.value = ''
-  }
-}
-
-const handleEditProductUploadChange = (data: { fileList: UploadFileInfo[] }) => {
-  editProductFileList.value = data.fileList
-  if (data.fileList.length > 0 && data.fileList[0].file) {
-    const file = data.fileList[0].file
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => {
-      editProductCover.value = reader.result as string
-    }
-  } else if (data.fileList.length === 0) {
-    editProductCover.value = ''
-  }
 }
 
 const cancelEdit = () => {
@@ -476,8 +373,7 @@ const handleUpdateAnchor = async () => {
   const doUpdate = async () => {
     const updated = await updateAnchorApi({
       id: editAnchorId.value!,
-      name: editName.value.trim(),
-      avatar: editAvatar.value
+      name: editName.value.trim()
     })
     const index = anchors.value.findIndex((a) => a.id === updated.id)
     if (index !== -1) anchors.value[index] = updated
@@ -495,8 +391,7 @@ const handleUpdateProduct = async () => {
   const doUpdate = async () => {
     const updated = await updateProductApi({
       id: editProductId.value!,
-      name: editProductName.value.trim(),
-      cover: editProductCover.value
+      name: editProductName.value.trim()
     })
     const index = products.value.findIndex((p) => p.id === updated.id)
     if (index !== -1) products.value[index] = updated
@@ -642,31 +537,6 @@ const doDeleteProduct = async (product: Product) => {
                 padding: 8px 4px;
               "
             >
-              <div style="display: flex; justify-content: center">
-                <n-upload
-                  :file-list="fileList"
-                  list-type="image-card"
-                  :max="1"
-                  accept="image/*"
-                  :show-preview-button="false"
-                  style="--n-item-size: 80px"
-                  @change="handleUploadChange"
-                >
-                  <div
-                    style="
-                      display: flex;
-                      flex-direction: column;
-                      align-items: center;
-                      justify-content: center;
-                      height: 100%;
-                    "
-                  >
-                    <n-icon size="18" depth="3"><PersonAddOutline /></n-icon>
-                    <span style="font-size: 10px; margin-top: 4px; color: #666">上传头像</span>
-                  </div>
-                </n-upload>
-              </div>
-
               <div>
                 <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px">新主播名称</div>
                 <n-input
@@ -722,7 +592,7 @@ const doDeleteProduct = async (product: Product) => {
                 <span class="anchor-name">{{ anchor.name }}</span>
               </div>
             </template>
-            <!-- Edit Content matches Add Content -->
+            <!-- Edit Content (only name, hide avatar upload) -->
             <div
               style="
                 width: 240px;
@@ -732,31 +602,6 @@ const doDeleteProduct = async (product: Product) => {
                 padding: 8px 4px;
               "
             >
-              <div style="display: flex; justify-content: center">
-                <n-upload
-                  :file-list="editFileList"
-                  list-type="image-card"
-                  :max="1"
-                  accept="image/*"
-                  :show-preview-button="false"
-                  style="--n-item-size: 80px"
-                  @change="handleEditUploadChange"
-                >
-                  <div
-                    style="
-                      display: flex;
-                      flex-direction: column;
-                      align-items: center;
-                      justify-content: center;
-                      height: 100%;
-                    "
-                  >
-                    <n-icon size="18" depth="3"><PencilOutline /></n-icon>
-                    <span style="font-size: 10px; margin-top: 4px; color: #666">更换头像</span>
-                  </div>
-                </n-upload>
-              </div>
-
               <div>
                 <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px">主播名称</div>
                 <n-input
@@ -827,31 +672,6 @@ const doDeleteProduct = async (product: Product) => {
                 padding: 8px 4px;
               "
             >
-              <div style="display: flex; justify-content: center">
-                <n-upload
-                  :file-list="productFileList"
-                  list-type="image-card"
-                  :max="1"
-                  accept="image/*"
-                  :show-preview-button="false"
-                  style="--n-item-size: 80px"
-                  @change="handleProductUploadChange"
-                >
-                  <div
-                    style="
-                      display: flex;
-                      flex-direction: column;
-                      align-items: center;
-                      justify-content: center;
-                      height: 100%;
-                    "
-                  >
-                    <n-icon size="18" depth="3"><ImagesOutline /></n-icon>
-                    <span style="font-size: 10px; margin-top: 4px; color: #666">产品封面</span>
-                  </div>
-                </n-upload>
-              </div>
-
               <div>
                 <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px">产品名称</div>
                 <n-input
@@ -955,7 +775,7 @@ const doDeleteProduct = async (product: Product) => {
                 </div>
               </div>
             </template>
-            <!-- Edit Content -->
+            <!-- Edit Content (only name, hide cover upload) -->
             <div
               style="
                 width: 240px;
@@ -965,31 +785,6 @@ const doDeleteProduct = async (product: Product) => {
                 padding: 8px 4px;
               "
             >
-              <div style="display: flex; justify-content: center">
-                <n-upload
-                  :file-list="editProductFileList"
-                  list-type="image-card"
-                  :max="1"
-                  accept="image/*"
-                  :show-preview-button="false"
-                  style="--n-item-size: 80px"
-                  @change="handleEditProductUploadChange"
-                >
-                  <div
-                    style="
-                      display: flex;
-                      flex-direction: column;
-                      align-items: center;
-                      justify-content: center;
-                      height: 100%;
-                    "
-                  >
-                    <n-icon size="18" depth="3"><ImagesOutline /></n-icon>
-                    <span style="font-size: 10px; margin-top: 4px; color: #666">更换封面</span>
-                  </div>
-                </n-upload>
-              </div>
-
               <div>
                 <div style="margin-bottom: 6px; font-weight: 500; font-size: 12px">产品名称</div>
                 <n-input
