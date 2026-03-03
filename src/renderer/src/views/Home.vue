@@ -24,6 +24,7 @@ import { useVideoUpload } from '../composables/useVideoUpload'
 import { useRealtimeStore } from '../stores/realtime'
 import type { HomePlayPayload } from '../api/video'
 import { searchVideosApi } from '../api/video'
+import { videoForMessagePayload } from '../utils/videoPayload'
 
 const router = useRouter()
 const route = useRoute()
@@ -190,9 +191,14 @@ const handleSend = async (val: string): Promise<void> => {
         ? `共找到 ${searchRes.results.length} 个相关视频`
         : '未找到匹配的视频，可换个描述词试试'
     const assistantMsgId = `assistant_${Date.now()}`
+    const compactResults = searchRes.results.map((item) => ({
+      ...item,
+      // 消息里不保存整段字幕，播放时按 videoId 再按需拉取
+      video: videoForMessagePayload(item.video)
+    }))
     const searchPayload = {
       type: 'search_result',
-      results: searchRes.results,
+      results: compactResults,
       keywords: searchRes.keywords
     }
     aiChatStore.addMessage({
