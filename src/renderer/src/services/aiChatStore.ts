@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { ref, computed, type Ref } from 'vue'
 import {
   getAiChatListApi,
   getAiChatMessagesApi,
@@ -82,6 +82,37 @@ export class AiChatStore {
    */
   getIsCurrentChatProcessing(): Ref<boolean> {
     return this.isCurrentChatProcessing
+  }
+
+  /**
+   * 检查当前对话是否有正在处理的任务（包括前端处理、等待确认以及后台进行中的剪辑任务）
+   */
+  getHasProcessingTask(): Ref<boolean> {
+    return computed(() => {
+      if (this.isCurrentChatProcessing.value) return true
+
+      const msgs = this.messages.value
+      for (const msg of msgs) {
+        if (msg.payload?.awaitingConfirmation) return true
+      }
+
+      if (msgs.length > 0) {
+        const lastMsg = msgs[msgs.length - 1]
+        const payload = lastMsg.payload as any
+        if (payload && (payload.aiGenVideoId || payload.smartCutTask?.aiGenVideoId)) {
+          const status =
+            payload.smartCutTask?.status !== undefined
+              ? payload.smartCutTask.status
+              : payload.status
+          // 1(Completed), 3(AIError), 4(VideoError) 为结束状态
+          if (status === undefined || (status !== 1 && status !== 3 && status !== 4)) {
+            return true
+          }
+        }
+      }
+
+      return false
+    })
   }
 
   /**

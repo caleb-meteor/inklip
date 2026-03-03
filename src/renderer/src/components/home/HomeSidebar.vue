@@ -27,7 +27,13 @@ import {
   LibraryOutline,
   AddCircleOutline
 } from '@vicons/ionicons5'
-import { getVideosApi, deleteVideoApi, renameVideoApi, type VideoItem, type HomePlayPayload } from '../../api/video'
+import {
+  getVideosApi,
+  deleteVideoApi,
+  renameVideoApi,
+  type VideoItem,
+  type HomePlayPayload
+} from '../../api/video'
 import {
   getAnchorsApi,
   createAnchorApi,

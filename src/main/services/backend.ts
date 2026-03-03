@@ -100,11 +100,11 @@ export class BackendService {
     }
 
     // APP_DATA_PATH 使用默认的 userData（用于 models、db 等）
-    let appDataPath = app.getPath('userData')
+    const appDataPath = app.getPath('userData')
     const videoDataPath = appDataPath
 
     // For both Windows and Mac (flat binary), the bin path is the directory containing the executable
-    let binPath = path.dirname(path.dirname(backendPath))
+    const binPath = path.dirname(path.dirname(backendPath))
     let pathToSpawn = backendPath
     let cwdToSpawn = binPath
     let appDataPathForArgs = appDataPath

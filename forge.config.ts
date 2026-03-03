@@ -42,8 +42,7 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerDMG({}, ['darwin']), // Mac 安装包 dmg（手动安装用）
-    new MakerZIP({}, ['darwin']), // Mac zip（update.electronjs.org 自动更新用）
-    new MakerZIP({}, ['win32'])   // Windows zip
+    new MakerZIP({}, ['win32']) // Windows zip
   ],
   hooks: {
     postPackage: async (forgeConfig, options) => {

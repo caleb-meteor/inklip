@@ -1,7 +1,9 @@
 import { ref, type Ref } from 'vue'
 import { getVideosApi, smartCutApi } from '../api/video'
-import { getAnchorsApi } from '../api/anchor'
-import { getProductsApi } from '../api/product'
+import { getAnchorsApi, type Anchor } from '../api/anchor'
+import { getProductsApi, type Product } from '../api/product'
+import { recognizeIntentApi } from '../api/intent'
+import { fuzzyMatchCandidates, fuzzyMatchByQueries } from '../utils/fuzzyMatch'
 import { addAiChatMessageApi, updateAiChatMessageApi } from '../api/aiChat'
 import type { DictItem } from '../api/dict'
 import type { Message, MessagePayload } from '../types/chat'
@@ -17,21 +19,45 @@ export interface ChatStep {
   state: 'wait' | 'process' | 'finish' | 'error'
 }
 
+/** 待确认数据：视频选择（原有）| 主播多选一 | 产品多选一 */
+export type PendingConfirmationData =
+  | {
+      selectionType: 'video_selection'
+      msgId: string
+      dicts: DictItem[]
+      videos: any[]
+      options: SmartCutOptions
+      prompt: string
+      anchorId?: number
+      productId?: number
+      productName?: string
+    }
+  | {
+      selectionType: 'anchor_selection'
+      selectionMsgId: string
+      taskCardMsgId: string
+      candidates: Anchor[]
+      prompt: string
+      currentAiChatId: number
+      options: SmartCutOptions
+    }
+  | {
+      selectionType: 'product_selection'
+      selectionMsgId: string
+      taskCardMsgId: string
+      matchedAnchor: Anchor
+      candidates: Product[]
+      prompt: string
+      currentAiChatId: number
+      options: SmartCutOptions
+    }
+
 export interface SmartCutAiServiceState {
   messages: Ref<Message[]>
   isProcessing: Ref<boolean>
   chatSteps: Ref<ChatStep[]>
   isAwaitingConfirmation: Ref<boolean>
-  pendingConfirmationData: Ref<{
-    msgId: string
-    dicts: DictItem[]
-    videos: any[]
-    options: SmartCutOptions
-    prompt: string
-    anchorId?: number
-    productId?: number
-    productName?: string
-  } | null>
+  pendingConfirmationData: Ref<PendingConfirmationData | null>
 }
 
 export interface SmartCutOptions {
@@ -39,6 +65,12 @@ export interface SmartCutOptions {
   maxDuration?: number
   maxRetries?: number
   retryInterval?: number
+}
+
+/** 意图识别结果（可由 Home 传入，避免重复请求） */
+export interface RecognizeResultForMatch {
+  keywords: string[]
+  keyword_weights?: { word: string; weight: number }[]
 }
 
 /**
@@ -208,6 +240,7 @@ export class SmartCutAiService {
       ) {
         // 从消息payload中恢复数据（用于加载历史消息的情况）
         data = {
+          selectionType: 'video_selection' as const,
           msgId: msgId,
           dicts: msg.payload.dicts || [],
           videos: msg.payload.videos,
@@ -230,6 +263,11 @@ export class SmartCutAiService {
 
     if (!data) {
       console.error('没有待确认的数据')
+      return
+    }
+
+    if (data.selectionType === 'anchor_selection' || data.selectionType === 'product_selection') {
+      console.error('主播/产品选择请使用 confirmAnchorAndProceed 或 confirmProductAndProceed')
       return
     }
 
@@ -394,39 +432,48 @@ export class SmartCutAiService {
   }
 
   /**
-   * 取消视频选择
-   * 更新消息状态为已取消且不可交互
+   * 取消当前待确认（视频/主播/产品选择）
+   * @param msgId 可选，点击取消时传入当前消息 id；若未传则从 pendingConfirmationData 取，避免刷新或状态丢失后无法正确结束
    */
-  async cancelConfirmation(): Promise<void> {
+  async cancelConfirmation(msgId?: string): Promise<void> {
     const data = this.state.pendingConfirmationData.value
-    if (!data) {
+    let targetMsgId: string
+
+    if (data) {
+      targetMsgId = data.selectionType === 'video_selection' ? data.msgId : data.selectionMsgId
+    } else if (msgId) {
+      targetMsgId = msgId
+    } else {
       console.error('没有待确认的数据')
       return
     }
 
-    // 更新消息：标记为已取消且不可交互
-    const currentMsg = aiChatStore.getMessages().value.find((m) => m.id === data.msgId)
-    const cancelledPayload = {
-      ...(currentMsg?.payload || {}),
-      type: 'video_selection',
-      awaitingConfirmation: false,
-      isInteractive: false,
-      cancelled: true
-    }
-
-    aiChatStore.updateMessage(data.msgId, {
-      payload: cancelledPayload
-    })
-
-    // 同时更新数据库中的消息
+    const currentMsg = aiChatStore.getMessages().value.find((m) => m.id === targetMsgId)
     const currentAiChatId = aiChatStore.getCurrentAiChatId().value
-    if (currentAiChatId) {
-      await updateAiChatMessageApi(Number(data.msgId), {
+
+    if (currentMsg) {
+      const payloadType =
+        data?.selectionType === 'video_selection'
+          ? 'video_selection'
+          : (currentMsg?.payload?.type as string) || 'video_selection'
+      const cancelledPayload = {
+        ...(currentMsg?.payload || {}),
+        type: payloadType,
+        awaitingConfirmation: false,
+        isInteractive: false,
+        cancelled: true
+      }
+      aiChatStore.updateMessage(targetMsgId, {
         payload: cancelledPayload
       })
+      if (currentAiChatId) {
+        await updateAiChatMessageApi(Number(targetMsgId), {
+          payload: cancelledPayload
+        })
+      }
     }
 
-    // 添加取消消息到对话记录
+    // 添加取消提示到对话记录
     if (currentAiChatId) {
       const cancelMessage = `⚠️ 操作已取消\n\n您已取消本次视频选择，智能剪辑流程已终止。\n\n如需重新开始，请重新发送剪辑指令。`
 
@@ -449,6 +496,336 @@ export class SmartCutAiService {
     // 清除待确认数据和处理标志
     this.state.pendingConfirmationData.value = null
     this.state.isAwaitingConfirmation.value = false
+  }
+
+  /**
+   * 用户选择主播后继续：匹配产品 -> 若唯一则查视频并展示视频选择卡，若多个则展示产品选择
+   */
+  async confirmAnchorAndProceed(selectionMsgId: string, selectedAnchorId: number): Promise<void> {
+    const data = this.state.pendingConfirmationData.value
+    if (
+      !data ||
+      data.selectionType !== 'anchor_selection' ||
+      data.selectionMsgId !== selectionMsgId
+    ) {
+      return
+    }
+    const matchedAnchor = data.candidates.find((a) => a.id === selectedAnchorId)
+    if (!matchedAnchor) return
+
+    this.state.isAwaitingConfirmation.value = false
+    const { taskCardMsgId, prompt: sanitizedPrompt, currentAiChatId, options } = data
+    const { minDuration, maxDuration, maxRetries, retryInterval } = options
+
+    // 更新选择消息为已确认，且仅保留选中的主播
+    const selMsg = aiChatStore.getMessages().value.find((m) => m.id === selectionMsgId)
+    if (selMsg?.payload) {
+      const updatedPayload = {
+        ...selMsg.payload,
+        anchors: [matchedAnchor],
+        awaitingConfirmation: false,
+        isInteractive: false
+      }
+      aiChatStore.updateMessage(selectionMsgId, { payload: updatedPayload })
+      await updateAiChatMessageApi(Number(selectionMsgId), { payload: updatedPayload })
+    }
+
+    // 更新任务卡：主播已匹配
+    const updatedPayload1 = {
+      type: 'video_filter_task',
+      steps: [
+        {
+          label: '正在匹配主播',
+          status: 'completed' as const,
+          detail: `已匹配主播：${matchedAnchor.name}`
+        },
+        { label: '正在匹配主播产品', status: 'processing' as const },
+        { label: '正在查询产品视频', status: 'pending' as const }
+      ]
+    }
+    aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload1 })
+    await updateAiChatMessageApi(Number(taskCardMsgId), { payload: updatedPayload1 })
+
+    this.state.chatSteps.value[0].state = 'finish'
+    this.state.chatSteps.value[1].state = 'process'
+
+    const productRes = await getProductsApi({ all: true, anchor_id: matchedAnchor.id })
+    let matchedProducts = fuzzyMatchCandidates(sanitizedPrompt, productRes.list, (p) => p.name)
+    if (matchedProducts.length === 0 && productRes.list.length > 0) {
+      const kwRes = await recognizeIntentApi(sanitizedPrompt).then((r) => r.keywords || [])
+      if (kwRes.length) {
+        matchedProducts = fuzzyMatchByQueries(
+          kwRes,
+          productRes.list,
+          (p) => p.name,
+          (p) => p.id
+        )
+      }
+    }
+
+    if (matchedProducts.length === 0) {
+      const errorPayload = {
+        type: 'video_filter_task',
+        steps: [
+          {
+            label: '正在匹配主播',
+            status: 'completed' as const,
+            detail: `已匹配主播：${matchedAnchor.name}`
+          },
+          {
+            label: '正在匹配主播产品',
+            status: 'error' as const,
+            detail: `在主播 ${matchedAnchor.name} 下未找到对应的产品`
+          },
+          { label: '正在查询产品视频', status: 'pending' as const }
+        ]
+      } as unknown as MessagePayload
+      aiChatStore.updateMessage(taskCardMsgId, { payload: errorPayload })
+      await updateAiChatMessageApi(Number(taskCardMsgId), { payload: errorPayload })
+      this.state.chatSteps.value[1].state = 'error'
+      const failureContent = `在主播 ${matchedAnchor.name} 下未找到对应的产品，请检查输入的产品名称是否正确，或先在设置中为该主播添加产品数据。`
+      aiChatStore.addMessage({
+        id: `new_message_${Date.now()}`,
+        role: 'assistant',
+        content: failureContent,
+        timestamp: new Date()
+      })
+      if (currentAiChatId)
+        await addAiChatMessageApi({
+          ai_chat_id: currentAiChatId,
+          role: 'assistant',
+          content: failureContent
+        })
+      this.state.pendingConfirmationData.value = null
+      return
+    }
+
+    if (matchedProducts.length > 1) {
+      const productSelectionPayload = {
+        type: 'product_selection' as const,
+        products: matchedProducts,
+        anchorName: matchedAnchor.name,
+        awaitingConfirmation: true as const,
+        isInteractive: true as const
+      }
+      const selectionMessage = await addAiChatMessageApi({
+        ai_chat_id: currentAiChatId,
+        role: 'assistant',
+        content: `<span style="font-size: 12px; color: #a1a1aa;">在主播 <strong>${matchedAnchor.name}</strong> 下找到 <strong>${matchedProducts.length}</strong> 个匹配的产品，请选择：</span>`,
+        payload: productSelectionPayload
+      })
+      aiChatStore.addMessage({
+        id: selectionMessage.id.toString(),
+        role: 'assistant',
+        content: selectionMessage.content,
+        timestamp: new Date(),
+        payload: productSelectionPayload
+      })
+      this.state.isAwaitingConfirmation.value = true
+      this.state.pendingConfirmationData.value = {
+        selectionType: 'product_selection',
+        selectionMsgId: selectionMessage.id.toString(),
+        taskCardMsgId,
+        matchedAnchor,
+        candidates: matchedProducts,
+        prompt: sanitizedPrompt,
+        currentAiChatId,
+        options: { minDuration, maxDuration, maxRetries, retryInterval }
+      }
+      return
+    }
+
+    const matchedProduct = matchedProducts[0]
+    await this.continueAfterProductMatched(
+      taskCardMsgId,
+      matchedAnchor,
+      matchedProduct,
+      sanitizedPrompt,
+      currentAiChatId,
+      { minDuration, maxDuration, maxRetries, retryInterval }
+    )
+    this.state.pendingConfirmationData.value = null
+  }
+
+  /**
+   * 用户选择产品后继续：查询视频并展示视频选择卡
+   */
+  async confirmProductAndProceed(selectionMsgId: string, selectedProductId: number): Promise<void> {
+    const data = this.state.pendingConfirmationData.value
+    if (
+      !data ||
+      data.selectionType !== 'product_selection' ||
+      data.selectionMsgId !== selectionMsgId
+    ) {
+      return
+    }
+    const matchedProduct = data.candidates.find((p) => p.id === selectedProductId)
+    if (!matchedProduct) return
+
+    this.state.isAwaitingConfirmation.value = false
+    const { taskCardMsgId, matchedAnchor, prompt: sanitizedPrompt, currentAiChatId, options } = data
+
+    const selMsg = aiChatStore.getMessages().value.find((m) => m.id === selectionMsgId)
+    if (selMsg?.payload) {
+      const updatedPayload = {
+        ...selMsg.payload,
+        products: [matchedProduct],
+        awaitingConfirmation: false,
+        isInteractive: false
+      }
+      aiChatStore.updateMessage(selectionMsgId, { payload: updatedPayload })
+      await updateAiChatMessageApi(Number(selectionMsgId), { payload: updatedPayload })
+    }
+
+    await this.continueAfterProductMatched(
+      taskCardMsgId,
+      matchedAnchor,
+      matchedProduct,
+      sanitizedPrompt,
+      currentAiChatId,
+      options
+    )
+    this.state.pendingConfirmationData.value = null
+  }
+
+  /**
+   * 主播与产品均已确定后：更新任务卡、拉取视频、展示视频选择卡
+   */
+  private async continueAfterProductMatched(
+    taskCardMsgId: string,
+    matchedAnchor: Anchor,
+    matchedProduct: Product,
+    sanitizedPrompt: string,
+    currentAiChatId: number,
+    options: SmartCutOptions
+  ): Promise<void> {
+    const { minDuration = 80, maxDuration = 100, maxRetries = 20, retryInterval = 3000 } = options
+
+    const updatedPayload2 = {
+      type: 'video_filter_task',
+      steps: [
+        {
+          label: '正在匹配主播',
+          status: 'completed' as const,
+          detail: `已匹配主播：${matchedAnchor.name}`
+        },
+        {
+          label: '正在匹配主播产品',
+          status: 'completed' as const,
+          detail: `已匹配产品：${matchedProduct.name}`
+        },
+        { label: '正在查询产品视频', status: 'processing' as const }
+      ]
+    }
+    aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload2 })
+    await updateAiChatMessageApi(Number(taskCardMsgId), { payload: updatedPayload2 })
+    this.state.chatSteps.value[1].state = 'finish'
+    this.state.chatSteps.value[2].state = 'process'
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const videos = await getVideosApi({ product_id: matchedProduct.id })
+    if (!videos || videos.length === 0) {
+      const errorPayload = {
+        type: 'video_filter_task',
+        steps: [
+          {
+            label: '正在匹配主播',
+            status: 'completed' as const,
+            detail: `已匹配主播：${matchedAnchor.name}`
+          },
+          {
+            label: '正在匹配主播产品',
+            status: 'completed' as const,
+            detail: `已匹配产品：${matchedProduct.name}`
+          },
+          {
+            label: '正在查询产品视频',
+            status: 'error' as const,
+            detail: `未找到 "${matchedProduct.name}" 相关的素材视频`
+          }
+        ]
+      } as unknown as MessagePayload
+      aiChatStore.updateMessage(taskCardMsgId, { payload: errorPayload })
+      await updateAiChatMessageApi(Number(taskCardMsgId), { payload: errorPayload })
+      this.state.chatSteps.value[2].state = 'error'
+      const failureContent = `未找到 "${matchedProduct.name}" 相关的素材视频，请检查该产品下是否有已解析的视频，或稍后再试。`
+      aiChatStore.addMessage({
+        id: `new_message_${Date.now()}`,
+        role: 'assistant',
+        content: failureContent,
+        timestamp: new Date()
+      })
+      if (currentAiChatId)
+        await addAiChatMessageApi({
+          ai_chat_id: currentAiChatId,
+          role: 'assistant',
+          content: failureContent
+        })
+      return
+    }
+
+    const updatedPayload3 = {
+      type: 'video_filter_task',
+      steps: [
+        {
+          label: '正在匹配主播',
+          status: 'completed' as const,
+          detail: `已匹配主播：${matchedAnchor.name}`
+        },
+        {
+          label: '正在匹配主播产品',
+          status: 'completed' as const,
+          detail: `已匹配产品：${matchedProduct.name}`
+        },
+        {
+          label: '正在查询产品视频',
+          status: 'completed' as const,
+          detail: `找到 ${videos.length} 个相关素材`
+        }
+      ]
+    }
+    aiChatStore.updateMessage(taskCardMsgId, { payload: updatedPayload3 })
+    await updateAiChatMessageApi(Number(taskCardMsgId), { payload: updatedPayload3 })
+    this.state.chatSteps.value[2].state = 'finish'
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    const selectionPayload = {
+      type: 'video_selection',
+      videos: videosForMessagePayload(videos),
+      awaitingConfirmation: true,
+      isInteractive: true,
+      options: { minDuration, maxDuration, maxRetries, retryInterval },
+      prompt: sanitizedPrompt,
+      anchorId: matchedAnchor.id,
+      productId: matchedProduct.id,
+      productName: matchedProduct.name
+    }
+    const selectionMessage = await addAiChatMessageApi({
+      ai_chat_id: currentAiChatId,
+      role: 'assistant',
+      content: `<span style="font-size: 12px; color: #a1a1aa;">已为您筛选出主播 <strong>${matchedAnchor.name}</strong> 的 <strong>${matchedProduct.name}</strong> 相关素材，请勾选：</span>`,
+      payload: selectionPayload
+    })
+    const selectionMessageId = selectionMessage.id.toString()
+    aiChatStore.addMessage({
+      id: selectionMessageId,
+      role: 'assistant',
+      content: selectionMessage.content,
+      timestamp: new Date(),
+      payload: selectionPayload
+    })
+    this.state.isAwaitingConfirmation.value = true
+    this.state.pendingConfirmationData.value = {
+      selectionType: 'video_selection',
+      msgId: selectionMessageId,
+      dicts: [],
+      videos,
+      options: { minDuration, maxDuration, maxRetries, retryInterval },
+      prompt: sanitizedPrompt,
+      anchorId: matchedAnchor.id,
+      productId: matchedProduct.id,
+      productName: matchedProduct.name
+    }
     this.state.isProcessing.value = false
     aiChatStore.setCurrentChatProcessing(false)
   }
@@ -457,8 +834,13 @@ export class SmartCutAiService {
    * 启动智能剪辑 AI 流程
    * @param prompt 用户输入的提示词
    * @param options 剪辑选项
+   * @param recognizeResult 意图识别结果（含 keywords）；若不传且 prompt 匹配不到主播/产品时会内部请求 recognize 做关键词兜底匹配
    */
-  async startSmartCut(prompt: string, options: SmartCutOptions = {}): Promise<void> {
+  async startSmartCut(
+    prompt: string,
+    options: SmartCutOptions = {},
+    recognizeResult?: RecognizeResultForMatch
+  ): Promise<void> {
     if (this.state.isProcessing.value) return
 
     // 检查 VIP 是否可用（是 VIP 且未过期）
@@ -572,12 +954,25 @@ export class SmartCutAiService {
       payload: filterTaskPayload
     })
 
-    // 流程一：主播 -> 产品 -> 视频
+    // 流程一：主播 -> 产品 -> 视频（模糊匹配，多选时由用户选择）
     this.state.chatSteps.value[0].state = 'process'
     const anchorRes = await getAnchorsApi({ all: true })
-    const matchedAnchor = anchorRes.list.find((a) => sanitizedPrompt.includes(a.name))
+    let matchedAnchors = fuzzyMatchCandidates(sanitizedPrompt, anchorRes.list, (a) => a.name)
+    if (matchedAnchors.length === 0 && anchorRes.list.length > 0) {
+      const keywords = recognizeResult?.keywords?.length
+        ? recognizeResult.keywords
+        : await recognizeIntentApi(sanitizedPrompt).then((r) => r.keywords || [])
+      if (keywords.length) {
+        matchedAnchors = fuzzyMatchByQueries(
+          keywords,
+          anchorRes.list,
+          (a) => a.name,
+          (a) => a.id
+        )
+      }
+    }
 
-    if (!matchedAnchor) {
+    if (matchedAnchors.length === 0) {
       const errorPayload = {
         type: 'video_filter_task',
         steps: [
@@ -608,6 +1003,43 @@ export class SmartCutAiService {
       return
     }
 
+    // 多个主播匹配时，让用户选择
+    if (matchedAnchors.length > 1) {
+      const anchorSelectionPayload = {
+        type: 'anchor_selection' as const,
+        anchors: matchedAnchors,
+        awaitingConfirmation: true as const,
+        isInteractive: true as const
+      }
+      const selectionMessage = await addAiChatMessageApi({
+        ai_chat_id: currentAiChatId!,
+        role: 'assistant',
+        content: `<span style="font-size: 12px; color: #a1a1aa;">找到 <strong>${matchedAnchors.length}</strong> 个匹配的主播，请选择要剪辑的主播：</span>`,
+        payload: anchorSelectionPayload
+      })
+      aiChatStore.addMessage({
+        id: selectionMessage.id.toString(),
+        role: 'assistant',
+        content: selectionMessage.content,
+        timestamp: new Date(),
+        payload: anchorSelectionPayload
+      })
+      this.state.isAwaitingConfirmation.value = true
+      this.state.pendingConfirmationData.value = {
+        selectionType: 'anchor_selection',
+        selectionMsgId: selectionMessage.id.toString(),
+        taskCardMsgId,
+        candidates: matchedAnchors,
+        prompt: sanitizedPrompt,
+        currentAiChatId: currentAiChatId!,
+        options: { minDuration, maxDuration, maxRetries, retryInterval }
+      }
+      this.state.isProcessing.value = false
+      aiChatStore.setCurrentChatProcessing(false)
+      return
+    }
+
+    const matchedAnchor = matchedAnchors[0]
     // 更新状态：主播已匹配
     const updatedPayload1 = {
       type: 'video_filter_task',
@@ -626,12 +1058,25 @@ export class SmartCutAiService {
     this.state.chatSteps.value[0].state = 'finish'
     await new Promise((resolve) => setTimeout(resolve, 300))
 
-    // 2. 匹配产品
+    // 2. 匹配产品（模糊匹配，多选时由用户选择；拿不到时用 recognize 关键词兜底）
     this.state.chatSteps.value[1].state = 'process'
     const productRes = await getProductsApi({ all: true, anchor_id: matchedAnchor.id })
-    const matchedProduct = productRes.list.find((p) => sanitizedPrompt.includes(p.name))
+    let matchedProducts = fuzzyMatchCandidates(sanitizedPrompt, productRes.list, (p) => p.name)
+    if (matchedProducts.length === 0 && productRes.list.length > 0) {
+      const keywords = recognizeResult?.keywords?.length
+        ? recognizeResult.keywords
+        : await recognizeIntentApi(sanitizedPrompt).then((r) => r.keywords || [])
+      if (keywords.length) {
+        matchedProducts = fuzzyMatchByQueries(
+          keywords,
+          productRes.list,
+          (p) => p.name,
+          (p) => p.id
+        )
+      }
+    }
 
-    if (!matchedProduct) {
+    if (matchedProducts.length === 0) {
       const errorPayload = {
         type: 'video_filter_task',
         steps: [
@@ -670,6 +1115,45 @@ export class SmartCutAiService {
       return
     }
 
+    // 多个产品匹配时，让用户选择
+    if (matchedProducts.length > 1) {
+      const productSelectionPayload = {
+        type: 'product_selection' as const,
+        products: matchedProducts,
+        anchorName: matchedAnchor.name,
+        awaitingConfirmation: true as const,
+        isInteractive: true as const
+      }
+      const selectionMessage = await addAiChatMessageApi({
+        ai_chat_id: currentAiChatId!,
+        role: 'assistant',
+        content: `<span style="font-size: 12px; color: #a1a1aa;">在主播 <strong>${matchedAnchor.name}</strong> 下找到 <strong>${matchedProducts.length}</strong> 个匹配的产品，请选择：</span>`,
+        payload: productSelectionPayload
+      })
+      aiChatStore.addMessage({
+        id: selectionMessage.id.toString(),
+        role: 'assistant',
+        content: selectionMessage.content,
+        timestamp: new Date(),
+        payload: productSelectionPayload
+      })
+      this.state.isAwaitingConfirmation.value = true
+      this.state.pendingConfirmationData.value = {
+        selectionType: 'product_selection',
+        selectionMsgId: selectionMessage.id.toString(),
+        taskCardMsgId,
+        matchedAnchor,
+        candidates: matchedProducts,
+        prompt: sanitizedPrompt,
+        currentAiChatId: currentAiChatId!,
+        options: { minDuration, maxDuration, maxRetries, retryInterval }
+      }
+      this.state.isProcessing.value = false
+      aiChatStore.setCurrentChatProcessing(false)
+      return
+    }
+
+    const matchedProduct = matchedProducts[0]
     // 更新状态：产品已匹配
     const updatedPayload2 = {
       type: 'video_filter_task',
@@ -803,6 +1287,7 @@ export class SmartCutAiService {
     // 暂停流程，等待用户确认
     this.state.isAwaitingConfirmation.value = true
     this.state.pendingConfirmationData.value = {
+      selectionType: 'video_selection',
       msgId: selectionMessageId,
       dicts: [], // 流程一暂时不用传统字典匹配
       videos: videos,

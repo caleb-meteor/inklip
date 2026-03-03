@@ -22,7 +22,7 @@ const UNSUPPORTED_INTENT_TIP = `我可能还没有完全理解你的意思，可
 import { useRealtimeSync } from '../composables/useRealtimeSync'
 import { useVideoUpload } from '../composables/useVideoUpload'
 import { useRealtimeStore } from '../stores/realtime'
-import type { HomePlayPayload, VideoItem, SmartCutItem } from '../api/video'
+import type { HomePlayPayload } from '../api/video'
 import { searchVideosApi } from '../api/video'
 
 const router = useRouter()
@@ -44,7 +44,7 @@ const isLoadingAiChats = computed(() => aiChatStore.getIsLoadingAiChats().value)
 
 // 检查是否有任务正在进行中
 const isTaskRunning = computed(() => {
-  return aiChatStore.getIsCurrentChatProcessing().value
+  return aiChatStore.getHasProcessingTask().value
 })
 
 const currentPlayingVideo = ref<HomePlayPayload | null>(null)
@@ -148,10 +148,13 @@ const handleSend = async (val: string): Promise<void> => {
     keyword_weights: intentResult.keyword_weights
   }
 
-  // 识别到剪辑意图后，直接进入智能剪辑流程（会创建对话、添加用户消息并执行剪辑）
+  // 识别到剪辑意图后，直接进入智能剪辑流程（会创建对话、添加用户消息并执行剪辑；传入 recognize 结果供主播/产品匹配不到时用关键词兜底）
   const intent = intentPayload?.intent as IntentType | undefined
   if (intent === INTENT_CLIP) {
-    await smartCutAiService.startSmartCut(trimmed)
+    await smartCutAiService.startSmartCut(trimmed, undefined, {
+      keywords: intentPayload.keywords,
+      keyword_weights: intentPayload.keyword_weights
+    })
     return
   }
 

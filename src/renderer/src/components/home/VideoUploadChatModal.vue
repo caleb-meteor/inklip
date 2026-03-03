@@ -153,7 +153,8 @@ const handleConfirm = async (): Promise<void> => {
     else if (formValue.value.anchor) anchorId = await getDictId(formValue.value.anchor, 'anchor')
 
     if (props.preSelectedProduct) productId = props.preSelectedProduct.id
-    else if (formValue.value.product) productId = await getDictId(formValue.value.product, 'product')
+    else if (formValue.value.product)
+      productId = await getDictId(formValue.value.product, 'product')
 
     const res = await uploadVideosBatchApi(
       videoPaths.value,

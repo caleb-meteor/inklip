@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NIcon, NTooltip, NEllipsis, NProgress } from 'naive-ui'
+import { NIcon, NTooltip, NEllipsis, NProgress, useMessage } from 'naive-ui'
 import {
   ChatbubbleOutline,
   AddOutline,
   ListOutline,
   ChevronForward,
-  TrashOutline
+  TrashOutline,
+  DownloadOutline
 } from '@vicons/ionicons5'
 import type { AiChatTopic } from '../../api/aiChat'
-import { getSmartCutsApi, deleteSmartCutApi, getSmartCutApi, type SmartCutItem, type HomePlayPayload } from '../../api/video'
+import {
+  getSmartCutsApi,
+  deleteSmartCutApi,
+  getSmartCutApi,
+  type SmartCutItem,
+  type HomePlayPayload
+} from '../../api/video'
 import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
 import { useRealtimeStore } from '../../stores/realtime'
 import { aiChatStore } from '../../services/aiChatStore'
@@ -34,6 +41,7 @@ const clipHistory = ref<SmartCutItem[]>([])
 const loadingHistory = ref(false)
 const historyPage = ref(1)
 const historyHasMore = ref(true)
+const message = useMessage()
 
 const handleSelectChat = (chat: AiChatTopic): void => {
   emit('select-chat', chat)
@@ -51,6 +59,41 @@ const handleDeleteChat = async (e: Event, chat: AiChatTopic) => {
 const handleDeleteClip = async (item: SmartCutItem) => {
   await deleteSmartCutApi(item.id)
   clipHistory.value = clipHistory.value.filter((i) => i.id !== item.id)
+  message.success('已删除剪辑历史')
+}
+
+const handleExportClip = async (item: SmartCutItem) => {
+  if (item.status !== 1) {
+    message.warning('视频尚未处理完成，无法导出')
+    return
+  }
+  const filePath = item.path || item.fileUrl
+  if (!filePath) {
+    message.error('未找到视频文件路径')
+    return
+  }
+
+  const loadingMsg = message.loading('正在准备导出...', { duration: 0 })
+  try {
+    const fileName = item.name
+      ? item.name.endsWith('.mp4')
+        ? item.name
+        : `${item.name}.mp4`
+      : 'smart-cut.mp4'
+    const result = await window.api.downloadVideo(filePath, fileName)
+    if (result.success) {
+      message.success(`已保存至: ${result.path}`)
+    } else if (result.canceled) {
+      message.info('已取消导出')
+    } else {
+      message.error(result.error || '导出失败')
+    }
+  } catch (error) {
+    console.error('导出失败:', error)
+    message.error('导出过程中发生错误')
+  } finally {
+    loadingMsg.destroy()
+  }
 }
 
 const fetchHistory = async () => {
@@ -89,8 +132,7 @@ watch(
     const currentMessages = aiChatStore.getMessages().value
     const lastMsg = currentMessages[currentMessages.length - 1]
     const payload: any = lastMsg?.payload
-    const aiGenVideoId =
-      payload?.smartCutTask?.aiGenVideoId || payload?.aiGenVideoId || payload?.id
+    const aiGenVideoId = payload?.smartCutTask?.aiGenVideoId || payload?.aiGenVideoId || payload?.id
 
     if (!aiGenVideoId) return
 
@@ -191,12 +233,12 @@ const usagePercentage = computed(() => {
 const isExpired = computed(() => {
   const expiredAt = currentUsage.value?.expiredAt
   if (!expiredAt) return false
-  
+
   const now = new Date()
   const exp = new Date(expiredAt)
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
   const expDate = new Date(exp.getFullYear(), exp.getMonth(), exp.getDate()).getTime()
-  
+
   return today > expDate
 })
 
@@ -215,6 +257,22 @@ const formatDate = (dateStr?: string) => {
   return `${year}-${month}-${day}`
 }
 
+const formatChatTime = (dateStr?: string, groupLabel?: string) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return ''
+  
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const day = date.getDate().toString().padStart(2, '0')
+  
+  if (groupLabel === '今天' || groupLabel === '昨天') {
+    return `${hours}:${minutes}`
+  }
+  return `${month}-${day}`
+}
+
 const onHistoryScroll = (ev: Event) => {
   const el = ev.target as HTMLElement
   if (!el || activeTab.value !== 'history' || !historyHasMore.value || loadingHistory.value) return
@@ -224,6 +282,38 @@ const onHistoryScroll = (ev: Event) => {
     fetchHistory()
   }
 }
+
+const groupedAiChats = computed(() => {
+  const groups = [
+    { label: '今天', chats: [] as AiChatTopic[] },
+    { label: '昨天', chats: [] as AiChatTopic[] },
+    { label: '一周', chats: [] as AiChatTopic[] },
+    { label: '更早', chats: [] as AiChatTopic[] }
+  ]
+
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000
+  const sevenDaysAgoStart = todayStart - 7 * 24 * 60 * 60 * 1000
+
+  props.aiChats.forEach((chat) => {
+    // 优先使用更新时间，如果没有则用创建时间
+    const timeStr = chat.updated_at || chat.created_at
+    const chatTime = timeStr ? new Date(timeStr).getTime() : 0
+
+    if (chatTime >= todayStart) {
+      groups[0].chats.push(chat)
+    } else if (chatTime >= yesterdayStart) {
+      groups[1].chats.push(chat)
+    } else if (chatTime >= sevenDaysAgoStart) {
+      groups[2].chats.push(chat)
+    } else {
+      groups[3].chats.push(chat)
+    }
+  })
+
+  return groups.filter((g) => g.chats.length > 0)
+})
 
 const onRecentScroll = (ev: Event) => {
   const el = ev.target as HTMLElement
@@ -283,28 +373,34 @@ const onRecentScroll = (ev: Event) => {
       <div v-if="activeTab === 'recent'" class="tab-content" @scroll="onRecentScroll">
         <div v-if="!aiChats || !aiChats.length" class="history-empty">暂无记录</div>
         <div v-else class="history-list">
-          <div
-            v-for="chat in aiChats"
-            :key="chat.id"
-            class="nav-item history-item"
-            @click="handleSelectChat(chat)"
-          >
-            <n-icon size="16"><ChatbubbleOutline /></n-icon>
-            <span class="history-title">{{ chat.topic || '未命名项目' }}</span>
-            <span v-if="(chat.unread_count ?? 0) > 0" class="unread-badge">{{
-              chat.unread_count! > 99 ? '99+' : chat.unread_count
-            }}</span>
-            <div class="item-actions">
-              <n-tooltip trigger="hover" placement="top">
-                <template #trigger>
-                  <div class="action-btn delete-btn" @click="(e) => handleDeleteChat(e, chat)">
-                    <n-icon size="14"><TrashOutline /></n-icon>
-                  </div>
-                </template>
-                删除记录
-              </n-tooltip>
+          <template v-for="group in groupedAiChats" :key="group.label">
+            <div class="history-group-title">{{ group.label }}</div>
+            <div
+              v-for="chat in group.chats"
+              :key="chat.id"
+              class="nav-item history-item"
+              @click="handleSelectChat(chat)"
+            >
+              <n-icon size="16"><ChatbubbleOutline /></n-icon>
+              <div class="history-content-wrapper">
+                <span class="history-title">{{ chat.topic || '未命名项目' }}</span>
+                <span class="history-time">{{ formatChatTime(chat.updated_at || chat.created_at, group.label) }}</span>
+              </div>
+              <span v-if="(chat.unread_count ?? 0) > 0" class="unread-badge">{{
+                chat.unread_count! > 99 ? '99+' : chat.unread_count
+              }}</span>
+              <div class="item-actions">
+                <n-tooltip trigger="hover" placement="top">
+                  <template #trigger>
+                    <div class="action-btn delete-btn" @click="(e) => handleDeleteChat(e, chat)">
+                      <n-icon size="14"><TrashOutline /></n-icon>
+                    </div>
+                  </template>
+                  删除记录
+                </n-tooltip>
+              </div>
             </div>
-          </div>
+          </template>
         </div>
       </div>
 
@@ -342,7 +438,15 @@ const onRecentScroll = (ev: Event) => {
               </div>
             </div>
             <div class="clip-actions">
-              <n-tooltip trigger="hover" placement="top">
+              <n-tooltip v-if="item.status === 1" trigger="hover" placement="left">
+                <template #trigger>
+                  <div class="action-btn export-btn" @click.stop="handleExportClip(item)">
+                    <n-icon size="14"><DownloadOutline /></n-icon>
+                  </div>
+                </template>
+                导出视频
+              </n-tooltip>
+              <n-tooltip trigger="hover" placement="left">
                 <template #trigger>
                   <div class="action-btn delete-btn" @click.stop="handleDeleteClip(item)">
                     <n-icon size="14"><TrashOutline /></n-icon>
@@ -377,7 +481,7 @@ const onRecentScroll = (ev: Event) => {
             color="#f87171"
             rail-color="#34d399"
             :height="6"
-            style="margin: 4px 0 8px 0; transform: scaleX(-1);"
+            style="margin: 4px 0 8px 0; transform: scaleX(-1)"
           />
         </div>
         <div v-if="currentUsage?.expiredAt" class="usage-row">
@@ -539,6 +643,13 @@ const onRecentScroll = (ev: Event) => {
   gap: 2px;
 }
 
+.history-group-title {
+  font-size: 11px;
+  color: #71717a;
+  font-weight: 500;
+  margin: 12px 10px 4px;
+}
+
 .load-more-tip {
   text-align: center;
   color: #71717a;
@@ -570,6 +681,19 @@ const onRecentScroll = (ev: Event) => {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+
+.history-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+}
+
+.history-time {
+  font-size: 10px;
+  color: #71717a;
 }
 
 .unread-badge {
@@ -615,6 +739,11 @@ const onRecentScroll = (ev: Event) => {
   color: #fff;
 }
 
+.export-btn:hover {
+  background: rgba(79, 172, 254, 0.2);
+  color: #4facfe;
+}
+
 .delete-btn:hover {
   background: rgba(239, 68, 68, 0.2);
   color: #f87171;
@@ -642,9 +771,16 @@ const onRecentScroll = (ev: Event) => {
   bottom: 0;
   width: 48px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.9) 10%, rgba(0, 0, 0, 1) 100%);
+  gap: 8px;
+  background: linear-gradient(
+    270deg,
+    rgba(0, 0, 0, 0.95) 40%,
+    rgba(0, 0, 0, 0.7) 80%,
+    transparent 100%
+  );
   transform: translateX(100%);
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 5;
