@@ -3,6 +3,8 @@ import fs from 'fs'
 import path, { join } from 'path'
 import { downloadFileSimple } from '../utils/download'
 import { BackendService } from '../services/backend'
+import { getDataRoot } from '../utils/appPath'
+import { toShortPathIfNeeded } from '../utils/pathWin'
 
 export function registerIpcHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -132,15 +134,15 @@ export function registerIpcHandlers(
   // 视频数据目录配置相关 IPC
   // 注意：实际配置由 Python 后端管理，这里只返回默认值作为后备
   ipcMain.handle('get-video-data-directory', () => {
-    return app.getPath('userData')
+    return getDataRoot()
   })
 
   ipcMain.handle('select-video-data-directory', async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (!win) return { success: false, error: '没有活动窗口' }
 
-    // 注意：实际配置由 Python 后端管理，这里只返回默认值作为后备
-    const currentDir = app.getPath('userData')
+    // 注意：实际配置由 Go 后端管理，这里只返回默认值作为后备
+    const currentDir = getDataRoot()
     const result = await dialog.showOpenDialog(win, {
       title: '选择视频数据目录',
       defaultPath: currentDir,
@@ -314,8 +316,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('get-app-config', () => {
-    // 注意：实际配置由 Python 后端管理，这里只返回默认值作为后备
-    return { videoDataDirectory: app.getPath('userData') }
+    return { videoDataDirectory: getDataRoot() }
   })
 
   ipcMain.handle('get-app-version', () => {
@@ -329,7 +330,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('check-resources', async () => {
-    const dataPath = app.getPath('userData')
+    const dataPath = getDataRoot()
     const modelsDir = join(dataPath, 'models')
     if (!fs.existsSync(modelsDir)) {
       return false
@@ -355,11 +356,13 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('download-resources', async () => {
-    const dataPath = app.getPath('userData')
-    const modelsDir = join(dataPath, 'models')
+    const dataPath = getDataRoot()
+    let modelsDir = join(dataPath, 'models')
     if (!fs.existsSync(modelsDir)) {
       fs.mkdirSync(modelsDir, { recursive: true })
     }
+    // Windows 中文路径下使用 8.3 短路径，避免下载与 SHA256 校验异常
+    modelsDir = toShortPathIfNeeded(modelsDir)
 
     // 使用 HF Mirror 镜像站点下载模型，提升国内下载速度
     // 参考: https://hf-mirror.com/

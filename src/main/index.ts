@@ -167,7 +167,12 @@ function createWindow(): void {
 app.commandLine.appendSwitch('lang', 'zh-CN')
 app.setName('inklip')
 
-// 仅 Windows 打包版：从受保护目录运行时 Chromium 会报 "Unable to move the cache: 拒绝访问"，将缓存强制放到 userData
+// Windows 打包版：数据保存到 exe 同目录 "data"，不再使用 AppData（便于便携、避免中文路径问题）
+if (app.isPackaged && process.platform === 'win32') {
+  const exeDir = path.dirname(app.getPath('exe'))
+  app.setPath('userData', path.join(exeDir, 'data'))
+}
+// 仅 Windows 打包版：Chromium 缓存也放到 userData，避免受保护目录报 "Unable to move the cache: 拒绝访问"
 if (app.isPackaged && process.platform === 'win32') {
   app.commandLine.appendSwitch('disk-cache-dir', path.join(app.getPath('userData'), 'Cache'))
   app.commandLine.appendSwitch('gpu-cache-dir', path.join(app.getPath('userData'), 'GPUCache'))

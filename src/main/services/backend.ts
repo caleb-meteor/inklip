@@ -2,6 +2,7 @@ import { app, type BrowserWindow } from 'electron'
 import { spawn, execSync, type ChildProcess } from 'child_process'
 import fs from 'fs'
 import path, { join } from 'path'
+import { getDataRoot } from '../utils/appPath'
 
 /**
  * Windows 下将长路径转为 8.3 短路径，避免中文路径导致 spawn 的子进程无法启动或参数乱码
@@ -99,8 +100,8 @@ export class BackendService {
       return
     }
 
-    // APP_DATA_PATH 使用默认的 userData（用于 models、db 等）
-    const appDataPath = app.getPath('userData')
+    // 数据目录：Windows 打包版为 exe 同目录 User Data，否则为 userData
+    const appDataPath = getDataRoot()
     const videoDataPath = appDataPath
 
     // For both Windows and Mac (flat binary), the bin path is the directory containing the executable
