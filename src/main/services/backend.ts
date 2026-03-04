@@ -125,9 +125,11 @@ export class BackendService {
     console.log('[Backend Service] Backend video data path:', videoDataPath)
     console.log('[Backend Service] Backend bin path:', binPath)
 
-    // 始终设置 VIDEO_DATA_PATH 环境变量（可能与 APP_DATA_PATH 相等）
+    // 始终设置 VIDEO_DATA_PATH、APP_VERSION（前端版本，供后端注册设备时上报云端）
     const env = { ...process.env }
     env.VIDEO_DATA_PATH = videoDataPath
+    const appVersion = app.getVersion()
+    if (appVersion) env.APP_VERSION = appVersion
     const commandStr = `cd "${cwdToSpawn}" && "${pathToSpawn}" ${args.map((a) => `"${a}"`).join(' ')}`
     console.log('[Backend Service] Backend command to run manually:')
     console.log(commandStr)

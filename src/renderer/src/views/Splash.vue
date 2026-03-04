@@ -104,8 +104,9 @@ onMounted(async () => {
           }
         }
 
-        // Update the holding variable, not status directly
-        resourceStatusText.value = `正在下载资源文件... (${currentText} / ${totalText}) ${progress.percentage}%${speedText}`
+        // 下载百分比保留 2 位小数
+        const pct = Number(progress.percentage).toFixed(2)
+        resourceStatusText.value = `正在下载资源文件... (${currentText} / ${totalText}) ${pct}%${speedText}`
 
         // Update percentage directly as it's visual only
         const downloadPhase = progress.percentage * 0.6

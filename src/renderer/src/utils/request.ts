@@ -57,9 +57,12 @@ service.interceptors.response.use(
     return res.data
   },
   (error) => {
-    // 网络异常（超时、断网、服务不可用等）在此统一弹窗
-    const text = getNetworkErrorMessage(error)
-    message.error(text)
+    // silent 为 true 时不弹窗（如上报设备版本等后台请求）
+    const silent = (error.config as { silent?: boolean })?.silent
+    if (!silent) {
+      const text = getNetworkErrorMessage(error)
+      message.error(text)
+    }
     if (import.meta.env.DEV) {
       console.error('[request]', error)
     }

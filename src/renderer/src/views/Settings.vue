@@ -12,9 +12,14 @@ import {
   NAlert,
   NIcon,
   NH2,
-  NInputGroup
+  NInputGroup,
+  NDivider
 } from 'naive-ui'
-import { ArrowBack, FolderOpenOutline, KeyOutline } from '@vicons/ionicons5'
+import {
+  ArrowBack,
+  FolderOpenOutline,
+  KeyOutline
+} from '@vicons/ionicons5'
 import { saveConfig, getConfig, setApiKey, getApiKey, validateApiKey } from '../api/config'
 
 const router = useRouter()
@@ -45,6 +50,21 @@ const maskedApiKey = computed(() => {
   const last4 = savedApiKey.slice(-4)
   return first4 + '********' + last4
 })
+
+const copyFullApiKey = async (): Promise<void> => {
+  const savedApiKey = localStorage.getItem('apiKey')
+  if (!savedApiKey) {
+    message.error('当前没有已保存的 API Key')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(savedApiKey)
+    message.success('已复制完整 API Key')
+  } catch (err) {
+    console.error('复制 API Key 失败:', err)
+    message.error('复制失败，请稍后重试')
+  }
+}
 
 const loadVideoDataDirectory = async (): Promise<void> => {
   const dir = await window.api.getVideoDataDirectory()
@@ -225,9 +245,23 @@ onMounted(() => {
                   <div v-if="hasApiKey && !isEditingApiKey" class="api-key-display">
                     <n-input :value="maskedApiKey" readonly type="text">
                       <template #suffix>
-                        <n-button text type="primary" @click="isEditingApiKey = true"
-                          >修改</n-button
+                        <n-button
+                          text
+                          type="primary"
+                          title="修改 API Key"
+                          @click="isEditingApiKey = true"
                         >
+                          修改
+                        </n-button>
+                        <n-divider vertical style="margin: 0 12px" />
+                        <n-button
+                          text
+                          type="primary"
+                          title="复制完整 API Key"
+                          @click="copyFullApiKey"
+                        >
+                          复制
+                        </n-button>
                       </template>
                     </n-input>
                   </div>

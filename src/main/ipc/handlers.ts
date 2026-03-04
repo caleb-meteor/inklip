@@ -132,7 +132,7 @@ export function registerIpcHandlers(
   })
 
   // 视频数据目录配置相关 IPC
-  // 注意：实际配置由 Python 后端管理，这里只返回默认值作为后备
+  // 注意：实际配置由 Go 后端管理，这里只返回默认值作为后备
   ipcMain.handle('get-video-data-directory', () => {
     return getDataRoot()
   })
@@ -406,7 +406,10 @@ export function registerIpcHandlers(
       }
     ]
 
-    for (const resource of resources) {
+    const totalResources = resources.length
+
+    for (let index = 0; index < resources.length; index++) {
+      const resource = resources[index]
       const filePath = join(modelsDir, resource.name)
       // 使用简化的单线程下载（适合镜像站点）
       await downloadFileSimple(
@@ -415,9 +418,17 @@ export function registerIpcHandlers(
         (progress) => {
           const mainWindow = getMainWindow()
           if (mainWindow) {
-            console.log(`[IPC] Sending progress for ${resource.name}: ${progress.percentage}%`)
+            const pct = Number(progress.percentage).toFixed(2)
+            const overallPercentage =
+              ((index + progress.percentage / 100) / totalResources) * 100
+            console.log(
+              `[IPC] Sending progress for ${resource.name}: file=${pct}%, overall=${overallPercentage.toFixed(
+                2
+              )}%`
+            )
             mainWindow.webContents.send('download-progress', {
               file: resource.name,
+              overallPercentage,
               ...progress
             })
           } else {
