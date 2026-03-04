@@ -3,7 +3,6 @@ import fs from 'fs'
 import path, { join } from 'path'
 import { downloadFileSimple } from '../utils/download'
 import { BackendService } from '../services/backend'
-import { getDataRoot } from '../utils/appPath'
 import { toShortPathIfNeeded } from '../utils/pathWin'
 
 export function registerIpcHandlers(
@@ -134,7 +133,7 @@ export function registerIpcHandlers(
   // 视频数据目录配置相关 IPC
   // 注意：实际配置由 Go 后端管理，这里只返回默认值作为后备
   ipcMain.handle('get-video-data-directory', () => {
-    return getDataRoot()
+    return app.getPath('userData')
   })
 
   ipcMain.handle('select-video-data-directory', async () => {
@@ -142,7 +141,7 @@ export function registerIpcHandlers(
     if (!win) return { success: false, error: '没有活动窗口' }
 
     // 注意：实际配置由 Go 后端管理，这里只返回默认值作为后备
-    const currentDir = getDataRoot()
+    const currentDir = app.getPath('userData')
     const result = await dialog.showOpenDialog(win, {
       title: '选择视频数据目录',
       defaultPath: currentDir,
@@ -316,7 +315,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('get-app-config', () => {
-    return { videoDataDirectory: getDataRoot() }
+    return { videoDataDirectory: app.getPath('userData') }
   })
 
   ipcMain.handle('get-app-version', () => {
@@ -330,7 +329,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('check-resources', async () => {
-    const dataPath = getDataRoot()
+    const dataPath = app.getPath('userData')
     const modelsDir = join(dataPath, 'models')
     if (!fs.existsSync(modelsDir)) {
       return false
@@ -356,7 +355,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('download-resources', async () => {
-    const dataPath = getDataRoot()
+    const dataPath = app.getPath('userData')
     let modelsDir = join(dataPath, 'models')
     if (!fs.existsSync(modelsDir)) {
       fs.mkdirSync(modelsDir, { recursive: true })

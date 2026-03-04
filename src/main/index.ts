@@ -167,10 +167,10 @@ function createWindow(): void {
 app.commandLine.appendSwitch('lang', 'zh-CN')
 app.setName('inklip')
 
-// Windows 打包版：数据保存到 exe 同目录 "data"，不再使用 AppData（便于便携、避免中文路径问题）
+// Windows 打包版：数据保存到 C:\ProgramData\Inklip，避免用户目录中文路径问题，且升级/重装不丢数据
 if (app.isPackaged && process.platform === 'win32') {
-  const exeDir = path.dirname(app.getPath('exe'))
-  app.setPath('userData', path.join(exeDir, 'data'))
+  const programData = process.env.PROGRAMDATA || 'C:\\ProgramData'
+  app.setPath('userData', path.join(programData, 'Inklip'))
 }
 // 仅 Windows 打包版：Chromium 缓存也放到 userData，避免受保护目录报 "Unable to move the cache: 拒绝访问"
 if (app.isPackaged && process.platform === 'win32') {
