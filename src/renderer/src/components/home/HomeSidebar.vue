@@ -753,10 +753,7 @@ const doDeleteProduct = async (product: Product) => {
 
                   <!-- Videos -->
                   <div
-                    v-for="video in getProductVideos(product.id).slice(
-                      0,
-                      getProductVideos(product.id).length < MAX_VIDEOS_PER_PRODUCT ? 5 : 6
-                    )"
+                    v-for="video in getProductVideos(product.id)"
                     :key="video.id"
                     class="video-preview-card"
                     @dblclick="emit('play-video', { video, videoType: 'material' })"
