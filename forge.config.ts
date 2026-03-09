@@ -5,6 +5,55 @@ import { MakerAppX, type MakerAppXConfig } from '@electron-forge/maker-appx'
 import path from 'path'
 import fs from 'fs-extra'
 
+// 动态生成 APPX manifest（默认模板与 SDK 10.0.26100+ 不兼容）
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf-8'))
+const appxVersion = `${pkg.version}.0`
+const appxManifestDir = path.join(__dirname, 'out', '.appx-manifest')
+const appxManifestPath = path.join(appxManifestDir, 'AppxManifest.xml')
+fs.ensureDirSync(appxManifestDir)
+fs.writeFileSync(
+  appxManifestPath,
+  `<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
+  <Identity Name="calebMeteor.414460B6D09AC"
+    ProcessorArchitecture="x64"
+    Publisher="CN=36150C96-6074-4814-8057-59B6580F873A"
+    Version="${appxVersion}" />
+  <Properties>
+    <DisplayName>影氪</DisplayName>
+    <PublisherDisplayName>calebMeteor</PublisherDisplayName>
+    <Description>智能视频剪辑工具</Description>
+    <Logo>assets\\SampleAppx.50x50.png</Logo>
+  </Properties>
+  <Resources>
+    <Resource Language="zh-CN" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust"/>
+  </Capabilities>
+  <Applications>
+    <Application Id="Inklip" Executable="app\\inklip.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        BackgroundColor="#464646"
+        DisplayName="影氪"
+        Square150x150Logo="assets\\SampleAppx.150x150.png"
+        Square44x44Logo="assets\\SampleAppx.44x44.png"
+        Description="智能视频剪辑工具">
+        <uap:DefaultTile Wide310x150Logo="assets\\SampleAppx.310x150.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+</Package>
+`,
+  'utf-8'
+)
+
 const config: ForgeConfig = {
   packagerConfig: {
     name: '影氪',
@@ -50,7 +99,9 @@ const config: ForgeConfig = {
         packageDisplayName: '影氪',
         packageDescription: '智能视频剪辑工具',
         packageName: 'Inklip',
+        packageExecutable: 'app\\inklip.exe',
         makeVersionWinStoreCompatible: true,
+        manifest: appxManifestPath,
         identityName: 'calebMeteor.414460B6D09AC',
         publisherDisplayName: 'calebMeteor',
         ...(process.env.APPX_DEV_CERT
