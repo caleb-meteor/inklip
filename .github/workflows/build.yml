@@ -124,6 +124,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Create APPX signing certificate
+        if: matrix.platform == 'win32'
+        shell: powershell
+        run: |
+          $cert = New-SelfSignedCertificate -Type Custom `
+            -Subject "CN=36150C96-6074-4814-8057-59B6580F873A" `
+            -KeyUsage DigitalSignature `
+            -FriendlyName "Inklip Dev Cert" `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $pwd = ConvertTo-SecureString -String "inklip-ci-build" -Force -AsPlainText
+          $certPath = "${{ github.workspace }}\dev-cert.pfx"
+          Export-PfxCertificate -cert $cert -FilePath $certPath -Password $pwd
+          echo "APPX_DEV_CERT=$certPath" >> $env:GITHUB_ENV
+          echo "APPX_CERT_PASS=inklip-ci-build" >> $env:GITHUB_ENV
+
       - name: Build Electron App
         shell: bash
         run: |
@@ -132,6 +148,8 @@ jobs:
           npx electron-forge make --arch ${{ matrix.arch }}
         env:
           TARGET_ARCH: ${{ matrix.arch }}
+          APPX_DEV_CERT: ${{ env.APPX_DEV_CERT }}
+          APPX_CERT_PASS: ${{ env.APPX_CERT_PASS }}
 
       - name: List build output (debug)
         shell: bash

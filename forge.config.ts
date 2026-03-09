@@ -52,8 +52,14 @@ const config: ForgeConfig = {
         packageName: 'Inklip',
         makeVersionWinStoreCompatible: true,
         identityName: 'calebMeteor.414460B6D09AC',
-        publisherDisplayName: 'calebMeteor'
-      } as MakerAppXConfig & { identityName: string; publisherDisplayName: string },
+        publisherDisplayName: 'calebMeteor',
+        ...(process.env.APPX_DEV_CERT
+          ? { devCert: process.env.APPX_DEV_CERT, certPass: process.env.APPX_CERT_PASS }
+          : {})
+      } as MakerAppXConfig & {
+        identityName: string
+        publisherDisplayName: string
+      },
       ['win32']
     )
   ],
