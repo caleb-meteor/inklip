@@ -1,6 +1,7 @@
 import type { ForgeConfig } from '@electron-forge/shared-types'
 import { MakerDMG } from '@electron-forge/maker-dmg'
 import { MakerZIP } from '@electron-forge/maker-zip'
+import { MakerAppX, type MakerAppXConfig } from '@electron-forge/maker-appx'
 import path from 'path'
 import fs from 'fs-extra'
 
@@ -41,8 +42,20 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [
-    new MakerDMG({}, ['darwin']), // Mac 安装包 dmg（手动安装用）
-    new MakerZIP({}, ['win32']) // Windows zip
+    new MakerDMG({}, ['darwin']),
+    new MakerZIP({}, ['win32']),
+    new MakerAppX(
+      {
+        publisher: 'CN=36150C96-6074-4814-8057-59B6580F873A',
+        packageDisplayName: '影氪',
+        packageDescription: '智能视频剪辑工具',
+        packageName: 'Inklip',
+        makeVersionWinStoreCompatible: true,
+        identityName: 'calebMeteor.414460B6D09AC',
+        publisherDisplayName: 'calebMeteor'
+      } as MakerAppXConfig & { identityName: string; publisherDisplayName: string },
+      ['win32']
+    )
   ],
   hooks: {
     postPackage: async (forgeConfig, options) => {

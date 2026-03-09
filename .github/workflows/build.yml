@@ -151,8 +151,8 @@ jobs:
             # macOS: 查找 DMG 文件 (Electron Forge MakerDMG 输出)
             find out/make -type f -name "*.dmg" -exec cp {} collected-artifacts/ \;
           elif [ "${{ matrix.platform }}" = "win32" ]; then
-            # Windows: 查找 ZIP, MSI 和 EXE 文件
-            find out/make -type f \( -name "*.zip" -o -name "*.msi" -o -name "*.exe" \) -exec cp {} collected-artifacts/ \;
+            # Windows: 查找 ZIP, MSI, EXE 和 APPX 文件
+            find out/make -type f \( -name "*.zip" -o -name "*.msi" -o -name "*.exe" -o -name "*.appx" \) -exec cp {} collected-artifacts/ \;
           fi
           
           # 验证是否收集到文件
@@ -231,6 +231,14 @@ jobs:
               for file in "$artifact_dir"*.exe; do
                 if [ -f "$file" ]; then
                   new_filename="Inklip-${platform_arch}.exe"
+                  cp "$file" "release-files/$new_filename"
+                  echo "Prepared: $new_filename"
+                fi
+              done
+
+              for file in "$artifact_dir"*.appx; do
+                if [ -f "$file" ]; then
+                  new_filename="Inklip-${platform_arch}.appx"
                   cp "$file" "release-files/$new_filename"
                   echo "Prepared: $new_filename"
                 fi
