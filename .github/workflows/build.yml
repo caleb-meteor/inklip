@@ -124,10 +124,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Rebuild macos-alias
-        if: matrix.platform == 'darwin'
-        run: pnpm rebuild macos-alias
-
       - name: Create APPX signing certificate
         if: matrix.platform == 'win32'
         shell: powershell
