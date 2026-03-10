@@ -114,7 +114,7 @@ const selectDirectory = async (): Promise<void> => {
   })
 }
 
-// ==================== 用户反馈 ====================
+// ==================== 建议反馈 ====================
 const showFeedbackModal = ref(false)
 const feedbackSubmitting = ref(false)
 const feedbackForm = ref({
@@ -370,8 +370,8 @@ watch(
             </div>
           </n-card>
 
-          <!-- 用户反馈（涵盖功能需求、Bug 反馈、AI 内容反馈） -->
-          <n-card :bordered="false" class="setting-card" title="用户反馈">
+          <!-- 建议反馈（涵盖功能需求、Bug 反馈、AI 内容反馈） -->
+          <n-card :bordered="false" class="setting-card" title="建议反馈">
             <template #header-extra>
               <n-icon size="20" depth="3"><ChatbubblesOutline /></n-icon>
             </template>
@@ -398,11 +398,11 @@ watch(
         </n-space>
       </div>
 
-      <!-- 用户反馈弹窗 -->
+      <!-- 建议反馈弹窗 -->
       <n-modal
         v-model:show="showFeedbackModal"
         preset="card"
-        title="用户反馈"
+        title="建议反馈"
         :bordered="false"
         style="width: 520px"
         :mask-closable="!feedbackSubmitting"

@@ -103,15 +103,9 @@ function createMenu(): void {
         },
         { type: 'separator' as const },
         {
-          label: '用户反馈',
+          label: '建议反馈',
           click: () => {
             mainWindow?.webContents.send('navigate-to', '/settings?feedback=')
-          }
-        },
-        {
-          label: '举报 AI 不当内容',
-          click: () => {
-            mainWindow?.webContents.send('navigate-to', '/settings?feedback=ai_content')
           }
         }
       ]
