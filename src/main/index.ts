@@ -1,8 +1,7 @@
-import { app, shell, BrowserWindow, protocol, nativeImage, Menu } from 'electron'
+import { app, shell, BrowserWindow, protocol, Menu } from 'electron'
 import fs from 'fs'
 import path, { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
 import { BackendService } from './services/backend'
 import { registerIpcHandlers } from './ipc/handlers'
 import { abortAllDownloads } from './utils/download'
@@ -101,6 +100,19 @@ function createMenu(): void {
             const { shell } = await import('electron')
             await shell.openExternal('https://inklip.caleb.center')
           }
+        },
+        { type: 'separator' as const },
+        {
+          label: '用户反馈',
+          click: () => {
+            mainWindow?.webContents.send('navigate-to', '/settings?feedback=')
+          }
+        },
+        {
+          label: '举报 AI 不当内容',
+          click: () => {
+            mainWindow?.webContents.send('navigate-to', '/settings?feedback=ai_content')
+          }
         }
       ]
     }
@@ -117,7 +129,6 @@ function createWindow(): void {
     height: 670,
     show: false,
     title: '影氪',
-    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -178,11 +189,6 @@ if (app.isPackaged && process.platform === 'win32') {
   app.commandLine.appendSwitch('gpu-cache-dir', path.join(app.getPath('userData'), 'GPUCache'))
 }
 app.whenReady().then(() => {
-  // Set app icon for macOS dock
-  if (process.platform === 'darwin' && app.dock) {
-    app.dock.setIcon(nativeImage.createFromPath(icon))
-  }
-
   // 创建中文菜单
   createMenu()
 

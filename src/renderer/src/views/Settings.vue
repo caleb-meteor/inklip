@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import {
   NButton,
   NCard,
@@ -13,16 +13,21 @@ import {
   NIcon,
   NH2,
   NInputGroup,
-  NDivider
+  NDivider,
+  NSelect,
+  NModal
 } from 'naive-ui'
 import {
   ArrowBack,
   FolderOpenOutline,
-  KeyOutline
+  KeyOutline,
+  ChatbubblesOutline
 } from '@vicons/ionicons5'
 import { saveConfig, getConfig, setApiKey, getApiKey, validateApiKey } from '../api/config'
+import { submitFeedback, type SubmitFeedbackParams } from '../api/report'
 
 const router = useRouter()
+const route = useRoute()
 const message = useMessage()
 
 const videoDataDirectory = ref('')
@@ -109,6 +114,54 @@ const selectDirectory = async (): Promise<void> => {
   })
 }
 
+// ==================== 用户反馈 ====================
+const showFeedbackModal = ref(false)
+const feedbackSubmitting = ref(false)
+const feedbackForm = ref({
+  type: null as string | null,
+  reason: '',
+  detail: '',
+  contact: ''
+})
+
+const feedbackTypeOptions = [
+  { label: '功能需求', value: 'feature_request' },
+  { label: 'Bug 反馈', value: 'bug_report' },
+  { label: 'AI 内容反馈', value: 'ai_content' }
+]
+
+const openFeedbackModal = (presetType?: string): void => {
+  feedbackForm.value = { type: presetType || null, reason: '', detail: '', contact: '' }
+  showFeedbackModal.value = true
+}
+
+const handleSubmitFeedback = async (): Promise<void> => {
+  if (!feedbackForm.value.type) {
+    message.warning('请选择反馈类型')
+    return
+  }
+  if (!feedbackForm.value.reason.trim()) {
+    message.warning('请填写反馈标题')
+    return
+  }
+  feedbackSubmitting.value = true
+  try {
+    await submitFeedback({
+      type: feedbackForm.value.type as SubmitFeedbackParams['type'],
+      reason: feedbackForm.value.reason.trim(),
+      detail: feedbackForm.value.detail,
+      contact: feedbackForm.value.contact
+    })
+    message.success('反馈已提交，感谢您的支持！')
+    showFeedbackModal.value = false
+  } catch (err) {
+    message.error('反馈提交失败，请稍后重试')
+    console.error('反馈提交失败:', err)
+  } finally {
+    feedbackSubmitting.value = false
+  }
+}
+
 const loadApiKey = async (): Promise<void> => {
   const savedApiKey = localStorage.getItem('apiKey')
   if (savedApiKey) {
@@ -169,7 +222,17 @@ const saveApiKey = (): void => {
 onMounted(() => {
   loadVideoDataDirectory()
   loadApiKey()
+  if (route.query.feedback) {
+    openFeedbackModal(route.query.feedback as string)
+  }
 })
+
+watch(
+  () => route.query.feedback,
+  (val) => {
+    if (val) openFeedbackModal(val as string)
+  }
+)
 </script>
 
 <template>
@@ -306,8 +369,99 @@ onMounted(() => {
               </div>
             </div>
           </n-card>
+
+          <!-- 用户反馈（涵盖功能需求、Bug 反馈、AI 内容反馈） -->
+          <n-card :bordered="false" class="setting-card" title="用户反馈">
+            <template #header-extra>
+              <n-icon size="20" depth="3"><ChatbubblesOutline /></n-icon>
+            </template>
+            <n-alert type="info" class="mb-4" :show-icon="true" :bordered="false">
+              您可以向我们提交功能需求、Bug 反馈或 AI 内容反馈，帮助我们持续改进产品。
+            </n-alert>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-title">提交反馈</div>
+                <div class="setting-desc">功能需求、Bug 反馈、AI 内容反馈</div>
+              </div>
+              <div class="setting-control">
+                <n-space>
+                  <n-button type="primary" secondary @click="openFeedbackModal()">
+                    提交反馈
+                  </n-button>
+                  <n-button type="warning" secondary @click="openFeedbackModal('ai_content')">
+                    举报 AI 不当内容
+                  </n-button>
+                </n-space>
+              </div>
+            </div>
+          </n-card>
         </n-space>
       </div>
+
+      <!-- 用户反馈弹窗 -->
+      <n-modal
+        v-model:show="showFeedbackModal"
+        preset="card"
+        title="用户反馈"
+        :bordered="false"
+        style="width: 520px"
+        :mask-closable="!feedbackSubmitting"
+      >
+        <n-space vertical size="large">
+          <div>
+            <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">
+              反馈类型 *
+            </n-text>
+            <n-select
+              v-model:value="feedbackForm.type"
+              :options="feedbackTypeOptions"
+              placeholder="请选择反馈类型"
+            />
+          </div>
+          <div>
+            <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">
+              标题 *
+            </n-text>
+            <n-input
+              v-model:value="feedbackForm.reason"
+              placeholder="请简要描述您的反馈"
+            />
+          </div>
+          <div>
+            <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">
+              详细描述
+            </n-text>
+            <n-input
+              v-model:value="feedbackForm.detail"
+              type="textarea"
+              placeholder="请详细描述（可选）"
+              :rows="4"
+            />
+          </div>
+          <div>
+            <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">
+              联系方式
+            </n-text>
+            <n-input
+              v-model:value="feedbackForm.contact"
+              placeholder="方便我们回复您（可选）"
+            />
+          </div>
+          <n-space justify="end">
+            <n-button :disabled="feedbackSubmitting" @click="showFeedbackModal = false">
+              取消
+            </n-button>
+            <n-button
+              type="primary"
+              :loading="feedbackSubmitting"
+              :disabled="!feedbackForm.type || !feedbackForm.reason.trim()"
+              @click="handleSubmitFeedback"
+            >
+              提交反馈
+            </n-button>
+          </n-space>
+        </n-space>
+      </n-modal>
     </div>
   </n-message-provider>
 </template>

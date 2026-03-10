@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, type PropType } from 'vue'
-import { NIcon } from 'naive-ui'
-import { SparklesOutline, FolderOpenOutline, VideocamOutline } from '@vicons/ionicons5'
+import { NIcon, useMessage, NTooltip } from 'naive-ui'
+import { submitFeedback } from '../../api/report'
+import { SparklesOutline, FolderOpenOutline, VideocamOutline, FlagOutline } from '@vicons/ionicons5'
 import VideoSelectionMessage from './message-types/VideoSelectionMessage.vue'
 import AnchorSelectionMessage from './message-types/AnchorSelectionMessage.vue'
 import ProductSelectionMessage from './message-types/ProductSelectionMessage.vue'
@@ -25,6 +26,31 @@ const props = defineProps({
 const emit = defineEmits<{
   (e: 'play-video', video: any): void
 }>()
+
+const message = useMessage()
+
+const handleReportAIContent = async (msg: Message): Promise<void> => {
+  try {
+    let contentDetail = msg.content
+    if (!contentDetail && msg.payload) {
+      contentDetail = JSON.stringify(msg.payload)
+    }
+    // 防止内容过长，截取前 1000 个字符
+    if (contentDetail && contentDetail.length > 1000) {
+      contentDetail = contentDetail.substring(0, 1000) + '...'
+    }
+    
+    await submitFeedback({
+      type: 'ai_content',
+      reason: '用户在对话中快捷举报了该 AI 回复',
+      detail: `[消息 ID: ${msg.id}]\n内容：${contentDetail}`
+    })
+    message.success('举报已提交，感谢您的反馈')
+  } catch (err) {
+    message.error('举报提交失败，请稍后重试')
+    console.error('快捷举报失败:', err)
+  }
+}
 
 const scrollContainer = ref<HTMLElement | null>(null)
 const messageList = computed(() => props.messages)
@@ -322,6 +348,18 @@ const getMessageContent = (msg: Message): string => {
                   <button class="apply-variation-btn">APPLY VARIATION 1</button>
                 </div>
               </div>
+            </div>
+
+            <!-- Quick actions for assistant messages -->
+            <div v-if="msg.role === 'assistant' && !msg.isTyping && msg.payload?.type !== 'vip_upgrade_prompt'" class="message-actions">
+              <n-tooltip trigger="hover" placement="top">
+                <template #trigger>
+                  <div class="action-btn" @click="handleReportAIContent(msg)">
+                    <n-icon size="16"><FlagOutline /></n-icon>
+                  </div>
+                </template>
+                AI生成内容不当?点击举报
+              </n-tooltip>
             </div>
           </div>
         </div>
@@ -1042,6 +1080,36 @@ const getMessageContent = (msg: Message): string => {
   flex-direction: column;
   align-items: center;
   gap: 16px;
+}
+
+.message-actions {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  margin-top: -2px;
+}
+
+.message-row.assistant:hover .message-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: color 0.2s ease;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.action-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* Scrollbar hidden for cleanest look, but functional */

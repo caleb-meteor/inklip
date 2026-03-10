@@ -26,7 +26,7 @@ fs.writeFileSync(
     <DisplayName>影氪</DisplayName>
     <PublisherDisplayName>calebMeteor</PublisherDisplayName>
     <Description>智能视频剪辑工具</Description>
-    <Logo>assets\\SampleAppx.50x50.png</Logo>
+    <Logo>assets\\Square50x50.png</Logo>
   </Properties>
   <Resources>
     <Resource Language="zh-CN" />
@@ -42,10 +42,10 @@ fs.writeFileSync(
       <uap:VisualElements
         BackgroundColor="#464646"
         DisplayName="影氪"
-        Square150x150Logo="assets\\SampleAppx.150x150.png"
-        Square44x44Logo="assets\\SampleAppx.44x44.png"
+        Square150x150Logo="assets\\Square150x150.png"
+        Square44x44Logo="assets\\Square44x44.png"
         Description="智能视频剪辑工具">
-        <uap:DefaultTile Wide310x150Logo="assets\\SampleAppx.310x150.png" />
+        <uap:DefaultTile Wide310x150Logo="assets\\Square310x150.png" />
       </uap:VisualElements>
     </Application>
   </Applications>
@@ -104,6 +104,8 @@ const config: ForgeConfig = {
         manifest: appxManifestPath,
         identityName: 'calebMeteor.414460B6D09AC',
         publisherDisplayName: 'calebMeteor',
+        // 使用产品图标作为 APPX 瓷砖，满足微软认证 10.1.1.11（瓷砖须唯一代表产品）
+        assets: path.join(__dirname, 'resources', 'appx-assets'),
         ...(process.env.APPX_DEV_CERT
           ? { devCert: process.env.APPX_DEV_CERT, certPass: process.env.APPX_CERT_PASS }
           : {})
