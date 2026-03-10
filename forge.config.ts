@@ -91,8 +91,8 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [
-    // new MakerDMG({}, ['darwin']),
-    // new MakerZIP({}, ['win32']),
+    new MakerDMG({}, ['darwin']),
+    new MakerZIP({}, ['win32']),
     new MakerAppX(
       {
         publisher: 'CN=36150C96-6074-4814-8057-59B6580F873A',
