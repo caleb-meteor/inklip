@@ -59,7 +59,8 @@ const config: ForgeConfig = {
     name: '影氪',
     executableName: 'inklip',
     asar: true,
-    icon: './resources/icon.icns',
+    // 不写扩展名：Windows 用 icon.ico（任务栏/窗口），macOS 用 icon.icns
+    icon: './resources/icon',
     extraResource: [
       path.join(
         __dirname,
@@ -78,7 +79,7 @@ const config: ForgeConfig = {
       : {}),
     ignore: [
       /^\/src/,
-      /^\/resources\/(?!([a-z0-9]+-[a-z0-9]+|icon\.icns|icon\.png))/, // Allow platform-arch folders and icons
+      /^\/resources\/(?!([a-z0-9]+-[a-z0-9]+|icon\.icns|icon\.ico|icon\.png))/, // Allow platform-arch folders and icons
       /^\/assets/,
       /^\/build/,
       /^\/website/,
