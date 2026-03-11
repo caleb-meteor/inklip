@@ -66,7 +66,8 @@ const config: ForgeConfig = {
         __dirname,
         'resources',
         `${process.platform}-${process.env.TARGET_ARCH || process.arch}`
-      )
+      ),
+      path.join(__dirname, 'resources', 'icon.ico')
     ],
     ...(process.platform === 'darwin'
       ? {

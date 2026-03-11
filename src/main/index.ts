@@ -117,12 +117,16 @@ function createMenu(): void {
 }
 
 function createWindow(): void {
-  // Create the browser window.
+  const iconPath = is.dev
+    ? join(__dirname, '../../resources/icon.ico')
+    : join(process.resourcesPath, 'icon.ico')
+
   mainWindow = new BrowserWindow({
     width: 1024,
     height: 670,
     show: false,
     title: '影氪',
+    icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -192,7 +196,7 @@ app.whenReady().then(() => {
   protocol.handle('media', handleMediaProtocol)
 
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.inklip.app')
+  electronApp.setAppUserModelId('inklip')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
