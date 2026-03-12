@@ -14,7 +14,8 @@ import {
   ChevronBackOutline,
   PeopleOutline,
   LibraryOutline,
-  AddCircleOutline
+  AddCircleOutline,
+  CutOutline
 } from '@vicons/ionicons5'
 import {
   getVideosApi,
@@ -442,6 +443,12 @@ const doDeleteProduct = async (product: Product) => {
           <span class="pending-tag">待开发</span>
         </div>
 
+        <div v-show="!collapsed" class="nav-item clickable" @click="emit('navigate', '/quick-clip')">
+          <n-icon size="14" class="arrow-icon"><ChevronForwardOutline /></n-icon>
+          <n-icon size="18" color="#10b981"><CutOutline /></n-icon>
+          <span>快速剪辑</span>
+        </div>
+
         <!-- Collapsed Icons Display -->
         <div v-if="collapsed" class="collapsed-icons-list" @click="emit('toggle-left-collapse')">
           <n-tooltip placement="right">
@@ -477,6 +484,15 @@ const doDeleteProduct = async (product: Product) => {
               </div>
             </template>
             {{ currentAnchor ? currentAnchor.name : '主播列表' }}
+          </n-tooltip>
+
+          <n-tooltip placement="right">
+            <template #trigger>
+              <div class="collapsed-icon-item" @click="emit('navigate', '/quick-clip')">
+                <n-icon size="20" color="#10b981"><CutOutline /></n-icon>
+              </div>
+            </template>
+            快速剪辑
           </n-tooltip>
 
           <n-tooltip v-if="selectedAnchorId" placement="right">
@@ -1003,6 +1019,10 @@ const doDeleteProduct = async (product: Product) => {
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item.clickable {
+  cursor: pointer;
 }
 
 .nav-item.disabled {

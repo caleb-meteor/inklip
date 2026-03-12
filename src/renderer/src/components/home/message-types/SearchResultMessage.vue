@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { type PropType, ref } from 'vue'
-import { NIcon, NCollapse, NCollapseItem } from 'naive-ui'
-import { VideocamOutline } from '@vicons/ionicons5'
+import { NIcon, NCollapse, NCollapseItem, NButton } from 'naive-ui'
+import { VideocamOutline, DownloadOutline } from '@vicons/ionicons5'
+import { useMessage } from 'naive-ui'
 import UnifiedVideoPreview from '../../UnifiedVideoPreview.vue'
 import type { VideoSearchResultItem } from '../../../api/video'
+import type { SearchSegment } from '../../../api/video'
+import { exportSegmentApi } from '../../../api/video'
 
 defineProps({
   results: {
@@ -20,7 +23,9 @@ const emit = defineEmits<{
   (e: 'play-video', video: any): void
 }>()
 
+const message = useMessage()
 const videoPlayers = ref<Record<number, any>>({})
+const exportingKey = ref<string | null>(null)
 
 const formatTime = (s: number) => {
   const m = Math.floor(s / 60)
@@ -30,6 +35,8 @@ const formatTime = (s: number) => {
 
 const isVideoDeleted = (v: any) => !v?.path && !v?.fileUrl
 
+const segmentKey = (videoId: number, segIndex: number) => `${videoId}-${segIndex}`
+
 const handleSegmentClick = (video: any, startTime: number, endTime: number) => {
   if (isVideoDeleted(video)) return
   const player = videoPlayers.value[video?.id]
@@ -38,6 +45,33 @@ const handleSegmentClick = (video: any, startTime: number, endTime: number) => {
 
 const handlePlayVideo = (video: any) => {
   if (!isVideoDeleted(video)) emit('play-video', { video, videoType: 'material' })
+}
+
+const handleExportSegment = async (video: any, seg: SearchSegment, segIndex: number) => {
+  if (isVideoDeleted(video) || !video?.id) {
+    message.warning('该视频已删除，无法导出')
+    return
+  }
+  const key = segmentKey(video.id, segIndex)
+  if (exportingKey.value) return
+  exportingKey.value = key
+  const loadingMsg = message.loading('正在导出片段...', { duration: 0 })
+  try {
+    const result = await exportSegmentApi(video.id, seg.start_s, seg.end_s)
+    const saveResult = await window.api.downloadVideo(result.path, result.suggested_name)
+    if (saveResult.success) {
+      message.success(`已保存至: ${saveResult.path}`)
+    } else if (saveResult.canceled) {
+      message.info('已取消保存')
+    } else {
+      message.error(saveResult.error || '导出失败')
+    }
+  } catch (e) {
+    message.error('导出片段失败，请稍后重试')
+  } finally {
+    loadingMsg.destroy()
+    exportingKey.value = null
+  }
 }
 </script>
 
@@ -86,10 +120,26 @@ const handlePlayVideo = (video: any) => {
                   :title="seg.text"
                   @click="handleSegmentClick(item.video, seg.start_s, seg.end_s)"
                 >
-                  <div class="segment-text">{{ seg.text }}</div>
-                  <div class="segment-time">
-                    {{ formatTime(seg.start_s) }} - {{ formatTime(seg.end_s) }}
+                  <div class="segment-content">
+                    <div class="segment-text">{{ seg.text }}</div>
+                    <div class="segment-time">
+                      {{ formatTime(seg.start_s) }} - {{ formatTime(seg.end_s) }}
+                    </div>
                   </div>
+                  <n-button
+                    v-if="!isVideoDeleted(item.video)"
+                    quaternary
+                    size="tiny"
+                    type="primary"
+                    class="segment-export-btn"
+                    :loading="exportingKey === segmentKey(item.video?.id, si)"
+                    @click.stop="handleExportSegment(item.video, seg, si)"
+                  >
+                    <template #icon>
+                      <n-icon :component="DownloadOutline" />
+                    </template>
+                    导出片段
+                  </n-button>
                 </div>
               </div>
             </div>
@@ -214,7 +264,7 @@ const handlePlayVideo = (video: any) => {
 .segment-chip {
   display: flex;
   gap: 12px;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.8);
@@ -223,6 +273,19 @@ const handlePlayVideo = (video: any) => {
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.04);
   transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.segment-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.segment-export-btn {
   flex-shrink: 0;
 }
 

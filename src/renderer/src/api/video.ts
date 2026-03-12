@@ -107,6 +107,24 @@ export function searchVideosApi(query: string, limit?: number): Promise<VideoSea
   })
 }
 
+/** 导出单段视频片段（AI 搜索结果每条字幕导出对应片段），返回临时文件路径与建议文件名 */
+export interface ExportSegmentResult {
+  path: string
+  suggested_name: string
+}
+
+export function exportSegmentApi(
+  videoId: number,
+  startS: number,
+  endS: number
+): Promise<ExportSegmentResult> {
+  return request({
+    url: '/api/videos/export-segment',
+    method: 'post',
+    data: { video_id: videoId, start_s: startS, end_s: endS }
+  })
+}
+
 /**
  * Upload multiple video files by their local paths
  * @param paths Array of absolute paths of video files
@@ -297,5 +315,22 @@ export function deleteVideoApi(id: number): Promise<void> {
     data: {
       id
     }
+  })
+}
+
+export interface ExportSegmentsRequestItem {
+  video_id: number
+  start_s: number
+  end_s: number
+}
+
+/**
+ * 批量导出并拼接视频片段
+ */
+export function exportSegmentsApi(segments: ExportSegmentsRequestItem[]): Promise<ExportSegmentResult> {
+  return request({
+    url: '/api/videos/export-segments',
+    method: 'post',
+    data: { segments }
   })
 }

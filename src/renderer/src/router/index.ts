@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Splash from '../views/Splash.vue'
 import Home from '../views/Home.vue'
+import QuickClip from '../views/QuickClip.vue'
 import Settings from '../views/Settings.vue'
 
 const routes = [
@@ -13,6 +14,11 @@ const routes = [
     path: '/home',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/quick-clip',
+    name: 'QuickClip',
+    component: QuickClip
   },
   {
     path: '/settings',
