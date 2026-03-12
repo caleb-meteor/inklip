@@ -1,8 +1,32 @@
-import { app, shell, BrowserWindow, protocol, Menu } from 'electron'
+import { app, shell, BrowserWindow, protocol, nativeImage, Menu } from 'electron'
 import fs from 'fs'
 import path, { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import iconPng from '../../resources/icon.png?asset'
 import { BackendService } from './services/backend'
+
+/** 按平台返回应用图标路径：macOS 用 .icns，Windows 用 .ico；仅打包后使用，开发阶段用 Vite 解析的 png */
+function getAppIconPath(): string {
+  const ext =
+    process.platform === 'darwin' ? 'icns' : process.platform === 'win32' ? 'ico' : 'png'
+  if (process.platform === 'darwin') {
+    return path.join(process.resourcesPath, `icon.${ext}`)
+  }
+  return path.join(process.resourcesPath, `icon.${ext}`)
+}
+
+function getAppIcon(): Electron.NativeImage {
+  // 开发阶段：直接用 Vite ?asset 解析的路径，保证 Dock/窗口图标能显示
+  if (!app.isPackaged) {
+    return nativeImage.createFromPath(iconPng)
+  }
+  const iconPath = getAppIconPath()
+  if (fs.existsSync(iconPath)) {
+    return nativeImage.createFromPath(iconPath)
+  }
+  return nativeImage.createFromPath(iconPng)
+}
+
 import { registerIpcHandlers } from './ipc/handlers'
 import { abortAllDownloads } from './utils/download'
 
@@ -117,16 +141,14 @@ function createMenu(): void {
 }
 
 function createWindow(): void {
-  const iconPath = is.dev
-    ? join(__dirname, '../../resources/icon.ico')
-    : join(process.resourcesPath, 'icon.ico')
-
+  // Create the browser window.
+  const icon = getAppIcon()
   mainWindow = new BrowserWindow({
     width: 1024,
     height: 670,
     show: false,
     title: '影氪',
-    icon: iconPath,
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -187,6 +209,11 @@ if (app.isPackaged && process.platform === 'win32') {
   app.commandLine.appendSwitch('gpu-cache-dir', path.join(app.getPath('userData'), 'GPUCache'))
 }
 app.whenReady().then(() => {
+  // macOS：设置 Dock 图标（.icns）
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(getAppIcon())
+  }
+
   // 创建中文菜单
   createMenu()
 
