@@ -1,9 +1,24 @@
 <script setup lang="ts">
-import { NIcon, NScrollbar, NButton } from 'naive-ui'
-import { ListOutline, RemoveOutline } from '@vicons/ionicons5'
+import { NIcon, NScrollbar, NButton, NSpin, NEmpty } from 'naive-ui'
+import { ListOutline, RemoveOutline, TimeOutline, CloseOutline } from '@vicons/ionicons5'
 import { inject } from 'vue'
+import type { ExportHistoryItem } from '../../api/video'
 
 const qc = inject('quickClip') as any
+
+const emit = defineEmits<{
+  (e: 'play-export', item: ExportHistoryItem): void
+}>()
+
+function formatDate(s: string) {
+  if (!s) return ''
+  const d = new Date(s)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function onSelectHistoryItem(item: ExportHistoryItem) {
+  emit('play-export', item)
+}
 </script>
 
 <template>
@@ -13,65 +28,108 @@ const qc = inject('quickClip') as any
         <n-icon size="18"><ListOutline /></n-icon>
         <span>选择的字幕</span>
       </div>
-      <n-button
-        v-show="qc.selectedSegmentIndexes.size > 0 && !qc.isPreviewPlaying"
-        size="tiny"
-        type="error"
-        @click="qc.removeSelectedSegments"
-      >
-        删除选中 ({{ qc.selectedSegmentIndexes.size }})
-      </n-button>
-    </div>
-    <div class="subtitle-panel-body">
-      <n-scrollbar>
-        <div v-if="qc.selectedSegments.length === 0" class="panel-empty">从左侧字幕点击添加</div>
-        <div
-          v-else
-          class="selected-list"
-          @dragenter.prevent
-          @dragover.prevent="!qc.isPreviewPlaying && qc.onListDragOver()"
-          @drop="!qc.isPreviewPlaying && qc.onListDrop()"
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <n-button
+          v-show="qc.selectedSegmentIndexes.size > 0 && !qc.isPreviewPlaying"
+          size="tiny"
+          type="error"
+          @click="qc.removeSelectedSegments"
         >
-          <template v-for="row in qc.displayRowsForSelected" :key="row.type === 'placeholder' ? `ph-${row.insertIndex}` : `sel-${row.index}-${row.seg.videoId}-${row.seg.segmentIndex}`">
-            <!-- 虚拟占位条：拖拽时在插入位置显示，把下面的项挤下去 -->
-            <div
-              v-if="row.type === 'placeholder'"
-              class="selected-row selected-row-placeholder"
-              @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOverPlaceholder(row.insertIndex)"
-              @drop.prevent.stop="!qc.isPreviewPlaying && qc.onDropAtInsertIndex(row.insertIndex)"
-            >
-              <span class="placeholder-hint">放置到此处</span>
-            </div>
-            <!-- 字幕行 -->
-            <div
-              v-else
-              class="selected-row"
-              :class="{
-                'is-selected': qc.selectedSegmentIndexes.has(row.index),
-                'is-dragging': qc.draggedIndexes.includes(row.index)
-              }"
-              :draggable="!qc.isPreviewPlaying"
-              @click="!qc.isPreviewPlaying && qc.toggleSegmentSelection(row.index, $event)"
-              @dragstart="!qc.isPreviewPlaying && qc.onDragStart($event, row.index)"
-              @dragenter.prevent
-              @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOver($event, row.index)"
-              @drop.stop="!qc.isPreviewPlaying && qc.onDrop($event, row.index)"
-              @dragend="qc.onDragEnd"
-            >
-              <div class="selected-content">
-                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                  <span class="selected-time">{{ qc.formatTime(row.seg.fromS) }} - {{ qc.formatTime(row.seg.toS) }}</span>
-                  <span class="selected-video">{{ row.seg.videoName }}</span>
-                </div>
-                <span class="selected-text" :title="row.seg.text">{{ row.seg.text }}</span>
-              </div>
-              <n-button quaternary size="tiny" type="error" v-show="!qc.isPreviewPlaying" @click.stop="qc.removeSegment(row.index)">
-                <n-icon><RemoveOutline /></n-icon>
-              </n-button>
-            </div>
+          删除选中 ({{ qc.selectedSegmentIndexes.size }})
+        </n-button>
+        <n-button
+          size="tiny"
+          type="default"
+          :disabled="!qc.selectedAnchorId"
+          :loading="qc.loadingExportHistory"
+          @click="qc.loadExportHistory"
+        >
+          <template #icon>
+            <n-icon size="14"><TimeOutline /></n-icon>
           </template>
+          查看导出历史
+        </n-button>
+      </div>
+    </div>
+    <div class="panel-body-split">
+      <!-- 上：已选字幕列表 -->
+      <div class="panel-section panel-section-top">
+        <n-scrollbar>
+          <div v-if="qc.selectedSegments.length === 0" class="panel-empty">从左侧字幕点击添加</div>
+          <div
+            v-else
+            class="selected-list"
+            @dragenter.prevent
+            @dragover.prevent="!qc.isPreviewPlaying && qc.onListDragOver()"
+            @drop="!qc.isPreviewPlaying && qc.onListDrop()"
+          >
+            <template v-for="row in qc.displayRowsForSelected" :key="row.type === 'placeholder' ? `ph-${row.insertIndex}` : `sel-${row.index}-${row.seg.videoId}-${row.seg.segmentIndex}`">
+              <div
+                v-if="row.type === 'placeholder'"
+                class="selected-row selected-row-placeholder"
+                @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOverPlaceholder(row.insertIndex)"
+                @drop.prevent.stop="!qc.isPreviewPlaying && qc.onDropAtInsertIndex(row.insertIndex)"
+              >
+                <span class="placeholder-hint">放置到此处</span>
+              </div>
+              <div
+                v-else
+                class="selected-row"
+                :class="{
+                  'is-selected': qc.selectedSegmentIndexes.has(row.index),
+                  'is-dragging': qc.draggedIndexes.includes(row.index)
+                }"
+                :draggable="!qc.isPreviewPlaying"
+                @click="!qc.isPreviewPlaying && qc.toggleSegmentSelection(row.index, $event)"
+                @dragstart="!qc.isPreviewPlaying && qc.onDragStart($event, row.index)"
+                @dragenter.prevent
+                @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOver($event, row.index)"
+                @drop.stop="!qc.isPreviewPlaying && qc.onDrop($event, row.index)"
+                @dragend="qc.onDragEnd"
+              >
+                <div class="selected-content">
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                    <span class="selected-time">{{ qc.formatTime(row.seg.fromS) }} - {{ qc.formatTime(row.seg.toS) }}</span>
+                    <span class="selected-video">{{ row.seg.videoName }}</span>
+                  </div>
+                  <span class="selected-text" :title="row.seg.text">{{ row.seg.text }}</span>
+                </div>
+                <n-button quaternary size="tiny" type="error" v-show="!qc.isPreviewPlaying" @click.stop="qc.removeSegment(row.index)">
+                  <n-icon><RemoveOutline /></n-icon>
+                </n-button>
+              </div>
+            </template>
+          </div>
+        </n-scrollbar>
+      </div>
+      <!-- 下：导出历史（点击「查看导出历史」后显示） -->
+      <div v-show="qc.showExportHistoryModal" class="panel-section panel-section-bottom">
+        <div class="export-history-header">
+          <span class="export-history-title">导出历史</span>
+          <n-button quaternary size="tiny" @click="qc.showExportHistoryModal = false">
+            <n-icon size="14"><CloseOutline /></n-icon>
+            关闭
+          </n-button>
         </div>
-      </n-scrollbar>
+        <n-scrollbar class="export-history-scroll">
+          <n-spin :show="qc.loadingExportHistory">
+            <div v-if="qc.exportHistoryList.length === 0 && !qc.loadingExportHistory" class="export-history-empty">
+              <n-empty description="暂无导出记录" size="small" />
+            </div>
+            <div v-else class="export-history-list">
+              <div
+                v-for="item in qc.exportHistoryList"
+                :key="item.id"
+                class="export-history-item"
+                @click="onSelectHistoryItem(item)"
+              >
+                <span class="export-history-name" :title="item.suggested_name">{{ item.suggested_name }}</span>
+                <span class="export-history-meta">{{ item.segment_count }} 段 · {{ formatDate(item.created_at) }}</span>
+              </div>
+            </div>
+          </n-spin>
+        </n-scrollbar>
+      </div>
     </div>
   </div>
 </template>
@@ -97,12 +155,83 @@ const qc = inject('quickClip') as any
   color: #f5f5f7;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.subtitle-panel-body {
+.panel-body-split {
   flex: 1;
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+.panel-section {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.panel-section-top {
+  flex: 1;
+}
+.panel-section-bottom {
+  flex-shrink: 0;
+  max-height: 45%;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+}
+.export-history-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.15);
+}
+.export-history-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.export-history-scroll {
+  flex: 1;
+  min-height: 0;
+}
+.export-history-empty {
+  padding: 16px;
+  text-align: center;
+}
+.export-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+}
+.export-history-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.export-history-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.export-history-name {
+  display: block;
+  font-size: 12px;
+  color: #f5f5f7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.export-history-meta {
+  display: block;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
 }
 .panel-empty {
   padding: 24px;

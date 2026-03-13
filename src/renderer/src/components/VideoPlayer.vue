@@ -19,7 +19,7 @@ const props = defineProps<{
   path?: string
   videoId?: number
   subtitleData?: any
-  videoType?: 'material' | 'edited'
+  videoType?: 'material' | 'edited' | 'exported'
   autoplay?: boolean
   muted?: boolean
 }>()
@@ -129,6 +129,7 @@ const processSubtitleData = (subtitleData: any): SubtitleItem[] => {
 
 const loadSubtitles = async (): Promise<void> => {
   subtitles.value = []
+  if (props.videoType === 'exported') return
 
   // 1. Direct props
   if (props.subtitleData) {

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onMounted, provide, reactive, toRef, ref } from 'vue'
+import { provide, reactive, computed } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
 import { ChevronBackOutline } from '@vicons/ionicons5'
-import { getProductsApi, type Product } from '../api/product'
 import type { Anchor } from '../api/anchor'
+import type { ExportHistoryItem } from '../api/video'
 import { useQuickClip } from '../composables/useQuickClip'
 import QuickClipSubtitleList from './quick-clip/QuickClipSubtitleList.vue'
 import QuickClipSelectedList from './quick-clip/QuickClipSelectedList.vue'
@@ -11,37 +11,27 @@ import QuickClipPreview from './quick-clip/QuickClipPreview.vue'
 
 const props = defineProps<{
   currentAnchor: Anchor | null
-  selectedProductId: number | null
 }>()
 
 const emit = defineEmits<{
   (e: 'navigate', path: string): void
 }>()
 
-const products = ref<Product[]>([])
-
-const selectedProductIdRef = toRef(props, 'selectedProductId')
-const quickClip = useQuickClip(selectedProductIdRef)
-// 用 reactive 包装后，子组件模板里 qc.xxx 会拿到解包后的值（Set/Array 等），否则拿到的是 Ref
+const selectedAnchorIdRef = computed(() => props.currentAnchor?.id ?? null)
+const quickClip = useQuickClip(selectedAnchorIdRef)
 provide('quickClip', reactive(quickClip))
 
 defineExpose({
   scrollToVideoSubtitles: quickClip.scrollToVideoSubtitles
 })
 
-function loadProducts() {
-  getProductsApi({ all: true }).then((res) => {
-    products.value = res.list
-  })
-}
-
 function handleNavigate(path: string) {
   emit('navigate', path)
 }
 
-onMounted(() => {
-  loadProducts()
-})
+function onPlayExport(item: ExportHistoryItem) {
+  quickClip.loadExportHistorySubtitles(item.id)
+}
 </script>
 
 <template>
@@ -54,14 +44,14 @@ onMounted(() => {
         返回首页
       </n-button>
       <span class="quick-clip-title">快速剪辑</span>
-      <span v-if="props.selectedProductId" style="font-size: 12px; color: rgba(255,255,255,0.5); margin-left: 8px;">
-        当前选择产品：{{ products.find(p => p.id === props.selectedProductId)?.name || '未选择' }}
+      <span v-if="props.currentAnchor" style="font-size: 12px; color: rgba(255,255,255,0.5); margin-left: 8px;">
+        当前选择主播：{{ props.currentAnchor.name }}
       </span>
     </div>
 
     <div class="quick-clip-grid">
       <QuickClipSubtitleList />
-      <QuickClipSelectedList />
+      <QuickClipSelectedList @play-export="onPlayExport" />
       <QuickClipPreview />
     </div>
   </div>

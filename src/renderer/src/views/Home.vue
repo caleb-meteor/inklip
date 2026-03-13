@@ -279,15 +279,20 @@ const handleNewChat = (): void => {
         </n-layout-sider>
 
         <n-layout-content class="home-content">
-          <QuickClip
-            v-if="route.path === '/quick-clip'"
-            ref="quickClipRef"
-            :current-anchor="currentSelectedAnchor"
-            :selected-product-id="currentSelectedProduct"
-            @navigate="navigateTo"
+          <HomeVideoPlayer
+            v-if="currentPlayingVideo"
+            :payload="currentPlayingVideo"
+            @close="handleClosePlayer"
+            @open-chat="handleNewChat"
           />
           <template v-else>
-            <div v-if="!currentPlayingVideo" class="chat-layout">
+            <QuickClip
+              v-show="route.path === '/quick-clip'"
+              ref="quickClipRef"
+              :current-anchor="currentSelectedAnchor"
+              @navigate="navigateTo"
+            />
+            <div v-show="route.path !== '/quick-clip'" class="chat-layout">
               <div class="messages-container">
                 <HomeChatMessages :messages="messages" @play-video="handlePlayVideo" />
               </div>
@@ -298,13 +303,6 @@ const handleNewChat = (): void => {
                 </div>
               </div>
             </div>
-
-            <HomeVideoPlayer
-              v-else
-              :payload="currentPlayingVideo"
-              @close="handleClosePlayer"
-              @open-chat="handleNewChat"
-            />
           </template>
 
           <VideoUploadChatModal v-model:show="showUploadModal" @success="handleUploadSuccess" />

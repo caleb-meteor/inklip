@@ -1,11 +1,11 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
 import { useMessage } from 'naive-ui'
-import { getVideosApi, type VideoItem, exportSegmentsApi } from '../api/video'
+import { getVideosApi, type VideoItem, exportSegmentsApi, getExportHistoryApi, getExportHistorySubtitlesApi, type ExportHistoryItem } from '../api/video'
 import { parseSubtitleToSegments } from '../utils/subtitle'
 import { getMediaUrl } from '../utils/media'
 import type { SegmentWithVideo, VideoSegmentGroup, VirtualListItem } from '../views/quick-clip/types'
 
-export function useQuickClip(selectedProductId: Ref<number | null>) {
+export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   const message = useMessage()
 
   const sourceVideos = ref<VideoItem[]>([])
@@ -84,6 +84,87 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
   const subtitleScrollbarRef = ref<any>(null)
   const isExporting = ref(false)
 
+  const exportHistoryList = ref<ExportHistoryItem[]>([])
+  const showExportHistoryModal = ref(false)
+  const loadingExportHistory = ref(false)
+  /** 清空选择字幕区 */
+  function clearSelectedSegments() {
+    selectedSegments.value = []
+    selectedSegmentIndexes.value.clear()
+    lastSelectedSegmentIndex.value = null
+    selectedSourceKeys.value.clear()
+    lastSelectedSourceKey.value = null
+  }
+
+  /** 仅拉取当前主播的导出历史列表（不打开弹窗） */
+  async function fetchExportHistoryList() {
+    if (!selectedAnchorId.value) {
+      exportHistoryList.value = []
+      return
+    }
+    try {
+      const res = await getExportHistoryApi(selectedAnchorId.value)
+      exportHistoryList.value = res.list || []
+    } catch {
+      exportHistoryList.value = []
+    }
+  }
+
+  async function loadExportHistory() {
+    if (!selectedAnchorId.value) {
+      message.warning('请先选择主播')
+      return
+    }
+    loadingExportHistory.value = true
+    try {
+      await fetchExportHistoryList()
+      showExportHistoryModal.value = true
+    } catch {
+      message.error('加载导出历史失败')
+    } finally {
+      loadingExportHistory.value = false
+    }
+  }
+
+  /** 加载某次导出视频的字幕片段并填入选择字幕区；视频路径与名称优先从当前主播下的 sourceVideos 解析，保证可正常播放 */
+  async function loadExportHistorySubtitles(exportVideoId: number) {
+    try {
+      const res = await getExportHistorySubtitlesApi(exportVideoId)
+      const list = res.list || []
+      const videoById = new Map(sourceVideos.value.map(v => [v.id, v]))
+      const segments: SegmentWithVideo[] = list.map((item) => {
+        const srcVideo = videoById.get(item.video_id)
+        const videoPath = srcVideo?.path != null ? getMediaUrl(srcVideo.path) : getMediaUrl(item.path)
+        const videoName = srcVideo?.name ?? item.video_name
+        let segmentIndex = 0
+        if (srcVideo && allSegments.value.length > 0) {
+          const found = allSegments.value.find(
+            s => s.videoId === item.video_id && Math.abs(s.fromS - item.start_s) < 0.01 && Math.abs(s.toS - item.end_s) < 0.01
+          )
+          if (found) segmentIndex = found.segmentIndex
+        }
+        return {
+          text: item.subtitle_text,
+          fromS: item.start_s,
+          toS: item.end_s,
+          fromMs: item.start_s * 1000,
+          toMs: item.end_s * 1000,
+          videoId: item.video_id,
+          videoName,
+          videoPath,
+          segmentIndex
+        }
+      })
+      selectedSegments.value = segments
+      selectedSegmentIndexes.value.clear()
+      lastSelectedSegmentIndex.value = null
+      selectedSourceKeys.value.clear()
+      lastSelectedSourceKey.value = null
+    } catch {
+      message.error('加载导出字幕失败')
+    }
+  }
+
   const currentStickyHeader = ref<{ videoId: number; videoName: string } | null>(null)
   const stickyHeaderOffset = ref(0)
 
@@ -95,7 +176,7 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
     const currentIndex = Math.floor(scrollTop / itemHeight)
     
     if (currentIndex >= 0 && currentIndex < flatVirtualList.value.length) {
-      let header = null
+      let header: VirtualListItem | null = null
       let nextHeaderIndex = -1
 
       // Find the active header
@@ -116,7 +197,7 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
         }
       }
 
-      if (header) {
+      if (header && header.type === 'header') {
         currentStickyHeader.value = { videoId: header.videoId!, videoName: header.videoName! }
         
         if (nextHeaderIndex !== -1) {
@@ -145,13 +226,13 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
   }
 
   function loadVideos() {
-    if (!selectedProductId.value) {
+    if (!selectedAnchorId.value) {
       sourceVideos.value = []
       allSegments.value = []
       return
     }
     loadingVideos.value = true
-    getVideosApi({ product_id: selectedProductId.value })
+    getVideosApi({ anchor_id: selectedAnchorId.value })
       .then(list => {
         sourceVideos.value = list
         const segs: SegmentWithVideo[] = []
@@ -166,7 +247,17 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
       .finally(() => { loadingVideos.value = false })
   }
 
-  watch(selectedProductId, loadVideos, { immediate: true })
+  watch(selectedAnchorId, loadVideos, { immediate: true })
+
+  // 切换主播时：清空选择字幕、重新请求导出历史
+  watch(
+    selectedAnchorId,
+    () => {
+      clearSelectedSegments()
+      fetchExportHistoryList()
+    },
+    { immediate: true }
+  )
 
   function toggleGroup(videoId: number) {
     if (collapsedGroups.value.has(videoId)) collapsedGroups.value.delete(videoId)
@@ -537,19 +628,38 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
     nextTick(() => doScroll())
   }
 
-  async function handleExportSegments() {
+  /** 按 videoId + fromS + toS 检测重复，返回重复组（同一时间段被选了多次） */
+  function checkDuplicateByVideoSegment(): { videoId: number; fromS: number; toS: number; videoName: string; selectedPositions: number[] }[] {
+    const list = selectedSegments.value
+    const map = new Map<string, { seg: SegmentWithVideo; positions: number[] }>()
+    list.forEach((seg, i) => {
+      const key = `${seg.videoId}-${seg.fromS}-${seg.toS}`
+      const one = map.get(key)
+      if (!one) map.set(key, { seg, positions: [i + 1] })
+      else one.positions.push(i + 1)
+    })
+    const result: { videoId: number; fromS: number; toS: number; videoName: string; selectedPositions: number[] }[] = []
+    map.forEach(({ seg, positions }) => {
+      if (positions.length > 1) result.push({ videoId: seg.videoId, fromS: seg.fromS, toS: seg.toS, videoName: seg.videoName, selectedPositions: positions })
+    })
+    return result
+  }
+
+  async function handleExportSegments(suggestedName?: string) {
     if (selectedSegments.value.length === 0) {
       message.warning('请先选择要导出的字幕片段')
       return
     }
+    const name = suggestedName?.trim() || `inklip_merged_${Date.now()}.mp4`
     isExporting.value = true
     try {
       const requestSegments = selectedSegments.value.map(seg => ({
         video_id: seg.videoId,
         start_s: seg.fromS,
-        end_s: seg.toS
+        end_s: seg.toS,
+        subtitle_text: seg.text || ''
       }))
-      const res = await exportSegmentsApi(requestSegments)
+      const res = await exportSegmentsApi(requestSegments, selectedAnchorId.value, name)
       if (res?.path && res?.suggested_name) {
         if (window.api?.downloadVideo) {
           await window.api.downloadVideo(res.path, res.suggested_name)
@@ -575,6 +685,7 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
   onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown))
 
   return {
+    selectedAnchorId,
     sourceVideos,
     loadingVideos,
     sourceSegmentVideoRef,
@@ -602,6 +713,11 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
     stickyHeaderOffset,
     onSubtitleScroll,
     isExporting,
+    exportHistoryList,
+    showExportHistoryModal,
+    loadExportHistory,
+    loadExportHistorySubtitles,
+    loadingExportHistory,
     formatTime,
     loadVideos,
     toggleGroup,
@@ -628,6 +744,7 @@ export function useQuickClip(selectedProductId: Ref<number | null>) {
     scrollToVideoSubtitles,
     locateContext,
     handleExportSegments,
+    checkDuplicateByVideoSegment,
     getMediaUrl
   }
 }

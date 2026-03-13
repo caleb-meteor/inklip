@@ -221,10 +221,10 @@ export interface SmartCutItem {
   updated_at: string
 }
 
-/** 首页播放载荷：区分素材/智能剪辑，以便无字幕时正确拉取字幕接口 */
+/** 首页播放载荷：区分素材/智能剪辑/导出历史，以便无字幕时正确拉取字幕接口 */
 export type HomePlayPayload = {
-  video: VideoItem | SmartCutItem
-  videoType: 'material' | 'edited'
+  video: VideoItem | SmartCutItem | { id: number; name: string; path: string }
+  videoType: 'material' | 'edited' | 'exported'
 }
 
 export interface SmartCutsResponse {
@@ -323,16 +323,70 @@ export interface ExportSegmentsRequestItem {
   video_id: number
   start_s: number
   end_s: number
+  /** 字幕文本，用于写入导出视频字幕表 */
+  subtitle_text?: string
 }
 
 /**
  * 批量导出并拼接视频片段
+ * @param suggestedName 可选，自定义导出文件名（如 "我的剪辑.mp4"）
  */
-export function exportSegmentsApi(segments: ExportSegmentsRequestItem[]): Promise<ExportSegmentResult> {
+export function exportSegmentsApi(
+  segments: ExportSegmentsRequestItem[],
+  anchorId?: number | null,
+  suggestedName?: string | null
+): Promise<ExportSegmentResult> {
+  const data: Record<string, unknown> = { segments, anchor_id: anchorId || 0 }
+  if (suggestedName != null && suggestedName.trim() !== '') {
+    data.suggested_name = suggestedName.trim()
+  }
   return request({
     url: '/api/videos/export-segments',
     method: 'post',
-    data: { segments },
+    data,
     timeout: 30 * 60 * 1000 // 30 minutes in milliseconds for large exports
+  })
+}
+
+/** 导出视频历史项（与 export_videos 表对应） */
+export interface ExportHistoryItem {
+  id: number
+  anchor_id: number
+  suggested_name: string
+  output_path: string
+  segment_count: number
+  created_at: string
+}
+
+/**
+ * 获取该主播下的导出视频历史
+ */
+export function getExportHistoryApi(anchorId: number): Promise<{ list: ExportHistoryItem[] }> {
+  return request({
+    url: '/api/videos/export-history',
+    method: 'get',
+    params: { anchor_id: anchorId }
+  })
+}
+
+/** 某次导出的字幕片段（含视频信息，用于回填选择字幕区） */
+export interface ExportHistorySubtitleItem {
+  id: number
+  video_id: number
+  start_s: number
+  end_s: number
+  subtitle_text: string
+  sort_order: number
+  video_name: string
+  path: string
+}
+
+/**
+ * 获取某次导出视频的字幕片段列表
+ */
+export function getExportHistorySubtitlesApi(exportVideoId: number): Promise<{ list: ExportHistorySubtitleItem[] }> {
+  return request({
+    url: `/api/videos/export-history/${exportVideoId}/subtitles`,
+    method: 'get'
   })
 }

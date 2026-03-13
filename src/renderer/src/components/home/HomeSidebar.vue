@@ -64,8 +64,26 @@ const isVip = computed(() => wsStore.usageInfo?.isVip ?? false)
 const anchors = ref<Anchor[]>([])
 const products = ref<Product[]>([])
 const videos = ref<VideoItem[]>([])
-const selectedAnchorId = ref<number | null>(null)
+const ANCHOR_STORAGE_KEY = 'home.selectedAnchorId'
+function readStoredAnchorId(): number | null {
+  const s = sessionStorage.getItem(ANCHOR_STORAGE_KEY)
+  if (s) {
+    const n = Number(s)
+    if (Number.isInteger(n)) return n
+  }
+  return null
+}
+const selectedAnchorId = ref<number | null>(readStoredAnchorId())
 const expandedProductIds = ref<number[]>([])
+
+// 主播选中变化时写入 sessionStorage，切回页面时可恢复
+watch(
+  selectedAnchorId,
+  (id) => {
+    sessionStorage.setItem(ANCHOR_STORAGE_KEY, id != null ? String(id) : '')
+  },
+  { flush: 'post' }
+)
 
 // Anchor State
 const newAnchorName = ref('')
@@ -137,9 +155,6 @@ const goToQuickClip = () => {
   if (selectedAnchorId.value) {
     query.append('anchorId', String(selectedAnchorId.value))
   }
-  if (expandedProductIds.value.length > 0) {
-    query.append('productId', String(expandedProductIds.value[0]))
-  }
   const queryString = query.toString()
   emit('navigate', `/quick-clip${queryString ? '?' + queryString : ''}`)
 }
@@ -155,8 +170,10 @@ const loadAll = async (): Promise<void> => {
     anchors.value = anchorsRes.value.list
     if (route.query.anchorId) {
       selectedAnchorId.value = Number(route.query.anchorId)
-    } else if (anchors.value.length > 0 && selectedAnchorId.value == null) {
-      selectedAnchorId.value = anchors.value[0].id
+    } else if (anchors.value.length > 0) {
+      const id = selectedAnchorId.value
+      const exists = id != null && anchors.value.some((a) => a.id === id)
+      if (!exists) selectedAnchorId.value = anchors.value[0].id
     }
   }
   if (productsRes.status === 'fulfilled') {
