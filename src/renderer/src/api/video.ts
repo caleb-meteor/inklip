@@ -121,7 +121,8 @@ export function exportSegmentApi(
   return request({
     url: '/api/videos/export-segment',
     method: 'post',
-    data: { video_id: videoId, start_s: startS, end_s: endS }
+    data: { video_id: videoId, start_s: startS, end_s: endS },
+    timeout: 10 * 60 * 1000 // 10 minutes in milliseconds
   })
 }
 
@@ -331,6 +332,7 @@ export function exportSegmentsApi(segments: ExportSegmentsRequestItem[]): Promis
   return request({
     url: '/api/videos/export-segments',
     method: 'post',
-    data: { segments }
+    data: { segments },
+    timeout: 30 * 60 * 1000 // 30 minutes in milliseconds for large exports
   })
 }

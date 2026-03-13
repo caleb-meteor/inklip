@@ -144,8 +144,8 @@ function createWindow(): void {
   // Create the browser window.
   const icon = getAppIcon()
   mainWindow = new BrowserWindow({
-    width: 1024,
-    height: 670,
+    width: 1280,
+    height: 800,
     show: false,
     title: '影氪',
     icon,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, h, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { NIcon, NAvatar, NPopconfirm, NInput, NDropdown, NTooltip, useMessage } from 'naive-ui'
 import {
   FolderOpenOutline,
@@ -52,10 +53,14 @@ const emit = defineEmits<{
   (e: 'toggle-left-collapse'): void
   (e: 'play-video', payload: HomePlayPayload): void
   (e: 'update:selected-anchor', anchor: Anchor | null): void
+  (e: 'select-product', productId: number): void
+  (e: 'click-video', videoId: number): void
 }>()
 
 const message = useMessage()
+const route = useRoute()
 const wsStore = useRealtimeStore()
+const isVip = computed(() => wsStore.usageInfo?.isVip ?? false)
 const anchors = ref<Anchor[]>([])
 const products = ref<Product[]>([])
 const videos = ref<VideoItem[]>([])
@@ -127,6 +132,18 @@ const currentAnchorProducts = computed(() => {
   return products.value.filter((p) => p.anchor_id === selectedAnchorId.value)
 })
 
+const goToQuickClip = () => {
+  const query = new URLSearchParams()
+  if (selectedAnchorId.value) {
+    query.append('anchorId', String(selectedAnchorId.value))
+  }
+  if (expandedProductIds.value.length > 0) {
+    query.append('productId', String(expandedProductIds.value[0]))
+  }
+  const queryString = query.toString()
+  emit('navigate', `/quick-clip${queryString ? '?' + queryString : ''}`)
+}
+
 /** 加载主播、产品、视频列表（用于首屏加载与休眠/长时间未操作后恢复） */
 const loadAll = async (): Promise<void> => {
   const [anchorsRes, productsRes, videosRes] = await Promise.allSettled([
@@ -136,11 +153,24 @@ const loadAll = async (): Promise<void> => {
   ])
   if (anchorsRes.status === 'fulfilled') {
     anchors.value = anchorsRes.value.list
-    if (anchors.value.length > 0 && selectedAnchorId.value == null) {
+    if (route.query.anchorId) {
+      selectedAnchorId.value = Number(route.query.anchorId)
+    } else if (anchors.value.length > 0 && selectedAnchorId.value == null) {
       selectedAnchorId.value = anchors.value[0].id
     }
   }
-  if (productsRes.status === 'fulfilled') products.value = productsRes.value.list
+  if (productsRes.status === 'fulfilled') {
+    products.value = productsRes.value.list
+    if (route.query.productId) {
+      const pId = Number(route.query.productId)
+      if (!expandedProductIds.value.includes(pId)) {
+        expandedProductIds.value.push(pId)
+      }
+      nextTick(() => {
+        emit('select-product', pId)
+      })
+    }
+  }
   if (videosRes.status === 'fulfilled') videos.value = videosRes.value
 }
 
@@ -165,6 +195,7 @@ const toggleProduct = (id: number): void => {
   } else {
     expandedProductIds.value.push(id)
   }
+  emit('select-product', id)
 }
 
 const getProductVideos = (productId: number) => {
@@ -443,7 +474,7 @@ const doDeleteProduct = async (product: Product) => {
           <span class="pending-tag">待开发</span>
         </div>
 
-        <div v-show="!collapsed" class="nav-item clickable" @click="emit('navigate', '/quick-clip')">
+        <div v-if="isVip" v-show="!collapsed" class="nav-item clickable" @click="goToQuickClip">
           <n-icon size="14" class="arrow-icon"><ChevronForwardOutline /></n-icon>
           <n-icon size="18" color="#10b981"><CutOutline /></n-icon>
           <span>快速剪辑</span>
@@ -486,9 +517,9 @@ const doDeleteProduct = async (product: Product) => {
             {{ currentAnchor ? currentAnchor.name : '主播列表' }}
           </n-tooltip>
 
-          <n-tooltip placement="right">
+          <n-tooltip v-if="isVip" placement="right">
             <template #trigger>
-              <div class="collapsed-icon-item" @click="emit('navigate', '/quick-clip')">
+              <div class="collapsed-icon-item" @click="goToQuickClip">
                 <n-icon size="20" color="#10b981"><CutOutline /></n-icon>
               </div>
             </template>
@@ -772,6 +803,7 @@ const doDeleteProduct = async (product: Product) => {
                     v-for="video in getProductVideos(product.id)"
                     :key="video.id"
                     class="video-preview-card"
+                    @click="emit('click-video', video.id)"
                     @dblclick="emit('play-video', { video, videoType: 'material' })"
                     @contextmenu="handleContextMenu($event, video, 'video')"
                   >

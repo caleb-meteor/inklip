@@ -18,7 +18,7 @@ const routes = [
   {
     path: '/quick-clip',
     name: 'QuickClip',
-    component: QuickClip
+    component: Home
   },
   {
     path: '/settings',

@@ -6,6 +6,7 @@ import HomeSidebar from '../components/home/HomeSidebar.vue'
 import HomeRightSidebar from '../components/home/HomeRightSidebar.vue'
 import HomeChatMessages from '../components/home/HomeChatMessages.vue'
 import HomeVideoPlayer from '../components/home/HomeVideoPlayer.vue'
+import QuickClip from './QuickClip.vue'
 import ChatInput from '../components/ChatInput.vue'
 import VideoUploadChatModal from '../components/home/VideoUploadChatModal.vue'
 import AppStatusBar from '../components/AppStatusBar.vue'
@@ -50,10 +51,12 @@ const isTaskRunning = computed(() => {
 
 const currentPlayingVideo = ref<HomePlayPayload | null>(null)
 const currentSelectedAnchor = ref<any>(null)
+const currentSelectedProduct = ref<number | null>(null)
 
 const homeSidebarRef = ref<InstanceType<typeof HomeSidebar> | null>(null)
 const homeRightSidebarRef = ref<InstanceType<typeof HomeRightSidebar> | null>(null)
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
+const quickClipRef = ref<InstanceType<typeof QuickClip> | null>(null)
 let stopReconnectWatch: (() => void) | undefined
 
 const handlePlayVideo = (payload: HomePlayPayload) => {
@@ -270,33 +273,45 @@ const handleNewChat = (): void => {
             @toggle-left-collapse="leftSidebarCollapsed = !leftSidebarCollapsed"
             @play-video="handlePlayVideo"
             @update:selected-anchor="currentSelectedAnchor = $event"
+            @select-product="currentSelectedProduct = $event"
+            @click-video="quickClipRef?.scrollToVideoSubtitles?.($event)"
           />
         </n-layout-sider>
 
         <n-layout-content class="home-content">
-          <div v-if="!currentPlayingVideo" class="chat-layout">
-            <div class="messages-container">
-              <HomeChatMessages :messages="messages" @play-video="handlePlayVideo" />
-            </div>
+          <QuickClip
+            v-if="route.path === '/quick-clip'"
+            ref="quickClipRef"
+            :current-anchor="currentSelectedAnchor"
+            :selected-product-id="currentSelectedProduct"
+            @navigate="navigateTo"
+          />
+          <template v-else>
+            <div v-if="!currentPlayingVideo" class="chat-layout">
+              <div class="messages-container">
+                <HomeChatMessages :messages="messages" @play-video="handlePlayVideo" />
+              </div>
 
-            <div class="input-area-wrapper">
-              <div class="input-area-container">
-                <ChatInput ref="chatInputRef" :disabled="isTaskRunning" @send="handleSend" />
+              <div class="input-area-wrapper">
+                <div class="input-area-container">
+                  <ChatInput ref="chatInputRef" :disabled="isTaskRunning" @send="handleSend" />
+                </div>
               </div>
             </div>
-          </div>
 
-          <HomeVideoPlayer
-            v-else
-            :payload="currentPlayingVideo"
-            @close="handleClosePlayer"
-            @open-chat="handleNewChat"
-          />
+            <HomeVideoPlayer
+              v-else
+              :payload="currentPlayingVideo"
+              @close="handleClosePlayer"
+              @open-chat="handleNewChat"
+            />
+          </template>
 
           <VideoUploadChatModal v-model:show="showUploadModal" @success="handleUploadSuccess" />
         </n-layout-content>
 
         <n-layout-sider
+          v-if="route.path !== '/quick-clip'"
           width="280"
           collapse-mode="width"
           :collapsed-width="48"
