@@ -26,6 +26,7 @@ function openExportFolder(filePath: string) {
       <div style="display: flex; align-items: center; gap: 8px;">
         <n-icon size="18"><ListOutline /></n-icon>
         <span>选择的字幕</span>
+        <span v-if="qc.selectedSegments.length > 0" class="total-duration">总时长 {{ qc.formatTime(qc.selectedTotalDurationSeconds) }}</span>
       </div>
       <div style="display: flex; align-items: center; gap: 6px;">
         <n-button
@@ -194,6 +195,11 @@ function openExportFolder(filePath: string) {
   font-size: 13px;
   color: #f5f5f7;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.total-duration {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.5);
 }
 .panel-body-split {
   flex: 1;

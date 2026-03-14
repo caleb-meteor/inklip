@@ -70,6 +70,7 @@ function confirmExport() {
         </template>
         导出所选片段
       </n-button>
+      <div class="preview-spacer"></div>
     </div>
 
     <n-modal
@@ -141,14 +142,23 @@ function confirmExport() {
   flex-direction: column;
   gap: 12px;
   padding: 12px;
+  min-height: 0;
 }
 .preview-video-wrap {
-  flex: 1;
-  min-height: 120px;
+  flex-shrink: 0;
+  width: 100%;
+  aspect-ratio: 9 / 16;
   border-radius: 8px;
   overflow: hidden;
   background: #000;
   position: relative;
+}
+.preview-body .n-button {
+  flex-shrink: 0;
+}
+.preview-spacer {
+  flex: 1;
+  min-height: 0;
 }
 .preview-video {
   width: 100%;

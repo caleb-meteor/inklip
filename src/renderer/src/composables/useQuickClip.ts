@@ -372,11 +372,29 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     return `${m}:${sec.toString().padStart(2, '0')}`
   }
 
-  function loadVideos() {
+  /** 所选字幕总时长（秒） */
+  const selectedTotalDurationSeconds = computed(() =>
+    selectedSegments.value.reduce((sum, seg) => sum + (seg.toS - seg.fromS), 0)
+  )
+
+  /**
+   * 加载当前主播的视频字幕。若传入全量列表则按 anchor_id 过滤复用，否则请求接口。
+   * @param allVideos 可选，左侧已拉取的全量视频列表，传入则不再发请求
+   */
+  function loadVideos(allVideos?: VideoItem[]) {
     if (!selectedAnchorId.value) {
       sourceVideos.value = []
       allSegments.value = []
       subtitleCache.clear()
+      return
+    }
+    if (allVideos !== undefined) {
+      const list = allVideos.filter(v => v.anchor_id === selectedAnchorId.value)
+      subtitleCache.clear()
+      sourceVideos.value = list
+      collapsedGroups.value = new Set(list.map(v => v.id))
+      showSubtitleContext.value = false
+      allSegments.value = []
       return
     }
     loadingVideos.value = true
@@ -391,7 +409,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       .finally(() => { loadingVideos.value = false })
   }
 
-  watch(selectedAnchorId, loadVideos, { immediate: true })
+  watch(selectedAnchorId, () => loadVideos(), { immediate: true })
 
   // 切换主播时：清空选择字幕、重新请求导出历史
   watch(
@@ -891,6 +909,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     dragOverIndex,
     dropPosition,
     displayRowsForSelected,
+    selectedTotalDurationSeconds,
     subtitleScrollbarRef,
     currentStickyHeader,
     stickyHeaderOffset,

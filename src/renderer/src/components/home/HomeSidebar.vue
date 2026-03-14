@@ -55,6 +55,7 @@ const emit = defineEmits<{
   (e: 'update:selected-anchor', anchor: Anchor | null): void
   (e: 'select-product', productId: number): void
   (e: 'click-video', videoId: number): void
+  (e: 'videos-updated', list: VideoItem[]): void
 }>()
 
 const message = useMessage()
@@ -188,7 +189,11 @@ const loadAll = async (): Promise<void> => {
       })
     }
   }
-  if (videosRes.status === 'fulfilled') videos.value = videosRes.value
+  if (videosRes.status === 'fulfilled') {
+    const list = videosRes.value
+    videos.value = list
+    emit('videos-updated', list)
+  }
 }
 
 onMounted(() => {
@@ -226,6 +231,7 @@ const refreshVideosFromApi = async () => {
   list.forEach((v) => {
     if (v.task_status === 2) wsStore.clearVideoProgress(v.id)
   })
+  emit('videos-updated', list)
 }
 
 const openUploadModal = (product: Product) => {
@@ -234,7 +240,9 @@ const openUploadModal = (product: Product) => {
 }
 
 const handleUploadSuccess = async () => {
-  videos.value = await getVideosApi()
+  const list = await getVideosApi()
+  videos.value = list
+  emit('videos-updated', list)
 }
 
 const getAvatarColor = (name: string): string => {

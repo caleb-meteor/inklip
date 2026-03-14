@@ -21,7 +21,8 @@ const quickClip = useQuickClip(selectedAnchorIdRef)
 provide('quickClip', reactive(quickClip))
 
 defineExpose({
-  scrollToVideoSubtitles: quickClip.scrollToVideoSubtitles
+  scrollToVideoSubtitles: quickClip.scrollToVideoSubtitles,
+  loadVideos: quickClip.loadVideos
 })
 
 function handleNavigate(path: string) {
@@ -82,11 +83,16 @@ function onApplyExport(exportVideoId: number) {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 360px 1.5fr 1.2fr;
+  grid-template-columns: 1fr 1fr 300px;
   grid-template-rows: 1fr;
   gap: 12px;
   padding: 12px;
   height: calc(100% - 53px);
   box-sizing: border-box;
+}
+.quick-clip-grid > * {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>

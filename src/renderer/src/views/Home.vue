@@ -67,6 +67,11 @@ const handleClosePlayer = () => {
   currentPlayingVideo.value = null
 }
 
+/** 左侧当前主播视频区有改动时，若在字幕剪辑页则用已拉取的全量列表复用，避免再发请求 */
+const onVideosUpdated = (list: import('../api/video').VideoItem[]): void => {
+  if (route.path === '/quick-clip') quickClipRef.value?.loadVideos?.(list)
+}
+
 /** 长时间未操作/休眠恢复后：重新拉取主播、产品、视频、聊天列表、当前对话消息、剪辑历史，避免信息丢失 */
 const refreshPageData = (): void => {
   homeSidebarRef.value?.loadAll?.()
@@ -275,6 +280,7 @@ const handleNewChat = (): void => {
             @update:selected-anchor="currentSelectedAnchor = $event"
             @select-product="currentSelectedProduct = $event"
             @click-video="quickClipRef?.scrollToVideoSubtitles?.($event)"
+            @videos-updated="onVideosUpdated"
           />
         </n-layout-sider>
 
