@@ -1,34 +1,14 @@
-# inklip
+# 影氪（inklip）
 
-An Electron application with Vue and TypeScript
+智能视频剪辑工具
 
-## Recommended IDE Setup
+---
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
+## 核心功能
 
-## Project Setup
-
-### Install
-
-```bash
-$ pnpm install
-```
-
-### Development
-
-```bash
-$ pnpm dev
-```
-
-### Build
-
-```bash
-# For windows
-$ pnpm build:win
-
-# For macOS
-$ pnpm build:mac
-
-# For Linux
-$ pnpm build:linux
-```
+- **AI 对话与智能剪辑**：输入需求后自动识别意图（搜索 / 剪辑），引导选择视频、主播、产品并执行智能剪辑。
+- **视频全文搜索**：按关键词搜索视频字幕与名称，返回命中片段与时间。
+- **资源管理**：管理主播、产品与视频列表，按主播/产品筛选，支持上传与基础编辑。
+- **快速剪辑**：按主播查看视频字幕，搜索、多选片段、拖拽排序，预览后导出成片。
+- **剪辑历史**：查看并刷新历史剪辑任务与结果。
+- **设置**：视频数据目录、API Key、反馈与自动更新。
