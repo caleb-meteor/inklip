@@ -291,24 +291,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     showSubtitleContext.value = false
   })
 
-  /** 搜索结果按视频分组 */
-  const searchResultGroups = computed(() => {
-    const segs = searchResults.value
-    if (segs.length === 0) return []
-    const groups: { videoId: number; videoName: string; segments: SegmentWithVideo[] }[] = []
-    const map = new Map<number, { videoId: number; videoName: string; segments: SegmentWithVideo[] }>()
-    for (const seg of segs) {
-      let g = map.get(seg.videoId)
-      if (!g) {
-        g = { videoId: seg.videoId, videoName: seg.videoName, segments: [] }
-        map.set(seg.videoId, g)
-        groups.push(g)
-      }
-      g.segments.push(seg)
-    }
-    return groups
-  })
-
   /** 是否显示「查看更多」（已展示条数小于接口返回的 total 时可能还有更多） */
   const searchHasMore = computed(() => searchResults.value.length < searchTotal.value && searchTotal.value > 0)
 
@@ -886,7 +868,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     showSubtitleContext,
     filteredSegmentGroups,
     searchResults,
-    searchResultGroups,
     searchTotal,
     searchHasMore,
     loadMoreSearchResults,

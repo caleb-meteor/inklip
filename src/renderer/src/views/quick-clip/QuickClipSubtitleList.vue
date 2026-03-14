@@ -44,34 +44,28 @@ const qc = inject('quickClip') as any
       <div class="search-results-body">
         <n-spin :show="qc.searchLoading">
           <div class="search-results-inner">
-            <template v-for="group in qc.searchResultGroups" :key="group.videoId">
-              <div class="search-group-header">
-                <n-icon size="14"><VideocamOutline /></n-icon>
-                <span class="search-group-title" :title="group.videoName">{{ group.videoName }}</span>
-                <span class="search-group-count">{{ group.segments.length }}</span>
+            <div class="segment-list">
+              <div
+                v-for="seg in qc.searchResults"
+                :key="qc.getSegmentKey(seg)"
+                class="segment-row"
+                :class="{ 'is-selected': qc.selectedSourceKeys.has(qc.getSegmentKey(seg)) }"
+                @click="qc.toggleSourceSelection(seg, $event)"
+              >
+                <span class="segment-time">{{ qc.formatTime(seg.fromS) }}</span>
+                <span class="segment-video" :title="seg.videoName">{{ seg.videoName }}</span>
+                <span class="segment-text" :title="seg.text">{{ seg.text }}</span>
+                <n-button quaternary size="tiny" type="warning" class="segment-action" title="定位上下文" @click.stop="qc.locateContext(seg)">
+                  <n-icon><LocateOutline /></n-icon>
+                </n-button>
+                <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(seg)">
+                  <n-icon><PlayOutline /></n-icon>
+                </n-button>
+                <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" @click.stop="qc.addSegment(seg)">
+                  <n-icon><AddOutline /></n-icon>
+                </n-button>
               </div>
-              <div class="segment-list">
-                <div
-                  v-for="seg in group.segments"
-                  :key="qc.getSegmentKey(seg)"
-                  class="segment-row"
-                  :class="{ 'is-selected': qc.selectedSourceKeys.has(qc.getSegmentKey(seg)) }"
-                  @click="qc.toggleSourceSelection(seg, $event)"
-                >
-                  <span class="segment-time">{{ qc.formatTime(seg.fromS) }}</span>
-                  <span class="segment-text" :title="seg.text">{{ seg.text }}</span>
-                  <n-button quaternary size="tiny" type="warning" class="segment-action" title="定位上下文" @click.stop="qc.locateContext(seg)">
-                    <n-icon><LocateOutline /></n-icon>
-                  </n-button>
-                  <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(seg)">
-                    <n-icon><PlayOutline /></n-icon>
-                  </n-button>
-                  <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" @click.stop="qc.addSegment(seg)">
-                    <n-icon><AddOutline /></n-icon>
-                  </n-button>
-                </div>
-              </div>
-            </template>
+            </div>
             <div v-if="qc.searchHasMore && !qc.searchLoading" class="search-load-more">
               <n-button quaternary block size="small" @click="qc.loadMoreSearchResults()">查看更多</n-button>
             </div>
@@ -169,7 +163,7 @@ const qc = inject('quickClip') as any
   background: rgba(255, 255, 255, 0.02);
 }
 .search-results-body {
-  /* 不做任何高度限制，交给 inner 自己限高 */
+  min-height: 0; /* 交给 inner 自己限高 */
 }
 .search-results-inner {
   max-height: 220px;
@@ -187,31 +181,6 @@ const qc = inject('quickClip') as any
 .search-load-more {
   padding: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-.search-group-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px 2px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #4facfe;
-}
-.search-group-header:first-child {
-  padding-top: 8px;
-}
-.search-group-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.search-group-count {
-  flex-shrink: 0;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: 400;
 }
 .subtitle-panel-body {
   flex: 1;
@@ -288,9 +257,15 @@ const qc = inject('quickClip') as any
   flex-shrink: 0;
   font-size: 11px;
   color: #4facfe;
-  font-family: monospace;
-  width: 36px;
-  text-align: right;
+}
+.segment-video {
+  flex-shrink: 0;
+  max-width: 100px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .segment-text {
   flex: 1;
