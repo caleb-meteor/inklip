@@ -456,3 +456,32 @@ export function getExportHistorySubtitlesApi(exportVideoId: number): Promise<{ l
     method: 'get'
   })
 }
+
+/** 爆款复刻：单句匹配结果 */
+export interface ReplicateHitMatchItem {
+  sentence: string
+  match: {
+    video: VideoItem
+    segment: {
+      video_id: number
+      text: string
+      start_ms: number
+      end_ms: number
+      start_s: number
+      end_s: number
+      score: number
+    }
+  } | null
+}
+
+/**
+ * 爆款复刻：将文案按句拆分，逐句在主播字幕中找最佳匹配
+ */
+export function replicateHitApi(text: string, anchorId: number | null): Promise<{ results: ReplicateHitMatchItem[] }> {
+  return request({
+    url: '/api/videos/replicate-hit',
+    method: 'post',
+    data: { text, anchor_id: anchorId },
+    timeout: 60000
+  })
+}

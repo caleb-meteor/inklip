@@ -7,7 +7,10 @@ import {
   ChevronDownOutline,
   PlayOutline,
   AddOutline,
-  LocateOutline
+  LocateOutline,
+  FlameOutline,
+  CheckmarkCircleOutline,
+  CloseCircleOutline
 } from '@vicons/ionicons5'
 import { inject } from 'vue'
 
@@ -27,119 +30,197 @@ function onSearchResultsScroll(e: Event) {
 <template>
   <div class="panel panel-subtitles">
     <div class="panel-header">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <n-icon size="18"><DocumentTextOutline /></n-icon>
-        <span>视频字幕</span>
+      <div class="custom-tabs">
+        <div class="tab-item" :class="{ active: qc.subtitleTab === 'subtitles' }" @click="qc.subtitleTab = 'subtitles'">
+          <n-icon size="14"><DocumentTextOutline /></n-icon>
+          <span>视频字幕</span>
+        </div>
+        <div class="tab-item" :class="{ active: qc.subtitleTab === 'replicate' }" @click="qc.subtitleTab = 'replicate'">
+          <n-icon size="14"><FlameOutline /></n-icon>
+          <span>爆款复刻</span>
+        </div>
       </div>
     </div>
-    <div class="panel-search">
-      <n-input
-        v-model:value="qc.subtitleSearch"
-        placeholder="搜索字幕..."
-        size="small"
-        clearable
-      />
-    </div>
 
-    <div v-if="qc.subtitleSearch" class="search-results-panel">
-      <div class="search-results-header">搜索结果（共 {{ qc.searchLoading ? '...' : qc.searchTotal }} 条）</div>
-      <div class="search-results-body">
-        <n-spin :show="qc.searchLoading">
-          <div class="search-results-inner" @scroll="onSearchResultsScroll">
-            <div class="segment-list">
-              <div
-                v-for="seg in qc.searchResults"
-                :key="qc.getSegmentKey(seg)"
-                class="segment-row"
-                :class="{
-                  'is-selected': qc.selectedSourceKeys.has(qc.getSegmentKey(seg)),
-                  'is-in-selected': qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))
-                }"
-                :draggable="!qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))"
-                @dragstart="qc.onSourceSegmentDragStart($event, seg)"
-                @click="qc.toggleSourceSelection(seg, $event)"
-              >
-                <span class="segment-time">{{ qc.formatTime(seg.fromS) }}</span>
-                <span class="segment-text" :title="seg.text">{{ seg.text }}</span>
-                <n-button quaternary size="tiny" type="warning" class="segment-action" title="定位上下文" @click.stop="qc.locateContext(seg)">
-                  <n-icon><LocateOutline /></n-icon>
-                </n-button>
-                <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(seg)">
-                  <n-icon><PlayOutline /></n-icon>
-                </n-button>
-                <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" :disabled="qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))" @click.stop="qc.addSegment(seg)">
-                  <n-icon><AddOutline /></n-icon>
-                </n-button>
+    <!-- ===== Tab1: 视频字幕（现有功能） ===== -->
+    <template v-if="qc.subtitleTab === 'subtitles'">
+      <div class="panel-search">
+        <n-input
+          v-model:value="qc.subtitleSearch"
+          placeholder="搜索字幕..."
+          size="small"
+          clearable
+        />
+      </div>
+
+      <div v-if="qc.subtitleSearch" class="search-results-panel">
+        <div class="search-results-header">搜索结果（共 {{ qc.searchLoading ? '...' : qc.searchTotal }} 条）</div>
+        <div class="search-results-body">
+          <n-spin :show="qc.searchLoading">
+            <div class="search-results-inner" @scroll="onSearchResultsScroll">
+              <div class="segment-list">
+                <div
+                  v-for="seg in qc.searchResults"
+                  :key="qc.getSegmentKey(seg)"
+                  class="segment-row"
+                  :class="{
+                    'is-selected': qc.selectedSourceKeys.has(qc.getSegmentKey(seg)),
+                    'is-in-selected': qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))
+                  }"
+                  :draggable="!qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))"
+                  @dragstart="qc.onSourceSegmentDragStart($event, seg)"
+                  @click="qc.toggleSourceSelection(seg, $event)"
+                >
+                  <span class="segment-time">{{ qc.formatTime(seg.fromS) }}</span>
+                  <span class="segment-text" :title="seg.text">{{ seg.text }}</span>
+                  <n-button quaternary size="tiny" type="warning" class="segment-action" title="定位上下文" @click.stop="qc.locateContext(seg)">
+                    <n-icon><LocateOutline /></n-icon>
+                  </n-button>
+                  <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(seg)">
+                    <n-icon><PlayOutline /></n-icon>
+                  </n-button>
+                  <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" :disabled="qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))" @click.stop="qc.addSegment(seg)">
+                    <n-icon><AddOutline /></n-icon>
+                  </n-button>
+                </div>
+              </div>
+            </div>
+          </n-spin>
+        </div>
+      </div>
+
+      <div class="subtitle-panel-body" :class="{ 'has-search': qc.subtitleSearch }">
+        <div v-if="qc.showSubtitleContext || qc.selectedSourceKeys.size > 0" class="context-header">
+          <span v-if="qc.showSubtitleContext">字幕上下文</span>
+          <span v-else></span>
+          <div v-if="qc.selectedSourceKeys.size > 0" class="context-header-actions">
+            <n-button size="tiny" quaternary @click="qc.clearSourceSelection">
+              取消全选
+            </n-button>
+            <n-button size="tiny" type="primary" @click="qc.addSelectedSegments">
+              添加选中 ({{ qc.selectedSourceKeys.size }})
+            </n-button>
+          </div>
+        </div>
+        <div v-else-if="qc.subtitleSearch" class="empty-hint">
+          点击搜索结果中的「定位」查看完整视频字幕
+        </div>
+
+        <n-virtual-list
+          v-show="!qc.subtitleSearch || qc.showSubtitleContext"
+          :ref="(el) => { if (el) qc.subtitleScrollbarRef = el }"
+          :items="qc.flatVirtualList"
+          :item-size="34"
+          class="subtitle-virtual-list"
+          @scroll="qc.onSubtitleScroll"
+        >
+          <template #default="{ item }">
+            <div
+              v-if="item.type === 'header'"
+              class="segment-group-header"
+              @click="qc.toggleGroup(item.videoId!)"
+              style="cursor: pointer;"
+            >
+              <n-icon size="14">
+                <ChevronForwardOutline v-if="qc.collapsedGroups.has(item.videoId!)" />
+                <ChevronDownOutline v-else />
+              </n-icon>
+              <n-icon size="14"><VideocamOutline /></n-icon>
+              <span class="segment-group-title" :title="item.videoName">{{ item.videoName }}</span>
+            </div>
+            <div
+              v-else
+              :id="`subtitle-${item.key}`"
+              class="segment-row"
+              :class="{
+                'is-selected': qc.selectedSourceKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!)),
+                'is-in-selected': qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))
+              }"
+              :draggable="!qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))"
+              @dragstart="qc.onSourceSegmentDragStart($event, item.segment!)"
+              @click="qc.toggleSourceSelection(item.segment!, $event)"
+            >
+              <span class="segment-time">{{ qc.formatTime(item.segment!.fromS) }}</span>
+              <span class="segment-text" :title="item.segment!.text">{{ item.segment!.text }}</span>
+              <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(item.segment!)">
+                <n-icon><PlayOutline /></n-icon>
+              </n-button>
+              <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" :disabled="qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))" @click.stop="qc.addSegment(item.segment!)">
+                <n-icon><AddOutline /></n-icon>
+              </n-button>
+            </div>
+          </template>
+        </n-virtual-list>
+      </div>
+    </template>
+
+    <!-- ===== Tab2: 爆款复刻 ===== -->
+    <template v-if="qc.subtitleTab === 'replicate'">
+      <div class="replicate-panel">
+        <div class="replicate-input-area">
+          <n-input
+            v-model:value="qc.replicateText"
+            type="textarea"
+            placeholder="粘贴爆款视频文案，系统将从当前主播的字幕中匹配最相似的内容..."
+            :rows="5"
+            size="small"
+          />
+          <n-button
+            type="primary"
+            size="small"
+            :loading="qc.replicateLoading"
+            :disabled="!qc.replicateText.trim() || qc.replicateLoading"
+            style="margin-top: 8px; width: 100%;"
+            @click="qc.startReplicate"
+          >
+            开始复刻
+          </n-button>
+        </div>
+
+        <div v-if="qc.replicateResults.length > 0" class="replicate-results">
+          <div class="replicate-results-header">
+            <span>匹配结果（{{ qc.replicateResults.filter(r => r.match).length }} / {{ qc.replicateResults.length }} 句匹配）</span>
+            <n-button
+              size="tiny"
+              type="primary"
+              :disabled="qc.replicateResults.filter(r => r.match).length === 0"
+              @click="qc.applyReplicateResults"
+            >
+              一键添加
+            </n-button>
+          </div>
+          <div class="replicate-results-list">
+            <div
+              v-for="(item, idx) in qc.replicateResults"
+              :key="idx"
+              class="replicate-row"
+              :class="{ 'no-match': !item.match }"
+            >
+              <div class="replicate-sentence">
+                <n-icon size="14" :color="item.match ? '#52c41a' : 'rgba(255,255,255,0.25)'">
+                  <CheckmarkCircleOutline v-if="item.match" />
+                  <CloseCircleOutline v-else />
+                </n-icon>
+                <span class="replicate-sentence-text">{{ item.sentence }}</span>
+              </div>
+              <div v-if="item.match" class="replicate-match">
+                <span class="replicate-match-arrow">→</span>
+                <span class="replicate-match-text" :title="item.match.segment.text">{{ item.match.segment.text }}</span>
+                <span class="replicate-match-video">{{ item.match.video.name }}</span>
+              </div>
+              <div v-else class="replicate-match replicate-match-empty">
+                <span class="replicate-match-arrow">→</span>
+                <span class="replicate-match-text">未找到匹配</span>
               </div>
             </div>
           </div>
-        </n-spin>
-      </div>
-    </div>
+        </div>
 
-    <div class="subtitle-panel-body" :class="{ 'has-search': qc.subtitleSearch }">
-      <div v-if="qc.showSubtitleContext || qc.selectedSourceKeys.size > 0" class="context-header">
-        <span v-if="qc.showSubtitleContext">字幕上下文</span>
-        <span v-else></span>
-        <div v-if="qc.selectedSourceKeys.size > 0" class="context-header-actions">
-          <n-button size="tiny" quaternary @click="qc.clearSourceSelection">
-            取消全选
-          </n-button>
-          <n-button size="tiny" type="primary" @click="qc.addSelectedSegments">
-            添加选中 ({{ qc.selectedSourceKeys.size }})
-          </n-button>
+        <div v-else-if="!qc.replicateLoading" class="empty-hint">
+          输入爆款文案后点击「开始复刻」
         </div>
       </div>
-      <div v-else-if="qc.subtitleSearch" class="empty-hint">
-        点击搜索结果中的「定位」查看完整视频字幕
-      </div>
-
-      <n-virtual-list
-        v-show="!qc.subtitleSearch || qc.showSubtitleContext"
-        :ref="(el) => { if (el) qc.subtitleScrollbarRef = el }"
-        :items="qc.flatVirtualList"
-        :item-size="34"
-        class="subtitle-virtual-list"
-        @scroll="qc.onSubtitleScroll"
-      >
-        <template #default="{ item }">
-          <div
-            v-if="item.type === 'header'"
-            class="segment-group-header"
-            @click="qc.toggleGroup(item.videoId!)"
-            style="cursor: pointer;"
-          >
-            <n-icon size="14">
-              <ChevronForwardOutline v-if="qc.collapsedGroups.has(item.videoId!)" />
-              <ChevronDownOutline v-else />
-            </n-icon>
-            <n-icon size="14"><VideocamOutline /></n-icon>
-            <span class="segment-group-title" :title="item.videoName">{{ item.videoName }}</span>
-          </div>
-          <div
-            v-else
-            :id="`subtitle-${item.key}`"
-            class="segment-row"
-            :class="{
-              'is-selected': qc.selectedSourceKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!)),
-              'is-in-selected': qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))
-            }"
-            :draggable="!qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))"
-            @dragstart="qc.onSourceSegmentDragStart($event, item.segment!)"
-            @click="qc.toggleSourceSelection(item.segment!, $event)"
-          >
-            <span class="segment-time">{{ qc.formatTime(item.segment!.fromS) }}</span>
-            <span class="segment-text" :title="item.segment!.text">{{ item.segment!.text }}</span>
-            <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(item.segment!)">
-              <n-icon><PlayOutline /></n-icon>
-            </n-button>
-            <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" :disabled="qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))" @click.stop="qc.addSegment(item.segment!)">
-              <n-icon><AddOutline /></n-icon>
-            </n-button>
-          </div>
-        </template>
-      </n-virtual-list>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -155,14 +236,38 @@ function onSearchResultsScroll(e: Event) {
 }
 .panel-header {
   flex-shrink: 0;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.custom-tabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 2px;
+}
+.tab-item {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  font-weight: 600;
-  font-size: 13px;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.tab-item:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+.tab-item.active {
+  background: rgba(255, 255, 255, 0.1);
   color: #f5f5f7;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-weight: 600;
 }
 .panel-search {
   flex-shrink: 0;
@@ -180,7 +285,7 @@ function onSearchResultsScroll(e: Event) {
   background: rgba(255, 255, 255, 0.02);
 }
 .search-results-body {
-  min-height: 0; /* 交给 inner 自己限高 */
+  min-height: 0;
 }
 .search-results-inner {
   max-height: 220px;
@@ -275,7 +380,6 @@ function onSearchResultsScroll(e: Event) {
   border-left: 3px solid rgba(82, 196, 26, 0.9);
   padding-left: 7px;
 }
-/* 字幕上下文在 n-virtual-list 内，需 :deep 穿透才能生效 */
 .panel :deep(.segment-row.is-in-selected) {
   border-left: 3px solid rgba(82, 196, 26, 0.9);
   padding-left: 7px;
@@ -334,5 +438,100 @@ function onSearchResultsScroll(e: Event) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ===== 爆款复刻 ===== */
+.replicate-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.replicate-input-area {
+  flex-shrink: 0;
+  padding: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.replicate-results {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.replicate-results-header {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.replicate-results-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 10px;
+}
+.replicate-row {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.replicate-row.no-match {
+  opacity: 0.45;
+}
+.replicate-sentence {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.replicate-sentence-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.4;
+  word-break: break-all;
+}
+.replicate-match {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding-left: 20px;
+}
+.replicate-match-arrow {
+  flex-shrink: 0;
+  color: #4facfe;
+  font-size: 12px;
+}
+.replicate-match-text {
+  flex: 1;
+  font-size: 11px;
+  color: rgba(79, 172, 254, 0.9);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.replicate-match-video {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.replicate-match-empty .replicate-match-text {
+  color: rgba(255, 255, 255, 0.25);
+  font-style: italic;
 }
 </style>

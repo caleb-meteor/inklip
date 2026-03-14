@@ -1,6 +1,6 @@
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
 import { useMessage } from 'naive-ui'
-import { getVideosApi, type VideoItem, exportSegmentsApi, getExportHistoryApi, getExportHistorySubtitlesApi, deleteExportHistoryApi, type ExportHistoryItem, searchSubtitlesApi } from '../api/video'
+import { getVideosApi, type VideoItem, exportSegmentsApi, getExportHistoryApi, getExportHistorySubtitlesApi, deleteExportHistoryApi, type ExportHistoryItem, searchSubtitlesApi, replicateHitApi, type ReplicateHitMatchItem } from '../api/video'
 import { parseSubtitleToSegments } from '../utils/subtitle'
 import { getMediaUrl } from '../utils/media'
 import type { SegmentWithVideo, VideoSegmentGroup, VirtualListItem } from '../views/quick-clip/types'
@@ -24,6 +24,12 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   const locatedContexts = ref<Set<number>>(new Set())
   /** 是否显示全部字幕区域（仅在通过搜索结果「定位上下文」后显示） */
   const showSubtitleContext = ref(false)
+
+  /** 视频字幕区 Tab：subtitles=视频字幕 replicate=爆款复刻 */
+  const subtitleTab = ref<'subtitles' | 'replicate'>('subtitles')
+  const replicateText = ref('')
+  const replicateLoading = ref(false)
+  const replicateResults = ref<ReplicateHitMatchItem[]>([])
 
   /** 懒解析字幕缓存：只有展开视频组时才解析该视频的字幕 */
   const subtitleCache = new Map<number, SegmentWithVideo[]>()
@@ -881,6 +887,59 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   }
 
   /** 按 videoId + fromS + toS 检测重复，返回重复组（同一时间段被选了多次） */
+  async function startReplicate() {
+    const text = replicateText.value.trim()
+    if (!text) {
+      message.warning('请输入爆款文案')
+      return
+    }
+    replicateLoading.value = true
+    replicateResults.value = []
+    try {
+      const res = await replicateHitApi(text, selectedAnchorId.value)
+      replicateResults.value = res.results || []
+    } catch {
+      message.error('爆款复刻匹配失败')
+    } finally {
+      replicateLoading.value = false
+    }
+  }
+
+  function applyReplicateResults() {
+    const matched = replicateResults.value.filter(r => r.match !== null)
+    if (matched.length === 0) {
+      message.warning('没有可添加的匹配结果')
+      return
+    }
+    const existingKeys = new Set(selectedSegments.value.map(s => getSegmentKey(s)))
+    let addedCount = 0
+    for (const item of matched) {
+      const m = item.match!
+      const seg: SegmentWithVideo = {
+        videoId: m.video.id,
+        videoName: m.video.name,
+        videoPath: m.video.path ? getMediaUrl(m.video.path) : '',
+        segmentIndex: 0,
+        text: m.segment.text,
+        fromS: m.segment.start_s,
+        toS: m.segment.end_s,
+        fromMs: m.segment.start_ms,
+        toMs: m.segment.end_ms
+      }
+      const key = getSegmentKey(seg)
+      if (!existingKeys.has(key)) {
+        selectedSegments.value.push(seg)
+        existingKeys.add(key)
+        addedCount++
+      }
+    }
+    if (addedCount > 0) {
+      message.success(`已添加 ${addedCount} 条匹配字幕`)
+    } else {
+      message.info('所有匹配字幕已存在')
+    }
+  }
+
   function checkDuplicateByVideoSegment(): { videoId: number; fromS: number; toS: number; videoName: string; selectedPositions: number[] }[] {
     const list = selectedSegments.value
     const map = new Map<string, { seg: SegmentWithVideo; positions: number[] }>()
@@ -951,6 +1010,10 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     searchLoading,
     collapsedGroups,
     showSubtitleContext,
+    subtitleTab,
+    replicateText,
+    replicateLoading,
+    replicateResults,
     filteredSegmentGroups,
     searchResults,
     searchTotal,
@@ -1012,6 +1075,8 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     scrollToVideoSubtitles,
     locateContext,
     handleExportSegments,
+    startReplicate,
+    applyReplicateResults,
     checkDuplicateByVideoSegment,
     getMediaUrl
   }
