@@ -12,23 +12,25 @@ import {
 import { inject } from 'vue'
 
 const qc = inject('quickClip') as any
+
+function onSearchResultsScroll(e: Event) {
+  const el = e.target as HTMLElement
+  if (!el || el !== e.currentTarget) return
+  const { scrollTop, clientHeight, scrollHeight } = el
+  const threshold = 80
+  if (scrollHeight - scrollTop - clientHeight < threshold && qc.searchHasMore && !qc.searchLoading) {
+    qc.loadMoreSearchResults()
+  }
+}
 </script>
 
 <template>
   <div class="panel panel-subtitles">
-    <div class="panel-header" style="justify-content: space-between;">
+    <div class="panel-header">
       <div style="display: flex; align-items: center; gap: 8px;">
         <n-icon size="18"><DocumentTextOutline /></n-icon>
         <span>视频字幕</span>
       </div>
-      <n-button
-        v-show="qc.selectedSourceKeys.size > 0"
-        size="tiny"
-        type="primary"
-        @click="qc.addSelectedSegments"
-      >
-        添加选中 ({{ qc.selectedSourceKeys.size }})
-      </n-button>
     </div>
     <div class="panel-search">
       <n-input
@@ -43,7 +45,7 @@ const qc = inject('quickClip') as any
       <div class="search-results-header">搜索结果（共 {{ qc.searchLoading ? '...' : qc.searchTotal }} 条）</div>
       <div class="search-results-body">
         <n-spin :show="qc.searchLoading">
-          <div class="search-results-inner">
+          <div class="search-results-inner" @scroll="onSearchResultsScroll">
             <div class="segment-list">
               <div
                 v-for="seg in qc.searchResults"
@@ -53,7 +55,6 @@ const qc = inject('quickClip') as any
                 @click="qc.toggleSourceSelection(seg, $event)"
               >
                 <span class="segment-time">{{ qc.formatTime(seg.fromS) }}</span>
-                <span class="segment-video" :title="seg.videoName">{{ seg.videoName }}</span>
                 <span class="segment-text" :title="seg.text">{{ seg.text }}</span>
                 <n-button quaternary size="tiny" type="warning" class="segment-action" title="定位上下文" @click.stop="qc.locateContext(seg)">
                   <n-icon><LocateOutline /></n-icon>
@@ -66,17 +67,23 @@ const qc = inject('quickClip') as any
                 </n-button>
               </div>
             </div>
-            <div v-if="qc.searchHasMore && !qc.searchLoading" class="search-load-more">
-              <n-button quaternary block size="small" @click="qc.loadMoreSearchResults()">查看更多</n-button>
-            </div>
           </div>
         </n-spin>
       </div>
     </div>
 
     <div class="subtitle-panel-body" :class="{ 'has-search': qc.subtitleSearch }">
-      <div v-if="qc.showSubtitleContext" class="context-header">
-        <span>字幕上下文</span>
+      <div v-if="qc.showSubtitleContext || qc.selectedSourceKeys.size > 0" class="context-header">
+        <span v-if="qc.showSubtitleContext">字幕上下文</span>
+        <span v-else></span>
+        <div v-if="qc.selectedSourceKeys.size > 0" class="context-header-actions">
+          <n-button size="tiny" quaternary @click="qc.clearSourceSelection">
+            取消全选
+          </n-button>
+          <n-button size="tiny" type="primary" @click="qc.addSelectedSegments">
+            添加选中 ({{ qc.selectedSourceKeys.size }})
+          </n-button>
+        </div>
       </div>
       <div v-else-if="qc.subtitleSearch" class="empty-hint">
         点击搜索结果中的「定位」查看完整视频字幕
@@ -177,10 +184,11 @@ const qc = inject('quickClip') as any
 }
 .search-results-inner .segment-list {
   padding: 2px 8px 6px;
+  gap: 2px;
 }
-.search-load-more {
-  padding: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+.search-results-inner .segment-row {
+  margin: 1px 0 1px 8px;
+  height: 28px;
 }
 .subtitle-panel-body {
   flex: 1;
@@ -258,15 +266,6 @@ const qc = inject('quickClip') as any
   font-size: 11px;
   color: #4facfe;
 }
-.segment-video {
-  flex-shrink: 0;
-  max-width: 100px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.45);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .segment-text {
   flex: 1;
   font-size: 12px;
@@ -311,5 +310,10 @@ const qc = inject('quickClip') as any
   background: rgba(255, 255, 255, 0.04);
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   flex-shrink: 0;
+}
+.context-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

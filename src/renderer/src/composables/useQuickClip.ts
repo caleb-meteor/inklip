@@ -455,6 +455,12 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     lastSelectedSourceKey.value = null
   }
 
+  /** 取消全选（清除字幕来源侧的勾选） */
+  function clearSourceSelection() {
+    selectedSourceKeys.value.clear()
+    lastSelectedSourceKey.value = null
+  }
+
   function addSegment(seg: SegmentWithVideo) {
     const key = getSegmentKey(seg)
     if (selectedSourceKeys.value.has(key) && selectedSourceKeys.value.size > 1) {
@@ -771,6 +777,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   }
 
   function locateContext(seg: SegmentWithVideo) {
+    clearSourceSelection()
     // 只展开目标视频，其余全部折叠，减少 flatVirtualList 数据量
     const allIds = sourceVideos.value.map(v => v.id)
     collapsedGroups.value = new Set(allIds.filter(id => id !== seg.videoId))
@@ -901,6 +908,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     toggleGroup,
     toggleSourceSelection,
     addSelectedSegments,
+    clearSourceSelection,
     addSegment,
     removeSelectedSegments,
     removeSegment,
