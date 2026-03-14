@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NIcon, NInput, NButton, NScrollbar, NVirtualList } from 'naive-ui'
+import { NIcon, NInput, NButton, NVirtualList, NSpin } from 'naive-ui'
 import {
   DocumentTextOutline,
   VideocamOutline,
@@ -40,45 +40,61 @@ const qc = inject('quickClip') as any
     </div>
 
     <div v-if="qc.subtitleSearch" class="search-results-panel">
-      <div class="search-results-header">搜索结果 ({{ qc.searchResults.length }})</div>
+      <div class="search-results-header">搜索结果（共 {{ qc.searchLoading ? '...' : qc.searchTotal }} 条）</div>
       <div class="search-results-body">
-        <n-scrollbar>
-          <div class="segment-list">
-            <div
-              v-for="seg in qc.searchResults"
-              :key="`search-${seg.videoId}-${seg.segmentIndex}`"
-              class="segment-row"
-              :class="{ 'is-selected': qc.selectedSourceKeys.has(`${seg.videoId}-${seg.segmentIndex}`) }"
-              @click="qc.toggleSourceSelection(seg, $event)"
-            >
-              <span class="segment-time">
-                {{ qc.formatTime(seg.fromS) }}
-              </span>
-              <span class="segment-text" :title="seg.text" style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                {{ seg.text }}
-              </span>
-              <n-button quaternary size="tiny" type="warning" class="segment-action" title="定位上下文" @click.stop="qc.locateContext(seg)">
-                <n-icon><LocateOutline /></n-icon>
-              </n-button>
-              <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(seg)">
-                <n-icon><PlayOutline /></n-icon>
-              </n-button>
-              <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" @click.stop="qc.addSegment(seg)">
-                <n-icon><AddOutline /></n-icon>
-              </n-button>
+        <n-spin :show="qc.searchLoading">
+          <div class="search-results-inner">
+            <template v-for="group in qc.searchResultGroups" :key="group.videoId">
+              <div class="search-group-header">
+                <n-icon size="14"><VideocamOutline /></n-icon>
+                <span class="search-group-title" :title="group.videoName">{{ group.videoName }}</span>
+                <span class="search-group-count">{{ group.segments.length }}</span>
+              </div>
+              <div class="segment-list">
+                <div
+                  v-for="seg in group.segments"
+                  :key="qc.getSegmentKey(seg)"
+                  class="segment-row"
+                  :class="{ 'is-selected': qc.selectedSourceKeys.has(qc.getSegmentKey(seg)) }"
+                  @click="qc.toggleSourceSelection(seg, $event)"
+                >
+                  <span class="segment-time">{{ qc.formatTime(seg.fromS) }}</span>
+                  <span class="segment-text" :title="seg.text">{{ seg.text }}</span>
+                  <n-button quaternary size="tiny" type="warning" class="segment-action" title="定位上下文" @click.stop="qc.locateContext(seg)">
+                    <n-icon><LocateOutline /></n-icon>
+                  </n-button>
+                  <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(seg)">
+                    <n-icon><PlayOutline /></n-icon>
+                  </n-button>
+                  <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" @click.stop="qc.addSegment(seg)">
+                    <n-icon><AddOutline /></n-icon>
+                  </n-button>
+                </div>
+              </div>
+            </template>
+            <div v-if="qc.searchHasMore && !qc.searchLoading" class="search-load-more">
+              <n-button quaternary block size="small" @click="qc.loadMoreSearchResults()">查看更多</n-button>
             </div>
           </div>
-        </n-scrollbar>
+        </n-spin>
       </div>
     </div>
 
-    <div class="subtitle-panel-body" :style="qc.subtitleSearch ? 'border-top: 1px solid rgba(255,255,255,0.06);' : ''">
-      <div v-if="qc.subtitleSearch" class="full-list-header">全部字幕</div>
+    <div class="subtitle-panel-body" :class="{ 'has-search': qc.subtitleSearch }">
+      <div v-if="qc.showSubtitleContext" class="context-header">
+        <span>字幕上下文</span>
+      </div>
+      <div v-else-if="qc.subtitleSearch" class="empty-hint">
+        点击搜索结果中的「定位」查看完整视频字幕
+      </div>
+
       <n-virtual-list
+        v-show="!qc.subtitleSearch || qc.showSubtitleContext"
         :ref="(el) => { if (el) qc.subtitleScrollbarRef = el }"
         :items="qc.flatVirtualList"
         :item-size="34"
         class="subtitle-virtual-list"
+        @scroll="qc.onSubtitleScroll"
       >
         <template #default="{ item }">
           <div
@@ -96,9 +112,9 @@ const qc = inject('quickClip') as any
           </div>
           <div
             v-else
-            :id="`subtitle-seg-${item.segment!.videoId}-${item.segment!.segmentIndex}`"
+            :id="`subtitle-${item.key}`"
             class="segment-row"
-            :class="{ 'is-selected': qc.selectedSourceKeys.has(`${item.segment!.videoId}-${item.segment!.segmentIndex}`) }"
+            :class="{ 'is-selected': qc.selectedSourceKeys.has(item.segmentKey!) }"
             @click="qc.toggleSourceSelection(item.segment!, $event)"
           >
             <span class="segment-time">{{ qc.formatTime(item.segment!.fromS) }}</span>
@@ -143,26 +159,59 @@ const qc = inject('quickClip') as any
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .search-results-panel {
-  flex: 0 0 35%;
-  display: flex;
-  flex-direction: column;
+  flex-shrink: 0;
   background: rgba(0, 0, 0, 0.2);
-  min-height: 0;
 }
 .search-results-header {
   padding: 4px 10px;
   font-size: 12px;
   color: #4facfe;
   background: rgba(255, 255, 255, 0.02);
-  flex-shrink: 0;
 }
 .search-results-body {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+  /* 不做任何高度限制，交给 inner 自己限高 */
 }
-.search-results-body :deep(.n-scrollbar-content) {
-  padding-bottom: 8px;
+.search-results-inner {
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.search-results-inner::-webkit-scrollbar {
+  display: none;
+}
+.search-results-inner .segment-list {
+  padding: 2px 8px 6px;
+}
+.search-load-more {
+  padding: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.search-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4facfe;
+}
+.search-group-header:first-child {
+  padding-top: 8px;
+}
+.search-group-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-group-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 400;
 }
 .subtitle-panel-body {
   flex: 1;
@@ -261,5 +310,31 @@ const qc = inject('quickClip') as any
   min-height: 100%;
   display: flex;
   flex-direction: column;
+}
+.subtitle-panel-body.has-search {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.1);
+}
+.empty-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+  padding: 20px;
+  text-align: center;
+}
+.context-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f5f5f7;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
 }
 </style>

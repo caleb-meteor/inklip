@@ -1,6 +1,6 @@
-import { ref, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
 import { useMessage } from 'naive-ui'
-import { getVideosApi, type VideoItem, exportSegmentsApi, getExportHistoryApi, getExportHistorySubtitlesApi, type ExportHistoryItem } from '../api/video'
+import { getVideosApi, type VideoItem, exportSegmentsApi, getExportHistoryApi, getExportHistorySubtitlesApi, deleteExportHistoryApi, type ExportHistoryItem, searchSubtitlesApi } from '../api/video'
 import { parseSubtitleToSegments } from '../utils/subtitle'
 import { getMediaUrl } from '../utils/media'
 import type { SegmentWithVideo, VideoSegmentGroup, VirtualListItem } from '../views/quick-clip/types'
@@ -8,44 +8,65 @@ import type { SegmentWithVideo, VideoSegmentGroup, VirtualListItem } from '../vi
 export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   const message = useMessage()
 
-  const sourceVideos = ref<VideoItem[]>([])
+  const sourceVideos = shallowRef<VideoItem[]>([])
   const loadingVideos = ref(false)
   const sourceSegmentVideoRef = ref<HTMLVideoElement | null>(null)
   const playingSourceSegment = ref(false)
 
-  const allSegments = ref<SegmentWithVideo[]>([])
+  const allSegments = shallowRef<SegmentWithVideo[]>([])
   const subtitleSearch = ref('')
+  const searchResults = shallowRef<SegmentWithVideo[]>([])
+  const searchLoading = ref(false)
+  /** 字幕搜索总条数（来自接口 total），用于「共 x 条」与是否显示查看更多 */
+  const searchTotal = ref(0)
+  const SEARCH_PAGE_SIZE = 20
   const collapsedGroups = ref<Set<number>>(new Set())
   const locatedContexts = ref<Set<number>>(new Set())
+  /** 是否显示全部字幕区域（仅在通过搜索结果「定位上下文」后显示） */
+  const showSubtitleContext = ref(false)
+
+  /** 懒解析字幕缓存：只有展开视频组时才解析该视频的字幕 */
+  const subtitleCache = new Map<number, SegmentWithVideo[]>()
+  function getVideoSegments(v: VideoItem): SegmentWithVideo[] {
+    const cached = subtitleCache.get(v.id)
+    if (cached) return cached
+    const path = v.path ? getMediaUrl(v.path) : ''
+    const segs = parseSubtitleToSegments(v.subtitle).map((item, idx) => ({
+      ...item, videoId: v.id, videoName: v.name, videoPath: path, segmentIndex: idx
+    }))
+    subtitleCache.set(v.id, segs)
+    return segs
+  }
 
   const filteredSegmentGroups = computed(() => {
-    const groupsMap: Record<number, VideoSegmentGroup> = {}
-    allSegments.value.forEach(seg => {
-      if (!groupsMap[seg.videoId]) {
-        groupsMap[seg.videoId] = { videoId: seg.videoId, videoName: seg.videoName, segments: [] }
-      }
-      groupsMap[seg.videoId].segments.push(seg)
-    })
+    // 只有在搜索且未点击定位时，才不渲染数据；无搜索词时默认显示
+    if (subtitleSearch.value && !showSubtitleContext.value) return []
     const result: VideoSegmentGroup[] = []
     sourceVideos.value.forEach(v => {
-      if (groupsMap[v.id]) result.push(groupsMap[v.id])
+      const segments = getVideoSegments(v)
+      if (segments.length > 0) {
+        result.push({ videoId: v.id, videoName: v.name, segments })
+      }
     })
     return result
   })
 
-  const searchResults = computed(() => {
-    const q = subtitleSearch.value.trim().toLowerCase()
-    if (!q) return []
-    return allSegments.value.filter(seg => seg.text.toLowerCase().includes(q))
-  })
+  /** 片段唯一键：video_id + start_s + end_s（与后端一致，用于定位与选中） */
+  function getSegmentKey(seg: SegmentWithVideo): string {
+    const from = Number(seg.fromS).toFixed(3)
+    const to = Number(seg.toS).toFixed(3)
+    return `${seg.videoId}-${from}-${to}`
+  }
 
   const flatVirtualList = computed(() => {
+    if (subtitleSearch.value && !showSubtitleContext.value) return []
     const list: VirtualListItem[] = []
     filteredSegmentGroups.value.forEach(group => {
       list.push({ type: 'header', key: `header-${group.videoId}`, videoId: group.videoId, videoName: group.videoName })
       if (!collapsedGroups.value.has(group.videoId)) {
         group.segments.forEach(seg => {
-          list.push({ type: 'segment', key: `seg-${seg.videoId}-${seg.segmentIndex}`, segment: seg })
+          const segKey = getSegmentKey(seg)
+          list.push({ type: 'segment', key: `seg-${segKey}`, segment: seg, segmentKey: segKey })
         })
       }
     })
@@ -61,10 +82,49 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   const previewVideoRef = ref<HTMLVideoElement | null>(null)
   const isPreviewPlaying = ref(false)
   const currentPreviewIndex = ref(-1)
+  /** 预加载下一段视频（不同文件时），减少切换间隙 */
+  let preloadVideoEl: HTMLVideoElement | null = null
+  function preloadNextSegmentVideo(path: string) {
+    if (!path) return
+    if (!preloadVideoEl) {
+      preloadVideoEl = document.createElement('video')
+      preloadVideoEl.preload = 'auto'
+    }
+    if (preloadVideoEl.src !== path) {
+      preloadVideoEl.src = path
+      preloadVideoEl.load()
+    }
+  }
 
   const draggedIndexes = ref<number[]>([])
   const dragOverIndex = ref<number | null>(null)
   const dropPosition = ref<'top' | 'bottom'>('top')
+
+  /** 按选择顺序播放时使用的合并区间：同视频且首尾相接的连续段合并为一段（如 0.2~0.5 + 0.5~1.5 → 0.2~1.5），避免衔接点重复播 */
+  const previewPlaybackRanges = computed(() => {
+    const segs = selectedSegments.value
+    if (segs.length === 0) return []
+    const ranges: { fromS: number; toS: number; videoPath: string }[] = []
+    let fromS = segs[0].fromS
+    let toS = segs[0].toS
+    let videoPath = segs[0].videoPath
+    const eps = 0.02
+    for (let i = 1; i < segs.length; i++) {
+      const seg = segs[i]
+      const isSameVideo = seg.videoPath === videoPath
+      const isAdjacent = Math.abs(seg.fromS - toS) < eps
+      if (isSameVideo && isAdjacent) {
+        toS = seg.toS
+      } else {
+        ranges.push({ fromS, toS, videoPath })
+        fromS = seg.fromS
+        toS = seg.toS
+        videoPath = seg.videoPath
+      }
+    }
+    ranges.push({ fromS, toS, videoPath })
+    return ranges
+  })
 
   /** 选择字幕列表的展示行（拖拽时在插入位置插入占位条） */
   type SelectedDisplayRow =
@@ -126,6 +186,16 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     }
   }
 
+  /** 删除一条导出历史记录并刷新列表 */
+  async function deleteExportHistory(exportVideoId: number) {
+    try {
+      await deleteExportHistoryApi(exportVideoId)
+      await loadExportHistory()
+    } catch (err: any) {
+      message.error(err?.message || '删除失败')
+    }
+  }
+
   /** 加载某次导出视频的字幕片段并填入选择字幕区；视频路径与名称优先从当前主播下的 sourceVideos 解析，保证可正常播放 */
   async function loadExportHistorySubtitles(exportVideoId: number) {
     try {
@@ -137,8 +207,9 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
         const videoPath = srcVideo?.path != null ? getMediaUrl(srcVideo.path) : getMediaUrl(item.path)
         const videoName = srcVideo?.name ?? item.video_name
         let segmentIndex = 0
-        if (srcVideo && allSegments.value.length > 0) {
-          const found = allSegments.value.find(
+        if (srcVideo) {
+          const cachedSegs = getVideoSegments(srcVideo)
+          const found = cachedSegs.find(
             s => s.videoId === item.video_id && Math.abs(s.fromS - item.start_s) < 0.01 && Math.abs(s.toS - item.end_s) < 0.01
           )
           if (found) segmentIndex = found.segmentIndex
@@ -179,7 +250,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       let header: VirtualListItem | null = null
       let nextHeaderIndex = -1
 
-      // Find the active header
       for (let i = currentIndex; i >= 0; i--) {
         const item = flatVirtualList.value[i]
         if (item.type === 'header') {
@@ -188,7 +258,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
         }
       }
 
-      // Find the next header to calculate push-up effect
       for (let i = currentIndex + 1; i < flatVirtualList.value.length; i++) {
         const item = flatVirtualList.value[i]
         if (item.type === 'header') {
@@ -217,7 +286,103 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     }
   }
 
-  watch(subtitleSearch, () => locatedContexts.value.clear())
+  watch(subtitleSearch, () => {
+    locatedContexts.value.clear()
+    showSubtitleContext.value = false
+  })
+
+  /** 搜索结果按视频分组 */
+  const searchResultGroups = computed(() => {
+    const segs = searchResults.value
+    if (segs.length === 0) return []
+    const groups: { videoId: number; videoName: string; segments: SegmentWithVideo[] }[] = []
+    const map = new Map<number, { videoId: number; videoName: string; segments: SegmentWithVideo[] }>()
+    for (const seg of segs) {
+      let g = map.get(seg.videoId)
+      if (!g) {
+        g = { videoId: seg.videoId, videoName: seg.videoName, segments: [] }
+        map.set(seg.videoId, g)
+        groups.push(g)
+      }
+      g.segments.push(seg)
+    }
+    return groups
+  })
+
+  /** 是否显示「查看更多」（已展示条数小于接口返回的 total 时可能还有更多） */
+  const searchHasMore = computed(() => searchResults.value.length < searchTotal.value && searchTotal.value > 0)
+
+  function mapSubtitleItemToSegment(item: { video: any; segment: any }): SegmentWithVideo {
+    const video = item.video
+    const path = video?.path ? getMediaUrl(video.path) : ''
+    const videoName = video?.name ?? ''
+    const videoId = video?.id ?? 0
+    const seg = item.segment
+    return {
+      videoId,
+      videoName,
+      videoPath: path,
+      segmentIndex: 0,
+      text: seg?.text ?? '',
+      fromS: seg?.start_s ?? (seg?.start_ms ?? 0) / 1000,
+      toS: seg?.end_s ?? (seg?.end_ms ?? 0) / 1000,
+      fromMs: seg?.start_ms ?? (seg?.start_s ?? 0) * 1000,
+      toMs: seg?.end_ms ?? (seg?.end_s ?? 0) * 1000
+    }
+  }
+
+  /** 请求字幕搜索（仅字幕全文检索，GET 翻页）；append 为 true 时追加到当前列表 */
+  async function fetchSearchResults(append = false) {
+    const q = subtitleSearch.value.trim()
+    const anchorId = selectedAnchorId.value ?? undefined
+    if (!q) {
+      searchResults.value = []
+      searchTotal.value = 0
+      return
+    }
+    const offset = append ? searchResults.value.length : 0
+    searchLoading.value = true
+    try {
+      const res = await searchSubtitlesApi(q, SEARCH_PAGE_SIZE, offset, anchorId ?? null)
+      const list = (res.results || []).map(mapSubtitleItemToSegment)
+      if (append) {
+        searchResults.value = [...searchResults.value, ...list]
+      } else {
+        searchResults.value = list
+      }
+      searchTotal.value = res.total ?? 0
+    } catch {
+      if (!append) {
+        searchResults.value = []
+        searchTotal.value = 0
+      }
+    } finally {
+      searchLoading.value = false
+    }
+  }
+
+  function loadMoreSearchResults() {
+    fetchSearchResults(true)
+  }
+
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  watch(
+    [subtitleSearch, selectedAnchorId],
+    () => {
+      const q = subtitleSearch.value.trim()
+      if (!q) {
+        searchResults.value = []
+        searchTotal.value = 0
+        return
+      }
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+      searchDebounceTimer = setTimeout(() => {
+        searchDebounceTimer = null
+        fetchSearchResults(false)
+      }, 300)
+    },
+    { immediate: true }
+  )
 
   function formatTime(s: number) {
     const m = Math.floor(s / 60)
@@ -229,20 +394,17 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     if (!selectedAnchorId.value) {
       sourceVideos.value = []
       allSegments.value = []
+      subtitleCache.clear()
       return
     }
     loadingVideos.value = true
     getVideosApi({ anchor_id: selectedAnchorId.value })
       .then(list => {
+        subtitleCache.clear()
         sourceVideos.value = list
-        const segs: SegmentWithVideo[] = []
-        list.forEach(v => {
-          const path = v.path ? getMediaUrl(v.path) : ''
-          parseSubtitleToSegments(v.subtitle).forEach((item, idx) => {
-            segs.push({ ...item, videoId: v.id, videoName: v.name, videoPath: path, segmentIndex: idx })
-          })
-        })
-        allSegments.value = segs
+        collapsedGroups.value = new Set(list.map(v => v.id))
+        showSubtitleContext.value = false
+        allSegments.value = []
       })
       .finally(() => { loadingVideos.value = false })
   }
@@ -265,10 +427,10 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   }
 
   function toggleSourceSelection(seg: SegmentWithVideo, event?: MouseEvent) {
-    const key = `${seg.videoId}-${seg.segmentIndex}`
+    const key = getSegmentKey(seg)
     if (event?.shiftKey && lastSelectedSourceKey.value) {
       const flatList = filteredSegmentGroups.value.flatMap(g => g.segments)
-      const flatKeys = flatList.map(s => `${s.videoId}-${s.segmentIndex}`)
+      const flatKeys = flatList.map(s => getSegmentKey(s))
       const startIndex = flatKeys.indexOf(lastSelectedSourceKey.value)
       const endIndex = flatKeys.indexOf(key)
       if (startIndex !== -1 && endIndex !== -1) {
@@ -301,9 +463,9 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   function addSelectedSegments() {
     if (selectedSourceKeys.value.size === 0) return
     const flatList = filteredSegmentGroups.value.flatMap(g => g.segments)
-    const toAdd = flatList.filter(seg => selectedSourceKeys.value.has(`${seg.videoId}-${seg.segmentIndex}`))
+    const toAdd = flatList.filter(seg => selectedSourceKeys.value.has(getSegmentKey(seg)))
     toAdd.forEach(seg => {
-      if (!selectedSegments.value.some(s => s.videoId === seg.videoId && s.segmentIndex === seg.segmentIndex)) {
+      if (!selectedSegments.value.some(s => getSegmentKey(s) === getSegmentKey(seg))) {
         selectedSegments.value.push(seg)
       }
     })
@@ -312,12 +474,12 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   }
 
   function addSegment(seg: SegmentWithVideo) {
-    const key = `${seg.videoId}-${seg.segmentIndex}`
+    const key = getSegmentKey(seg)
     if (selectedSourceKeys.value.has(key) && selectedSourceKeys.value.size > 1) {
       addSelectedSegments()
       return
     }
-    if (selectedSegments.value.some(s => s.videoId === seg.videoId && s.segmentIndex === seg.segmentIndex)) return
+    if (selectedSegments.value.some(s => getSegmentKey(s) === key)) return
     selectedSegments.value.push(seg)
   }
 
@@ -476,28 +638,36 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   }
 
   function playNextSegment() {
+    const ranges = previewPlaybackRanges.value
     currentPreviewIndex.value++
-    if (currentPreviewIndex.value >= selectedSegments.value.length) {
+    if (currentPreviewIndex.value >= ranges.length) {
       isPreviewPlaying.value = false
       currentPreviewIndex.value = -1
+      previewVideoRef.value?.pause()
       return
     }
-    const seg = selectedSegments.value[currentPreviewIndex.value]
+    const range = ranges[currentPreviewIndex.value]
     const video = previewVideoRef.value
     if (!video) return
     const currentSrc = video.getAttribute('src')
-    if (currentSrc !== seg.videoPath) {
-      video.src = seg.videoPath
+    if (currentSrc !== range.videoPath) {
+      video.src = range.videoPath
       video.load()
       const onLoaded = () => {
         video.removeEventListener('loadedmetadata', onLoaded)
-        video.currentTime = seg.fromS
+        video.currentTime = range.fromS
         video.play().catch(() => { isPreviewPlaying.value = false })
       }
       video.addEventListener('loadedmetadata', onLoaded)
     } else {
-      video.currentTime = seg.fromS
+      video.currentTime = range.fromS
       video.play().catch(() => { isPreviewPlaying.value = false })
+    }
+    // 预加载下一段（不同视频时），切换时更连贯
+    const nextIdx = currentPreviewIndex.value + 1
+    if (nextIdx < ranges.length) {
+      const nextRange = ranges[nextIdx]
+      if (nextRange.videoPath !== range.videoPath) preloadNextSegmentVideo(nextRange.videoPath)
     }
   }
 
@@ -519,7 +689,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       if (video.currentTime >= seg.toS) {
         video.pause()
         video.removeEventListener('timeupdate', onTimeUpdate)
-        playingSourceSegment.value = false
+        // 不切回预览视频，保持当前视频停在最后一帧；只有开始「按选择顺序播放」时再切回
       }
     }
     ;(video as any)._segmentTimeUpdate = onTimeUpdate
@@ -539,11 +709,12 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
 
   function onPreviewTimeUpdate() {
     const video = previewVideoRef.value
+    const ranges = previewPlaybackRanges.value
     const idx = currentPreviewIndex.value
-    if (!video || idx < 0 || idx >= selectedSegments.value.length) return
-    const seg = selectedSegments.value[idx]
-    if (video.currentTime >= seg.toS) {
-      video.pause()
+    if (!video || idx < 0 || idx >= ranges.length) return
+    const range = ranges[idx]
+    if (video.currentTime >= range.toS) {
+      // 不暂停，直接切到下一段，保持连贯
       playNextSegment()
     }
   }
@@ -589,41 +760,54 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   }
 
   function scrollToVideoSubtitles(videoId: number) {
+    const allIds = sourceVideos.value.map(v => v.id)
+    collapsedGroups.value = new Set(allIds.filter(id => id !== videoId))
+    showSubtitleContext.value = true
     nextTick(() => {
       const group = filteredSegmentGroups.value.find(g => g.videoId === videoId)
       if (!group || group.segments.length === 0) {
         message.info('该视频暂无字幕')
         return
       }
-      if (collapsedGroups.value.has(videoId)) collapsedGroups.value.delete(videoId)
       const doScroll = (retryCount = 0) => {
         const headerKey = `header-${videoId}`
         const firstSegment = group.segments[0]
-        const key = `seg-${videoId}-${firstSegment.segmentIndex}`
+        const key = `seg-${getSegmentKey(firstSegment)}`
         const index = flatVirtualList.value.findIndex(item => item.key === headerKey)
-        if (index !== -1) {
+        const containerEl = document.querySelector('.subtitle-virtual-list')
+        
+        if (index !== -1 && containerEl && containerEl.clientHeight > 0) {
           const topOffset = index * 34
           subtitleScrollbarRef.value?.scrollTo({ top: topOffset, behavior: 'auto' })
           setTimeout(() => flashItem(key), 200)
-        } else if (retryCount < 20) setTimeout(() => doScroll(retryCount + 1), 50)
+        } else if (retryCount < 20) {
+          setTimeout(() => doScroll(retryCount + 1), 50)
+        }
       }
       doScroll()
     })
   }
 
   function locateContext(seg: SegmentWithVideo) {
-    if (collapsedGroups.value.has(seg.videoId)) collapsedGroups.value.delete(seg.videoId)
+    // 只展开目标视频，其余全部折叠，减少 flatVirtualList 数据量
+    const allIds = sourceVideos.value.map(v => v.id)
+    collapsedGroups.value = new Set(allIds.filter(id => id !== seg.videoId))
+    showSubtitleContext.value = true
+    const virtualKey = `seg-${getSegmentKey(seg)}`
     const doScroll = (retryCount = 0) => {
-      const virtualKey = `seg-${seg.videoId}-${seg.segmentIndex}`
       const index = flatVirtualList.value.findIndex(item => item.key === virtualKey)
-      if (index !== -1) {
+      const containerEl = document.querySelector('.subtitle-virtual-list')
+      
+      // 如果元素还未渲染（高度为 0），或者数据还没准备好，则继续重试
+      if (index !== -1 && containerEl && containerEl.clientHeight > 0) {
         const topOffset = index * 34
-        const containerEl = document.querySelector('.subtitle-virtual-list')
-        const containerHeight = containerEl?.clientHeight || 600
+        const containerHeight = containerEl.clientHeight
         const centerTop = Math.max(0, topOffset - containerHeight / 2 + 17)
         subtitleScrollbarRef.value?.scrollTo({ top: centerTop, behavior: 'auto' })
         setTimeout(() => flashItem(virtualKey), 200)
-      } else if (retryCount < 20) setTimeout(() => doScroll(retryCount + 1), 50)
+      } else if (retryCount < 20) {
+        setTimeout(() => doScroll(retryCount + 1), 50)
+      }
     }
     nextTick(() => doScroll())
   }
@@ -651,6 +835,12 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       return
     }
     const name = suggestedName?.trim() || `inklip_merged_${Date.now()}.mp4`
+    // 先让用户选择保存位置，拿到路径（目录 = path.dirname(filePath)）
+    const dialogResult = await window.api?.showExportSaveDialog(name)
+    if (dialogResult?.canceled || !dialogResult?.filePath) {
+      return
+    }
+    const userChosenPath = dialogResult.filePath
     isExporting.value = true
     try {
       const requestSegments = selectedSegments.value.map(seg => ({
@@ -659,12 +849,11 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
         end_s: seg.toS,
         subtitle_text: seg.text || ''
       }))
-      const res = await exportSegmentsApi(requestSegments, selectedAnchorId.value, name)
+      const res = await exportSegmentsApi(requestSegments, selectedAnchorId.value, name, userChosenPath)
       if (res?.path && res?.suggested_name) {
-        if (window.api?.downloadVideo) {
-          await window.api.downloadVideo(res.path, res.suggested_name)
-        } else {
-          message.warning('当前环境不支持下载视频')
+        message.success('导出成功，可在导出历史中打开所在文件夹')
+        if (showExportHistoryModal.value) {
+          loadExportHistory()
         }
       }
     } catch (error: any) {
@@ -692,9 +881,15 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     playingSourceSegment,
     allSegments,
     subtitleSearch,
+    searchLoading,
     collapsedGroups,
+    showSubtitleContext,
     filteredSegmentGroups,
     searchResults,
+    searchResultGroups,
+    searchTotal,
+    searchHasMore,
+    loadMoreSearchResults,
     flatVirtualList,
     selectedSegments,
     selectedSourceKeys,
@@ -716,9 +911,11 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     exportHistoryList,
     showExportHistoryModal,
     loadExportHistory,
+    deleteExportHistory,
     loadExportHistorySubtitles,
     loadingExportHistory,
     formatTime,
+    getSegmentKey,
     loadVideos,
     toggleGroup,
     toggleSourceSelection,

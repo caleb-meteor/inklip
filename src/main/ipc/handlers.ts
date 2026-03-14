@@ -1,9 +1,7 @@
-import { ipcMain, BrowserWindow, app, dialog, Notification, net } from 'electron'
+import { ipcMain, BrowserWindow, app, dialog, Notification, net, shell } from 'electron'
 import fs from 'fs'
-import path, { join } from 'path'
-import { downloadFileSimple } from '../utils/download'
+import path from 'path'
 import { BackendService } from '../services/backend'
-import { toShortPathIfNeeded } from '../utils/pathWin'
 
 export function registerIpcHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -11,6 +9,30 @@ export function registerIpcHandlers(
 ): void {
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
+
+  /** 导出时弹出「另存为」对话框，返回用户选择的完整路径（可据此得到目录） */
+  ipcMain.handle('show-export-save-dialog', async (_event, suggestedName: string) => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (!win) return { canceled: true as const, filePath: undefined }
+    const defaultPath = path.join(app.getPath('downloads'), suggestedName || 'inklip_export.mp4')
+    const { filePath, canceled } = await dialog.showSaveDialog(win, {
+      title: '导出视频',
+      defaultPath,
+      filters: [{ name: '视频文件', extensions: ['mp4'] }]
+    })
+    if (canceled || !filePath) return { canceled: true as const, filePath: undefined }
+    return { canceled: false as const, filePath }
+  })
+
+  /** 在资源管理器中定位到文件（打开所在文件夹并选中该文件） */
+  ipcMain.handle('show-item-in-folder', async (_event, filePath: string) => {
+    if (!filePath || typeof filePath !== 'string') return
+    try {
+      shell.showItemInFolder(filePath)
+    } catch (e) {
+      console.error('[IPC] showItemInFolder failed:', e)
+    }
+  })
 
   ipcMain.handle('download-video', async (_event, sourcePath: string, fileName: string) => {
     const win = BrowserWindow.getFocusedWindow()
@@ -328,115 +350,4 @@ export function registerIpcHandlers(
     return { success: true }
   })
 
-  ipcMain.handle('check-resources', async () => {
-    const dataPath = app.getPath('userData')
-    const modelsDir = join(dataPath, 'models')
-    if (!fs.existsSync(modelsDir)) {
-      return false
-    }
-
-    const models = ['ggml-large-v3-turbo-q5_0.bin', 'ggml-silero-v6.2.0.bin']
-
-    for (const model of models) {
-      const filePath = join(modelsDir, model)
-      // If final file doesn't exist, it's not ready
-      if (!fs.existsSync(filePath)) {
-        return false
-      }
-
-      // If any .part files exist, it means merge hasn't happened or was interrupted
-      // (Though with new logic, part files are deleted after merge)
-      // Check for targetPath.part0 etc.
-      if (fs.existsSync(`${filePath}.part0`) || fs.existsSync(`${filePath}.part1`)) {
-        return false
-      }
-    }
-    return true
-  })
-
-  ipcMain.handle('download-resources', async () => {
-    const dataPath = app.getPath('userData')
-    let modelsDir = join(dataPath, 'models')
-    if (!fs.existsSync(modelsDir)) {
-      fs.mkdirSync(modelsDir, { recursive: true })
-    }
-    // Windows 中文路径下使用 8.3 短路径，避免下载与 SHA256 校验异常
-    modelsDir = toShortPathIfNeeded(modelsDir)
-
-    // 使用 HF Mirror 镜像站点下载模型，提升国内下载速度
-    // 参考: https://hf-mirror.com/
-    //
-    // Shell 脚本中的 URL 构建逻辑解析：
-    // 1. 定义源仓库: src="https://huggingface.co/ggerganov/whisper.cpp"
-    // 2. 定义路径前缀: pfx="resolve/main/ggml"
-    // 3. 构建下载 URL: $src/$pfx-"$model".bin
-    //    结果: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{model}.bin
-    //
-    // HuggingFace URL 转换规则：
-    // - 浏览页面 URL: https://hf-mirror.com/ggml-org/whisper-vad/tree/main/ggml-silero-v6.2.0.bin
-    // - 真实下载 URL: https://hf-mirror.com/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
-    // - 关键转换：将 /tree/ 替换为 /resolve/ 即可获取真实下载链接
-    //
-    // URL 格式说明：
-    // {repo_url}/resolve/{branch}/{filename}
-    // 例如: https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
-    const resources = [
-      {
-        // Whisper 模型：从 ggerganov/whisper.cpp 仓库下载
-        // 仓库 URL: https://hf-mirror.com/ggerganov/whisper.cpp
-        // 分支: main
-        // 文件名: ggml-large-v3-turbo-q5_0.bin
-        // 构建方式: {repo}/resolve/{branch}/{filename}
-        url: 'https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin',
-        name: 'ggml-large-v3-turbo-q5_0.bin',
-        sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2' // TODO: 更新为新模型的 SHA256 校验和
-      },
-      {
-        // VAD 模型：从 ggml-org/whisper-vad 仓库下载
-        // 仓库 URL: https://hf-mirror.com/ggml-org/whisper-vad
-        // 分支: main
-        // 文件名: ggml-silero-v6.2.0.bin
-        // 构建方式: {repo}/resolve/{branch}/{filename}
-        // 如果看到浏览 URL: https://hf-mirror.com/ggml-org/whisper-vad/tree/main/ggml-silero-v6.2.0.bin
-        // 只需将 /tree/ 替换为 /resolve/ 即可
-        url: 'https://hf-mirror.com/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin',
-        name: 'ggml-silero-v6.2.0.bin',
-        sha256: '2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987'
-      }
-    ]
-
-    const totalResources = resources.length
-
-    for (let index = 0; index < resources.length; index++) {
-      const resource = resources[index]
-      const filePath = join(modelsDir, resource.name)
-      // 使用简化的单线程下载（适合镜像站点）
-      await downloadFileSimple(
-        resource.url,
-        filePath,
-        (progress) => {
-          const mainWindow = getMainWindow()
-          if (mainWindow) {
-            const pct = Number(progress.percentage).toFixed(2)
-            const overallPercentage =
-              ((index + progress.percentage / 100) / totalResources) * 100
-            console.log(
-              `[IPC] Sending progress for ${resource.name}: file=${pct}%, overall=${overallPercentage.toFixed(
-                2
-              )}%`
-            )
-            mainWindow.webContents.send('download-progress', {
-              file: resource.name,
-              overallPercentage,
-              ...progress
-            })
-          } else {
-            console.warn('[IPC] No mainWindow to send progress to')
-          }
-        },
-        isQuitting,
-        resource.sha256
-      )
-    }
-  })
 }

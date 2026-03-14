@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { NIcon, NScrollbar, NButton, NSpin, NEmpty } from 'naive-ui'
-import { ListOutline, RemoveOutline, TimeOutline, CloseOutline } from '@vicons/ionicons5'
+import { NIcon, NScrollbar, NButton, NSpin, NEmpty, NTooltip } from 'naive-ui'
+import { ListOutline, RemoveOutline, TimeOutline, CloseOutline, PlayOutline, ArrowUpCircleOutline, FolderOpenOutline, TrashOutline } from '@vicons/ionicons5'
 import { inject } from 'vue'
-import type { ExportHistoryItem } from '../../api/video'
 
 const qc = inject('quickClip') as any
 
 const emit = defineEmits<{
-  (e: 'play-export', item: ExportHistoryItem): void
+  (e: 'apply-export', exportVideoId: number): void
 }>()
 
 function formatDate(s: string) {
@@ -16,8 +15,8 @@ function formatDate(s: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function onSelectHistoryItem(item: ExportHistoryItem) {
-  emit('play-export', item)
+function openExportFolder(filePath: string) {
+  window.api?.showItemInFolder(filePath)
 }
 </script>
 
@@ -63,7 +62,7 @@ function onSelectHistoryItem(item: ExportHistoryItem) {
             @dragover.prevent="!qc.isPreviewPlaying && qc.onListDragOver()"
             @drop="!qc.isPreviewPlaying && qc.onListDrop()"
           >
-            <template v-for="row in qc.displayRowsForSelected" :key="row.type === 'placeholder' ? `ph-${row.insertIndex}` : `sel-${row.index}-${row.seg.videoId}-${row.seg.segmentIndex}`">
+            <template v-for="row in qc.displayRowsForSelected" :key="row.type === 'placeholder' ? `ph-${row.insertIndex}` : `sel-${row.index}-${qc.getSegmentKey(row.seg)}`">
               <div
                 v-if="row.type === 'placeholder'"
                 class="selected-row selected-row-placeholder"
@@ -94,6 +93,9 @@ function onSelectHistoryItem(item: ExportHistoryItem) {
                   </div>
                   <span class="selected-text" :title="row.seg.text">{{ row.seg.text }}</span>
                 </div>
+                <n-button quaternary size="tiny" type="info" title="播放" @click.stop="qc.playSourceSegment(row.seg)">
+                  <n-icon><PlayOutline /></n-icon>
+                </n-button>
                 <n-button quaternary size="tiny" type="error" v-show="!qc.isPreviewPlaying" @click.stop="qc.removeSegment(row.index)">
                   <n-icon><RemoveOutline /></n-icon>
                 </n-button>
@@ -121,10 +123,48 @@ function onSelectHistoryItem(item: ExportHistoryItem) {
                 v-for="item in qc.exportHistoryList"
                 :key="item.id"
                 class="export-history-item"
-                @click="onSelectHistoryItem(item)"
               >
-                <span class="export-history-name" :title="item.suggested_name">{{ item.suggested_name }}</span>
-                <span class="export-history-meta">{{ item.segment_count }} 段 · {{ formatDate(item.created_at) }}</span>
+                <div class="export-history-item-content">
+                  <span class="export-history-name" :title="item.suggested_name">{{ item.suggested_name }}</span>
+                  <span class="export-history-meta">{{ item.segment_count }} 段 · {{ formatDate(item.created_at) }}</span>
+                </div>
+                <div class="export-history-actions">
+                  <n-tooltip v-if="item.output_path" placement="top" trigger="hover">
+                    <template #trigger>
+                      <n-button
+                        class="export-history-btn"
+                        quaternary
+                        size="tiny"
+                        @click.stop="openExportFolder(item.output_path)"
+                      >
+                        <n-icon size="14"><FolderOpenOutline /></n-icon>
+                      </n-button>
+                    </template>
+                    打开所在文件夹
+                  </n-tooltip>
+                  <n-tooltip placement="top" trigger="hover">
+                    <template #trigger>
+                      <n-button class="export-history-btn" quaternary size="tiny" type="primary" @click.stop="emit('apply-export', item.id)">
+                        <n-icon size="14"><ArrowUpCircleOutline /></n-icon>
+                      </n-button>
+                    </template>
+                    引用此记录中的字幕
+                  </n-tooltip>
+                <n-tooltip placement="top" trigger="hover">
+                  <template #trigger>
+                    <n-button
+                      class="export-history-btn"
+                      quaternary
+                      size="tiny"
+                      type="error"
+                      @click.stop="qc.deleteExportHistory(item.id)"
+                    >
+                      <n-icon size="14"><TrashOutline /></n-icon>
+                    </n-button>
+                  </template>
+                  删除该导出记录
+                </n-tooltip>
+                </div>
               </div>
             </div>
           </n-spin>
@@ -209,15 +249,40 @@ function onSelectHistoryItem(item: ExportHistoryItem) {
   padding: 6px;
 }
 .export-history-item {
-  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  cursor: pointer;
   transition: background 0.2s;
 }
 .export-history-item:hover {
   background: rgba(255, 255, 255, 0.08);
+}
+.export-history-item-content {
+  flex: 1;
+  min-width: 0;
+}
+.export-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.export-history-actions .export-history-btn {
+  min-width: 0;
+  padding: 2px 4px;
+  height: 24px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+.export-history-actions .export-history-btn .n-icon {
+  font-size: 14px;
+}
+.export-history-item:hover .export-history-actions .export-history-btn {
+  opacity: 1;
 }
 .export-history-name {
   display: block;

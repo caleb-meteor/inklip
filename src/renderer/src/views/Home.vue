@@ -280,12 +280,12 @@ const handleNewChat = (): void => {
 
         <n-layout-content class="home-content">
           <HomeVideoPlayer
-            v-if="currentPlayingVideo"
+            v-show="currentPlayingVideo"
             :payload="currentPlayingVideo"
             @close="handleClosePlayer"
             @open-chat="handleNewChat"
           />
-          <template v-else>
+          <div v-show="!currentPlayingVideo" class="home-content-main">
             <QuickClip
               v-show="route.path === '/quick-clip'"
               ref="quickClipRef"
@@ -303,7 +303,7 @@ const handleNewChat = (): void => {
                 </div>
               </div>
             </div>
-          </template>
+          </div>
 
           <VideoUploadChatModal v-model:show="showUploadModal" @success="handleUploadSuccess" />
         </n-layout-content>
@@ -381,6 +381,13 @@ const handleNewChat = (): void => {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.home-content-main {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .chat-layout {

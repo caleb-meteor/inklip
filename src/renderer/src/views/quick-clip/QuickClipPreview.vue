@@ -74,12 +74,10 @@ function confirmExport() {
 
     <n-modal
       :show="showExportNameModal"
+      preset="card"
       title="导出视频"
-      preset="dialog"
-      positive-text="导出"
-      negative-text="取消"
-      :loading="qc.isExporting"
-      @positive-click="confirmExport"
+      size="small"
+      style="width: 400px; border-radius: 12px;"
       @update:show="(v: boolean) => { showExportNameModal = v }"
     >
       <div class="export-name-form">
@@ -87,13 +85,26 @@ function confirmExport() {
           <n-input
             v-model:value="exportFileName"
             placeholder="输入导出文件名（无需加 .mp4）"
-            maxlength="200"
-            show-count
+            maxlength="100"
+            clearable
             @keydown.enter.prevent="confirmExport"
           />
           <span class="export-name-suffix">.mp4</span>
         </div>
       </div>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
+          <n-button @click="showExportNameModal = false">取消</n-button>
+          <n-button
+            type="primary"
+            :loading="qc.isExporting"
+            :disabled="!exportFileName.trim()"
+            @click="confirmExport"
+          >
+            导出
+          </n-button>
+        </div>
+      </template>
     </n-modal>
   </div>
 </template>
@@ -155,8 +166,12 @@ function confirmExport() {
   display: block;
 }
 .export-name-form {
-  padding: 8px 0;
-  min-width: 320px;
+  padding: 4px 0;
+}
+.export-name-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 12px 0;
 }
 .export-name-input-wrap {
   display: flex;

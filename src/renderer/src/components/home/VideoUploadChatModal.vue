@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { NModal, NForm, NFormItem, NSelect, NButton, NIcon, NSpace, useMessage } from 'naive-ui'
 import {
   CloudUploadOutline,
@@ -103,7 +103,6 @@ const handleSelectFolder = async (): Promise<void> => {
       videoPaths.value = result.videoFiles
       subtitleFiles.value = result.subtitleFiles || {}
       folderPath.value = result.folderPath || ''
-      message.success(`已选择文件夹，包含 ${result.videoFiles.length} 个视频`)
     } else {
       message.warning('该文件夹中没有找到视频文件')
     }
@@ -117,6 +116,14 @@ const removeFile = (index: number): void => {
     subtitleFiles.value = {}
   }
 }
+
+/** 存在缺少字幕的视频时，上传按钮不可用 */
+const hasMissingSubtitle = computed(() =>
+  videoPaths.value.length > 0 && videoPaths.value.some((p) => !subtitleFiles.value[p])
+)
+const uploadButtonDisabled = computed(
+  () => isUploading.value || videoPaths.value.length === 0 || hasMissingSubtitle.value
+)
 
 const getDictId = async (name: string, type: 'anchor' | 'product'): Promise<number> => {
   const key = `${type}:${name}`
@@ -133,6 +140,17 @@ const getDictId = async (name: string, type: 'anchor' | 'product'): Promise<numb
 const handleConfirm = async (): Promise<void> => {
   if (videoPaths.value.length === 0) {
     message.warning('请先选择视频文件或文件夹')
+    return
+  }
+
+  const missingSubtitlePaths = videoPaths.value.filter((p) => !subtitleFiles.value[p])
+  if (missingSubtitlePaths.length > 0) {
+    const names = missingSubtitlePaths.map((p) => p.split(/[/\\]/).pop() || p)
+    const tip =
+      missingSubtitlePaths.length === 1
+        ? `该视频缺少对应字幕文件：${names[0]}`
+        : `有 ${missingSubtitlePaths.length} 个视频缺少对应字幕文件：${names.slice(0, 3).join('、')}${names.length > 3 ? ' 等' : ''}`
+    message.warning(tip)
     return
   }
 
@@ -248,7 +266,7 @@ const handleClose = (): void => {
           </n-space>
           <div class="upload-tip">
             <n-icon size="14"><InformationCircleOutline /></n-icon>
-            支持上传视频与同名 SRT 字幕文件，系统会自动匹配
+            上传视频必须带有同名 SRT 字幕文件，系统会自动匹配
           </div>
         </div>
 
@@ -276,6 +294,9 @@ const handleClose = (): void => {
                   <span class="sub-label">字幕</span>
                 </div>
               </div>
+              <div v-else class="file-row subtitle-missing-row">
+                <span class="missing-label">缺少字幕</span>
+              </div>
             </div>
             <n-button
               quaternary
@@ -296,7 +317,14 @@ const handleClose = (): void => {
 
       <div class="modal-footer">
         <n-button :disabled="isUploading" @click="handleClose">取消</n-button>
-        <n-button type="primary" :loading="isUploading" @click="handleConfirm"> 开始上传 </n-button>
+        <n-button
+          type="primary"
+          :loading="isUploading"
+          :disabled="uploadButtonDisabled"
+          @click="handleConfirm"
+        >
+          开始上传
+        </n-button>
       </div>
     </div>
   </n-modal>
@@ -408,6 +436,16 @@ const handleClose = (): void => {
   color: #63e2b7;
   display: flex;
   align-items: center;
+}
+
+.subtitle-missing-row {
+  height: 20px;
+}
+
+.missing-label {
+  font-size: 12px;
+  color: #f0a020;
+  margin-left: 28px;
 }
 
 .sub-label {

@@ -14,10 +14,6 @@ const api = {
     electronAPI.ipcRenderer.on('navigate-to', (_event, route) => callback(route)),
   onBackendPort: (callback: (port: number) => void) =>
     electronAPI.ipcRenderer.on('backend-port', (_event, port) => callback(port)),
-  checkResources: () => electronAPI.ipcRenderer.invoke('check-resources'),
-  downloadResources: () => electronAPI.ipcRenderer.invoke('download-resources'),
-  onDownloadProgress: (callback) =>
-    electronAPI.ipcRenderer.on('download-progress', (_event, progress) => callback(progress)),
   onBackendStartFailed: (callback: (error: { code: string; message: string }) => void) =>
     electronAPI.ipcRenderer.on('backend-start-failed', (_event, error) => callback(error)),
   getVideoDataDirectory: () => electronAPI.ipcRenderer.invoke('get-video-data-directory'),
@@ -27,7 +23,12 @@ const api = {
   checkBackendHealth: () => electronAPI.ipcRenderer.invoke('check-backend-health'),
   selectVideoFile: () => electronAPI.ipcRenderer.invoke('select-video-file'),
   selectVideoFolder: () => electronAPI.ipcRenderer.invoke('select-video-folder'),
-  getAppVersion: () => electronAPI.ipcRenderer.invoke('get-app-version')
+  getAppVersion: () => electronAPI.ipcRenderer.invoke('get-app-version'),
+  /** 在资源管理器中打开文件所在文件夹并选中该文件 */
+  showItemInFolder: (filePath: string) => electronAPI.ipcRenderer.invoke('show-item-in-folder', filePath),
+  /** 导出时选择保存位置，返回用户选择的完整路径 */
+  showExportSaveDialog: (suggestedName: string) =>
+    electronAPI.ipcRenderer.invoke('show-export-save-dialog', suggestedName)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -19,4 +19,6 @@ export interface VirtualListItem {
   videoId?: number
   videoName?: string
   segment?: SegmentWithVideo
+  /** 预计算的 segmentKey，避免渲染时重复调用 getSegmentKey */
+  segmentKey?: string
 }

@@ -494,7 +494,7 @@ const doDeleteProduct = async (product: Product) => {
         <div v-if="isVip" v-show="!collapsed" class="nav-item clickable" @click="goToQuickClip">
           <n-icon size="14" class="arrow-icon"><ChevronForwardOutline /></n-icon>
           <n-icon size="18" color="#10b981"><CutOutline /></n-icon>
-          <span>快速剪辑</span>
+          <span>字幕剪辑</span>
         </div>
 
         <!-- Collapsed Icons Display -->
@@ -540,7 +540,7 @@ const doDeleteProduct = async (product: Product) => {
                 <n-icon size="20" color="#10b981"><CutOutline /></n-icon>
               </div>
             </template>
-            快速剪辑
+            字幕剪辑
           </n-tooltip>
 
           <n-tooltip v-if="selectedAnchorId" placement="right">

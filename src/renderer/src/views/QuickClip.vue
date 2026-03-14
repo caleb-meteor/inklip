@@ -3,7 +3,6 @@ import { provide, reactive, computed } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
 import { ChevronBackOutline } from '@vicons/ionicons5'
 import type { Anchor } from '../api/anchor'
-import type { ExportHistoryItem } from '../api/video'
 import { useQuickClip } from '../composables/useQuickClip'
 import QuickClipSubtitleList from './quick-clip/QuickClipSubtitleList.vue'
 import QuickClipSelectedList from './quick-clip/QuickClipSelectedList.vue'
@@ -29,8 +28,8 @@ function handleNavigate(path: string) {
   emit('navigate', path)
 }
 
-function onPlayExport(item: ExportHistoryItem) {
-  quickClip.loadExportHistorySubtitles(item.id)
+function onApplyExport(exportVideoId: number) {
+  quickClip.loadExportHistorySubtitles(exportVideoId)
 }
 </script>
 
@@ -43,7 +42,7 @@ function onPlayExport(item: ExportHistoryItem) {
         </template>
         返回首页
       </n-button>
-      <span class="quick-clip-title">快速剪辑</span>
+      <span class="quick-clip-title">字幕剪辑</span>
       <span v-if="props.currentAnchor" style="font-size: 12px; color: rgba(255,255,255,0.5); margin-left: 8px;">
         当前选择主播：{{ props.currentAnchor.name }}
       </span>
@@ -51,7 +50,7 @@ function onPlayExport(item: ExportHistoryItem) {
 
     <div class="quick-clip-grid">
       <QuickClipSubtitleList />
-      <QuickClipSelectedList @play-export="onPlayExport" />
+      <QuickClipSelectedList @apply-export="onApplyExport" />
       <QuickClipPreview />
     </div>
   </div>

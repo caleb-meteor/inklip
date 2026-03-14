@@ -26,7 +26,8 @@ const { message } = createDiscreteApi(['message'], {
   },
   messageProviderProps: {
     duration: 5000,
-    keepAliveOnHover: true
+    keepAliveOnHover: true,
+    closable: true
   }
 })
 

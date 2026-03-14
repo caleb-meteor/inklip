@@ -97,14 +97,65 @@ export interface VideoSearchResponse {
 
 /**
  * 全文搜索视频（字幕 + 名称，带关键词权重）
- * 识别到搜索意图后调用，返回匹配视频及字幕片段（含时间）
+ * @param query 搜索词
+ * @param limit 返回条数
+ * @param anchorId 可选：限定在指定主播下的视频中搜索
  */
-export function searchVideosApi(query: string, limit?: number): Promise<VideoSearchResponse> {
+export function searchVideosApi(
+  query: string,
+  limit?: number,
+  anchorId?: number | null
+): Promise<VideoSearchResponse> {
+  const data: { query: string; limit: number; anchor_id?: number } = {
+    query: query.trim(),
+    limit: limit ?? 50
+  }
+  if (anchorId != null && anchorId > 0) data.anchor_id = anchorId
   return request({
     url: '/api/videos/search',
     method: 'post',
-    data: { query: query.trim(), limit: limit ?? 5 }
+    data
   })
+}
+
+/** 仅字幕全文搜索单项（一条字幕 + 所属视频） */
+export interface SubtitleSearchResultItem {
+  video: VideoItem
+  segment: SearchSegment
+}
+
+export interface SubtitleSearchResponse {
+  results: SubtitleSearchResultItem[]
+  total: number
+}
+
+/**
+ * 仅针对字幕的全文搜索（GET，支持翻页）
+ * @param query 搜索词
+ * @param limit 每页条数，默认 20
+ * @param offset 偏移量，默认 0
+ * @param anchorId 可选：限定在指定主播下的视频中搜索
+ */
+export function searchSubtitlesApi(
+  query: string,
+  limit?: number,
+  offset?: number,
+  anchorId?: number | null
+): Promise<{ results: SubtitleSearchResultItem[]; total: number }> {
+  const params: Record<string, string | number> = {
+    query: query.trim(),
+    limit: limit ?? 20,
+    offset: offset ?? 0
+  }
+  if (anchorId != null && anchorId > 0) params.anchor_id = anchorId
+  return request({
+    url: '/api/videos/search-subtitles',
+    method: 'get',
+    params
+  }).then((res: any) => ({
+    results: res?.results ?? [],
+    total: res?.total ?? 0
+  }))
 }
 
 /** 导出单段视频片段（AI 搜索结果每条字幕导出对应片段），返回临时文件路径与建议文件名 */
@@ -330,15 +381,20 @@ export interface ExportSegmentsRequestItem {
 /**
  * 批量导出并拼接视频片段
  * @param suggestedName 可选，自定义导出文件名（如 "我的剪辑.mp4"）
+ * @param outputPath 可选，用户通过另存为选择的完整保存路径；若提供则后端直接写入该路径，你可通过 path.dirname(outputPath) 得到目录
  */
 export function exportSegmentsApi(
   segments: ExportSegmentsRequestItem[],
   anchorId?: number | null,
-  suggestedName?: string | null
+  suggestedName?: string | null,
+  outputPath?: string | null
 ): Promise<ExportSegmentResult> {
   const data: Record<string, unknown> = { segments, anchor_id: anchorId || 0 }
   if (suggestedName != null && suggestedName.trim() !== '') {
     data.suggested_name = suggestedName.trim()
+  }
+  if (outputPath != null && outputPath.trim() !== '') {
+    data.output_path = outputPath.trim()
   }
   return request({
     url: '/api/videos/export-segments',
@@ -366,6 +422,16 @@ export function getExportHistoryApi(anchorId: number): Promise<{ list: ExportHis
     url: '/api/videos/export-history',
     method: 'get',
     params: { anchor_id: anchorId }
+  })
+}
+
+/**
+ * 删除一条导出历史记录（仅删除记录，不删除磁盘文件）
+ */
+export function deleteExportHistoryApi(exportVideoId: number): Promise<void> {
+  return request({
+    url: `/api/videos/export-history/${exportVideoId}`,
+    method: 'delete'
   })
 }
 
