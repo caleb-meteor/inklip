@@ -99,6 +99,29 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   const draggedIndexes = ref<number[]>([])
   const dragOverIndex = ref<number | null>(null)
   const dropPosition = ref<'top' | 'bottom'>('top')
+  /** 是否正在从视频字幕区拖入 */
+  const isSourceDragging = ref(false)
+
+  const SOURCE_DRAG_TYPE = 'application/x-inklip-source-segment'
+  const SOURCE_DRAG_PREFIX = 'inklip-source-segment:'
+
+  function onSourceSegmentDragStart(event: DragEvent, seg: SegmentWithVideo) {
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'copy'
+      event.dataTransfer.setData(SOURCE_DRAG_TYPE, '1')
+      event.dataTransfer.setData('text/plain', SOURCE_DRAG_PREFIX + JSON.stringify(seg))
+    }
+  }
+
+  function isSourceSegmentDrag(event: DragEvent | undefined): boolean {
+    return Boolean(event?.dataTransfer?.types?.includes(SOURCE_DRAG_TYPE))
+  }
+
+  function getSourceSegmentFromDrop(event: DragEvent | undefined): SegmentWithVideo | null {
+    const raw = event?.dataTransfer?.getData('text/plain')
+    if (!raw || !raw.startsWith(SOURCE_DRAG_PREFIX)) return null
+    try { return JSON.parse(raw.slice(SOURCE_DRAG_PREFIX.length)) as SegmentWithVideo } catch { return null }
+  }
 
   /** 按选择顺序播放时使用的合并区间：同视频且首尾相接的连续段合并为一段（如 0.2~0.5 + 0.5~1.5 → 0.2~1.5），避免衔接点重复播 */
   const previewPlaybackRanges = computed(() => {
@@ -132,10 +155,11 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     | { type: 'placeholder'; insertIndex: number }
   const displayRowsForSelected = computed(() => {
     const segments = selectedSegments.value
-    if (draggedIndexes.value.length === 0 || dragOverIndex.value === null) {
+    const hasDrag = (draggedIndexes.value.length > 0 || isSourceDragging.value) && dragOverIndex.value !== null
+    if (!hasDrag) {
       return segments.map((seg, i) => ({ type: 'segment' as const, index: i, seg }) as SelectedDisplayRow)
     }
-    const insertIndex = dropPosition.value === 'top' ? dragOverIndex.value : dragOverIndex.value + 1
+    const insertIndex = dropPosition.value === 'top' ? dragOverIndex.value! : dragOverIndex.value! + 1
     const before = segments.slice(0, insertIndex).map((seg, i) => ({ type: 'segment' as const, index: i, seg }) as SelectedDisplayRow)
     const after = segments.slice(insertIndex).map((seg, i) => ({ type: 'segment' as const, index: insertIndex + i, seg }) as SelectedDisplayRow)
     return [...before, { type: 'placeholder' as const, insertIndex }, ...after] as SelectedDisplayRow[]
@@ -377,6 +401,11 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     selectedSegments.value.reduce((sum, seg) => sum + (seg.toS - seg.fromS), 0)
   )
 
+  /** 已加入「所选字幕」的 segment 的 key 集合，用于在视频字幕列表中高亮 */
+  const selectedSegmentKeys = computed(() =>
+    new Set(selectedSegments.value.map(seg => getSegmentKey(seg)))
+  )
+
   /**
    * 加载当前主播的视频字幕。若传入全量列表则按 anchor_id 过滤复用，否则请求接口。
    * @param allVideos 可选，左侧已拉取的全量视频列表，传入则不再发请求
@@ -451,13 +480,8 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       }
       return
     }
-    if (selectedSourceKeys.value.has(key)) {
-      selectedSourceKeys.value.delete(key)
-      lastSelectedSourceKey.value = Array.from(selectedSourceKeys.value)[0] ?? null
-    } else {
-      selectedSourceKeys.value.add(key)
-      lastSelectedSourceKey.value = key
-    }
+    selectedSourceKeys.value = new Set([key])
+    lastSelectedSourceKey.value = key
   }
 
   function addSelectedSegments() {
@@ -526,13 +550,8 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       }
       return
     }
-    if (selectedSegmentIndexes.value.has(index)) {
-      selectedSegmentIndexes.value.delete(index)
-      lastSelectedSegmentIndex.value = selectedSegmentIndexes.value.size > 0 ? Math.max(...selectedSegmentIndexes.value) : null
-    } else {
-      selectedSegmentIndexes.value.add(index)
-      lastSelectedSegmentIndex.value = index
-    }
+    selectedSegmentIndexes.value = new Set([index])
+    lastSelectedSegmentIndex.value = index
   }
 
   function onDragStart(event: DragEvent, index: number) {
@@ -557,6 +576,17 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   }
 
   function onDragOver(event: DragEvent, index: number) {
+    if (isSourceSegmentDrag(event)) {
+      isSourceDragging.value = true
+      const target = event.currentTarget as HTMLElement
+      const rect = target.getBoundingClientRect()
+      const position: 'top' | 'bottom' = event.clientY - rect.top < rect.height / 2 ? 'top' : 'bottom'
+      if (dragOverIndex.value !== index || dropPosition.value !== position) {
+        dropPosition.value = position
+        dragOverIndex.value = index
+      }
+      return
+    }
     if (draggedIndexes.value.length === 0) return
     if (draggedIndexes.value.includes(index)) {
       if (dragOverIndex.value !== null) { dragOverIndex.value = null }
@@ -565,14 +595,23 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     const target = event.currentTarget as HTMLElement
     const rect = target.getBoundingClientRect()
     const position: 'top' | 'bottom' = event.clientY - rect.top < rect.height / 2 ? 'top' : 'bottom'
-    // 仅在实际变化时更新状态，避免 dragover 高频触发导致卡顿
     if (dragOverIndex.value !== index || dropPosition.value !== position) {
       dropPosition.value = position
       dragOverIndex.value = index
     }
   }
 
-  function onDrop(_event: DragEvent, index: number) {
+  function onDrop(event: DragEvent, index: number) {
+    const sourceSeg = getSourceSegmentFromDrop(event)
+    if (sourceSeg) {
+      const key = getSegmentKey(sourceSeg)
+      if (!selectedSegments.value.some(s => getSegmentKey(s) === key)) {
+        const insertIdx = dropPosition.value === 'top' ? index : index + 1
+        selectedSegments.value.splice(Math.min(insertIdx, selectedSegments.value.length), 0, sourceSeg)
+      }
+      resetDragState()
+      return
+    }
     if (draggedIndexes.value.length === 0 || draggedIndexes.value.includes(index)) return
     const itemsToMove: SegmentWithVideo[] = []
     for (let i = draggedIndexes.value.length - 1; i >= 0; i--) {
@@ -584,37 +623,51 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     selectedSegmentIndexes.value.clear()
     lastSelectedSegmentIndex.value = null
     for (let i = 0; i < itemsToMove.length; i++) selectedSegmentIndexes.value.add(insertIndex + i)
-    draggedIndexes.value = []
-    dragOverIndex.value = null
+    resetDragState()
   }
 
-  /** 拖放到虚拟占位条时调用，直接按插入下标放置 */
-  function onDropAtInsertIndex(insertIndex: number) {
+  function onDropAtInsertIndex(insertIndex: number, event?: DragEvent) {
+    const sourceSeg = event ? getSourceSegmentFromDrop(event) : null
+    if (sourceSeg) {
+      const key = getSegmentKey(sourceSeg)
+      if (!selectedSegments.value.some(s => getSegmentKey(s) === key)) {
+        selectedSegments.value.splice(Math.min(insertIndex, selectedSegments.value.length), 0, sourceSeg)
+      }
+      resetDragState()
+      return
+    }
     if (draggedIndexes.value.length === 0) return
     const itemsToMove: SegmentWithVideo[] = []
     for (let i = draggedIndexes.value.length - 1; i >= 0; i--) {
       itemsToMove.unshift(selectedSegments.value.splice(draggedIndexes.value[i], 1)[0])
     }
-    // 移除项后，插入位置需减去“在它前面的被移除数量”
     const adjust = draggedIndexes.value.filter(i => i < insertIndex).length
     selectedSegments.value.splice(insertIndex - adjust, 0, ...itemsToMove)
     selectedSegmentIndexes.value.clear()
     lastSelectedSegmentIndex.value = null
     for (let i = 0; i < itemsToMove.length; i++) selectedSegmentIndexes.value.add(insertIndex - adjust + i)
-    draggedIndexes.value = []
-    dragOverIndex.value = null
+    resetDragState()
   }
 
-  /** 拖过虚拟占位条时更新为“放到此处” */
-  function onDragOverPlaceholder(insertIndex: number) {
-    if (draggedIndexes.value.length === 0) return
+  function onDragOverPlaceholder(insertIndex: number, event?: DragEvent) {
+    if (isSourceSegmentDrag(event)) { isSourceDragging.value = true }
+    if (draggedIndexes.value.length === 0 && !isSourceDragging.value) return
     if (dragOverIndex.value !== insertIndex - 1 || dropPosition.value !== 'bottom') {
       dragOverIndex.value = insertIndex - 1
       dropPosition.value = 'bottom'
     }
   }
 
-  function onListDragOver() {
+  function onListDragOver(event?: DragEvent) {
+    if (isSourceSegmentDrag(event)) {
+      isSourceDragging.value = true
+      const lastIdx = selectedSegments.value.length - 1
+      if (lastIdx >= 0 && (dragOverIndex.value !== lastIdx || dropPosition.value !== 'bottom')) {
+        dragOverIndex.value = lastIdx
+        dropPosition.value = 'bottom'
+      }
+      return
+    }
     if (draggedIndexes.value.length === 0) return
     const lastIdx = selectedSegments.value.length - 1
     if (dragOverIndex.value !== lastIdx || dropPosition.value !== 'bottom') {
@@ -623,7 +676,16 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     }
   }
 
-  function onListDrop() {
+  function onListDrop(event?: DragEvent) {
+    const sourceSeg = event ? getSourceSegmentFromDrop(event) : null
+    if (sourceSeg) {
+      const key = getSegmentKey(sourceSeg)
+      if (!selectedSegments.value.some(s => getSegmentKey(s) === key)) {
+        selectedSegments.value.push(sourceSeg)
+      }
+      resetDragState()
+      return
+    }
     if (draggedIndexes.value.length === 0) return
     const itemsToMove: SegmentWithVideo[] = []
     for (let i = draggedIndexes.value.length - 1; i >= 0; i--) {
@@ -634,13 +696,17 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     selectedSegmentIndexes.value.clear()
     lastSelectedSegmentIndex.value = null
     for (let i = 0; i < itemsToMove.length; i++) selectedSegmentIndexes.value.add(insertIndex + i)
+    resetDragState()
+  }
+
+  function resetDragState() {
     draggedIndexes.value = []
     dragOverIndex.value = null
+    isSourceDragging.value = false
   }
 
   function onDragEnd() {
-    draggedIndexes.value = []
-    dragOverIndex.value = null
+    resetDragState()
   }
 
   function playNextSegment() {
@@ -669,7 +735,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       video.currentTime = range.fromS
       video.play().catch(() => { isPreviewPlaying.value = false })
     }
-    // 预加载下一段（不同视频时），切换时更连贯
     const nextIdx = currentPreviewIndex.value + 1
     if (nextIdx < ranges.length) {
       const nextRange = ranges[nextIdx]
@@ -695,7 +760,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       if (video.currentTime >= seg.toS) {
         video.pause()
         video.removeEventListener('timeupdate', onTimeUpdate)
-        // 不切回预览视频，保持当前视频停在最后一帧；只有开始「按选择顺序播放」时再切回
       }
     }
     ;(video as any)._segmentTimeUpdate = onTimeUpdate
@@ -720,7 +784,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     if (!video || idx < 0 || idx >= ranges.length) return
     const range = ranges[idx]
     if (video.currentTime >= range.toS) {
-      // 不暂停，直接切到下一段，保持连贯
       playNextSegment()
     }
   }
@@ -796,7 +859,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
 
   function locateContext(seg: SegmentWithVideo) {
     clearSourceSelection()
-    // 只展开目标视频，其余全部折叠，减少 flatVirtualList 数据量
     const allIds = sourceVideos.value.map(v => v.id)
     collapsedGroups.value = new Set(allIds.filter(id => id !== seg.videoId))
     showSubtitleContext.value = true
@@ -805,7 +867,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       const index = flatVirtualList.value.findIndex(item => item.key === virtualKey)
       const containerEl = document.querySelector('.subtitle-virtual-list')
       
-      // 如果元素还未渲染（高度为 0），或者数据还没准备好，则继续重试
       if (index !== -1 && containerEl && containerEl.clientHeight > 0) {
         const topOffset = index * 34
         const containerHeight = containerEl.clientHeight
@@ -842,7 +903,6 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       return
     }
     const name = suggestedName?.trim() || `inklip_merged_${Date.now()}.mp4`
-    // 先让用户选择保存位置，拿到路径（目录 = path.dirname(filePath)）
     const dialogResult = await window.api?.showExportSaveDialog(name)
     if (dialogResult?.canceled || !dialogResult?.filePath) {
       return
@@ -898,6 +958,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     loadMoreSearchResults,
     flatVirtualList,
     selectedSegments,
+    selectedSegmentKeys,
     selectedSourceKeys,
     lastSelectedSourceKey,
     selectedSegmentIndexes,
@@ -940,6 +1001,8 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     onListDragOver,
     onListDrop,
     onDragEnd,
+    onSourceSegmentDragStart,
+    isSourceSegmentDrag,
     playSourceSegment,
     playNextSegment,
     onPreviewTimeUpdate,

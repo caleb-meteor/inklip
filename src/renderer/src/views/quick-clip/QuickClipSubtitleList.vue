@@ -51,7 +51,12 @@ function onSearchResultsScroll(e: Event) {
                 v-for="seg in qc.searchResults"
                 :key="qc.getSegmentKey(seg)"
                 class="segment-row"
-                :class="{ 'is-selected': qc.selectedSourceKeys.has(qc.getSegmentKey(seg)) }"
+                :class="{
+                  'is-selected': qc.selectedSourceKeys.has(qc.getSegmentKey(seg)),
+                  'is-in-selected': qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))
+                }"
+                :draggable="!qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))"
+                @dragstart="qc.onSourceSegmentDragStart($event, seg)"
                 @click="qc.toggleSourceSelection(seg, $event)"
               >
                 <span class="segment-time">{{ qc.formatTime(seg.fromS) }}</span>
@@ -62,7 +67,7 @@ function onSearchResultsScroll(e: Event) {
                 <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(seg)">
                   <n-icon><PlayOutline /></n-icon>
                 </n-button>
-                <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" @click.stop="qc.addSegment(seg)">
+                <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" :disabled="qc.selectedSegmentKeys.has(qc.getSegmentKey(seg))" @click.stop="qc.addSegment(seg)">
                   <n-icon><AddOutline /></n-icon>
                 </n-button>
               </div>
@@ -115,7 +120,12 @@ function onSearchResultsScroll(e: Event) {
             v-else
             :id="`subtitle-${item.key}`"
             class="segment-row"
-            :class="{ 'is-selected': qc.selectedSourceKeys.has(item.segmentKey!) }"
+            :class="{
+              'is-selected': qc.selectedSourceKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!)),
+              'is-in-selected': qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))
+            }"
+            :draggable="!qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))"
+            @dragstart="qc.onSourceSegmentDragStart($event, item.segment!)"
             @click="qc.toggleSourceSelection(item.segment!, $event)"
           >
             <span class="segment-time">{{ qc.formatTime(item.segment!.fromS) }}</span>
@@ -123,7 +133,7 @@ function onSearchResultsScroll(e: Event) {
             <n-button quaternary size="tiny" type="info" class="segment-action" title="播放" @click.stop="qc.playSourceSegment(item.segment!)">
               <n-icon><PlayOutline /></n-icon>
             </n-button>
-            <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" @click.stop="qc.addSegment(item.segment!)">
+            <n-button quaternary size="tiny" type="primary" class="segment-action" title="添加" :disabled="qc.selectedSegmentKeys.has(item.segmentKey ?? qc.getSegmentKey(item.segment!))" @click.stop="qc.addSegment(item.segment!)">
               <n-icon><AddOutline /></n-icon>
             </n-button>
           </div>
@@ -260,6 +270,15 @@ function onSearchResultsScroll(e: Event) {
 .segment-row.is-selected {
   background: rgba(79, 172, 254, 0.2);
   border-color: rgba(79, 172, 254, 0.5);
+}
+.segment-row.is-in-selected {
+  border-left: 3px solid rgba(82, 196, 26, 0.9);
+  padding-left: 7px;
+}
+/* 字幕上下文在 n-virtual-list 内，需 :deep 穿透才能生效 */
+.panel :deep(.segment-row.is-in-selected) {
+  border-left: 3px solid rgba(82, 196, 26, 0.9);
+  padding-left: 7px;
 }
 .segment-time {
   flex-shrink: 0;

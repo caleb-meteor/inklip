@@ -55,20 +55,25 @@ function openExportFolder(filePath: string) {
       <!-- 上：已选字幕列表 -->
       <div class="panel-section panel-section-top">
         <n-scrollbar>
-          <div v-if="qc.selectedSegments.length === 0" class="panel-empty">从左侧字幕点击添加</div>
+          <div
+            v-if="qc.selectedSegments.length === 0"
+            class="panel-empty"
+            @dragover.prevent
+            @drop.prevent="!qc.isPreviewPlaying && qc.onListDrop($event)"
+          >从左侧字幕点击或拖拽添加</div>
           <div
             v-else
             class="selected-list"
             @dragenter.prevent
-            @dragover.prevent="!qc.isPreviewPlaying && qc.onListDragOver()"
-            @drop="!qc.isPreviewPlaying && qc.onListDrop()"
+            @dragover.prevent="!qc.isPreviewPlaying && qc.onListDragOver($event)"
+            @drop.prevent="!qc.isPreviewPlaying && qc.onListDrop($event)"
           >
             <template v-for="row in qc.displayRowsForSelected" :key="row.type === 'placeholder' ? `ph-${row.insertIndex}` : `sel-${row.index}-${qc.getSegmentKey(row.seg)}`">
               <div
                 v-if="row.type === 'placeholder'"
                 class="selected-row selected-row-placeholder"
-                @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOverPlaceholder(row.insertIndex)"
-                @drop.prevent.stop="!qc.isPreviewPlaying && qc.onDropAtInsertIndex(row.insertIndex)"
+                @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOverPlaceholder(row.insertIndex, $event)"
+                @drop.prevent.stop="!qc.isPreviewPlaying && qc.onDropAtInsertIndex(row.insertIndex, $event)"
               >
                 <span class="placeholder-hint">放置到此处</span>
               </div>
@@ -84,7 +89,7 @@ function openExportFolder(filePath: string) {
                 @dragstart="!qc.isPreviewPlaying && qc.onDragStart($event, row.index)"
                 @dragenter.prevent
                 @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOver($event, row.index)"
-                @drop.stop="!qc.isPreviewPlaying && qc.onDrop($event, row.index)"
+                @drop.prevent.stop="!qc.isPreviewPlaying && qc.onDrop($event, row.index)"
                 @dragend="qc.onDragEnd"
               >
                 <div class="selected-content">
