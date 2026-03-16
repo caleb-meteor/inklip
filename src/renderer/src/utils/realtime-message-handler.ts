@@ -39,6 +39,12 @@ export interface MessageHandlers {
     /** 过期日期 */
     expiredAt?: string
   }) => void
+  /** 发现新版本（后端通过 SSE 推送），用于弹窗更新；force_update 为 true 时弹窗不可关闭 */
+  onVersionUpdate?: (data: {
+    version: string
+    force_update: boolean
+    changelog: string
+  }) => void
 }
 
 export class RealtimeMessageHandler {
@@ -73,6 +79,9 @@ export class RealtimeMessageHandler {
         break
       case 'usage_info':
         this.handleUsageInfo(data)
+        break
+      case 'version_update':
+        this.handleVersionUpdate(data)
         break
       default:
         console.log('Unknown message type:', data.type, data)
@@ -134,6 +143,14 @@ export class RealtimeMessageHandler {
       remainingSeconds: data.remainingSeconds,
       isVip: data.isVip,
       expiredAt: data.expiredAt
+    })
+  }
+
+  private handleVersionUpdate(data: any): void {
+    this.handlers.onVersionUpdate?.({
+      version: data.version ?? '',
+      force_update: Boolean(data.force_update),
+      changelog: data.changelog ?? ''
     })
   }
 }

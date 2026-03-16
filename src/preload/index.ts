@@ -28,7 +28,9 @@ const api = {
   showItemInFolder: (filePath: string) => electronAPI.ipcRenderer.invoke('show-item-in-folder', filePath),
   /** 导出时选择保存位置，返回用户选择的完整路径 */
   showExportSaveDialog: (suggestedName: string) =>
-    electronAPI.ipcRenderer.invoke('show-export-save-dialog', suggestedName)
+    electronAPI.ipcRenderer.invoke('show-export-save-dialog', suggestedName),
+  /** 在默认浏览器中打开链接（如更新下载页） */
+  openExternal: (url: string) => electronAPI.ipcRenderer.invoke('open-external', url)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

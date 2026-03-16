@@ -34,6 +34,16 @@ export function registerIpcHandlers(
     }
   })
 
+  /** 在默认浏览器中打开链接（如更新下载页） */
+  ipcMain.handle('open-external', async (_event, url: string) => {
+    if (!url || typeof url !== 'string') return
+    try {
+      await shell.openExternal(url)
+    } catch (e) {
+      console.error('[IPC] openExternal failed:', e)
+    }
+  })
+
   ipcMain.handle('download-video', async (_event, sourcePath: string, fileName: string) => {
     const win = BrowserWindow.getFocusedWindow()
     if (!win) return { success: false, error: '没有活动窗口' }

@@ -46,6 +46,8 @@ declare global {
       showItemInFolder: (filePath: string) => void
       /** 导出时选择保存位置，返回 { canceled, filePath } */
       showExportSaveDialog: (suggestedName: string) => Promise<{ canceled: boolean; filePath?: string }>
+      /** 在默认浏览器中打开链接（如更新下载页） */
+      openExternal: (url: string) => Promise<void>
     }
   }
 }

@@ -21,6 +21,13 @@ export interface UsageInfo {
   expiredAt?: string
 }
 
+/** 版本更新信息（SSE type=version_update）；force_update 为 true 时弹窗不可关闭 */
+export interface VersionUpdateInfo {
+  version: string
+  force_update: boolean
+  changelog: string
+}
+
 /** 判断余量是否可用：是 VIP、未过期、且有剩余额度 */
 export function isUsageAvailable(info: UsageInfo | null | undefined): boolean {
   if (!info?.isVip) return false
@@ -50,6 +57,9 @@ export const useRealtimeStore = defineStore('realtime', () => {
     isVip: false,
     expiredAt: undefined
   })
+
+  /** 新版本信息（后端 SSE 推送）；有值时显示更新弹窗，force_update 时不可关闭 */
+  const versionUpdateInfo = ref<VersionUpdateInfo | null>(null)
 
   const isVipAvailable = computed(() => isUsageAvailable(usageInfo.value))
 
@@ -175,6 +185,9 @@ export const useRealtimeStore = defineStore('realtime', () => {
       },
       onUsageInfo: (data) => {
         usageInfo.value = data
+      },
+      onVersionUpdate: (data) => {
+        versionUpdateInfo.value = data
       }
     })
 
@@ -209,6 +222,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
     connect()
   }
 
+  const clearVersionUpdate = (): void => {
+    versionUpdateInfo.value = null
+  }
+
   return {
     connected,
     smartCutUpdated,
@@ -222,6 +239,8 @@ export const useRealtimeStore = defineStore('realtime', () => {
     updateVideoProgress,
     usageInfo,
     isVipAvailable,
+    versionUpdateInfo,
+    clearVersionUpdate,
     clearVideoProgress,
     getVideoProgress
   }
