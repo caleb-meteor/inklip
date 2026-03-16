@@ -10,9 +10,12 @@ const VERSION_DOWNLOAD_URL = 'https://inklip.caleb.center'
 const route = useRoute()
 const rtStore = useRealtimeStore()
 
-/** 有版本更新信息且当前在首页时才弹窗 */
+/** 有版本更新信息且当前在首页且用户未被封禁时才弹窗（封禁弹窗优先级更高） */
 const show = computed(
-  () => rtStore.versionUpdateInfo != null && route.path === '/home'
+  () =>
+    rtStore.versionUpdateInfo != null &&
+    route.path === '/home' &&
+    !rtStore.isUserBanned
 )
 const versionUpdateInfo = computed(() => rtStore.versionUpdateInfo)
 const isForceUpdate = computed(() => versionUpdateInfo.value?.force_update ?? false)

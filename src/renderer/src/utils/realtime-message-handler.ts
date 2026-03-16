@@ -38,6 +38,8 @@ export interface MessageHandlers {
     isVip: boolean
     /** 过期日期 */
     expiredAt?: string
+    /** 用户状态：1=启用，非1=封禁 */
+    status?: number
   }) => void
   /** 发现新版本（后端通过 SSE 推送），用于弹窗更新；force_update 为 true 时弹窗不可关闭 */
   onVersionUpdate?: (data: {
@@ -142,7 +144,8 @@ export class RealtimeMessageHandler {
       totalSeconds: data.totalSeconds,
       remainingSeconds: data.remainingSeconds,
       isVip: data.isVip,
-      expiredAt: data.expiredAt
+      expiredAt: data.expiredAt,
+      status: data.status
     })
   }
 

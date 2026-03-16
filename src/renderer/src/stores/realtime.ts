@@ -19,6 +19,8 @@ export interface UsageInfo {
   isVip: boolean
   /** 过期日期（云端下发的过期时间） */
   expiredAt?: string
+  /** 用户状态：1=启用，非 1（如 0）= 封禁 */
+  status?: number
 }
 
 /** 版本更新信息（SSE type=version_update）；force_update 为 true 时弹窗不可关闭 */
@@ -55,13 +57,19 @@ export const useRealtimeStore = defineStore('realtime', () => {
     totalSeconds: 0,
     remainingSeconds: 0,
     isVip: false,
-    expiredAt: undefined
+    expiredAt: undefined,
+    status: undefined
   })
 
   /** 新版本信息（后端 SSE 推送）；有值时显示更新弹窗，force_update 时不可关闭 */
   const versionUpdateInfo = ref<VersionUpdateInfo | null>(null)
 
   const isVipAvailable = computed(() => isUsageAvailable(usageInfo.value))
+
+  /** 用户是否被封禁：已收到用量信息且 status !== 1 */
+  const isUserBanned = computed(
+    () => usageInfo.value.status !== undefined && usageInfo.value.status !== 1
+  )
 
   let sseClient: SSEClient | null = null
   let messageHandler: RealtimeMessageHandler | null = null
@@ -239,6 +247,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     updateVideoProgress,
     usageInfo,
     isVipAvailable,
+    isUserBanned,
     versionUpdateInfo,
     clearVersionUpdate,
     clearVideoProgress,
