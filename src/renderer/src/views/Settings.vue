@@ -25,8 +25,10 @@ import {
 } from '@vicons/ionicons5'
 import { saveConfig, getConfig, setApiKey, getApiKey, validateApiKey } from '../api/config'
 import { submitFeedback, type SubmitFeedbackParams } from '../api/report'
+import { useRealtimeStore } from '../stores/realtime'
 
 const router = useRouter()
+const rtStore = useRealtimeStore()
 const route = useRoute()
 const message = useMessage()
 
@@ -208,6 +210,8 @@ const saveApiKey = (): void => {
         apiKeyRefresh.value++
         // 触发自定义事件，通知其他组件 apiKey 已更新
         window.dispatchEvent(new CustomEvent('apiKeyChanged', { detail: { hasApiKey: true } }))
+        // 重连 SSE，从云端拉取当前 API Key 对应用户信息
+        rtStore.reauthenticate()
       })
       .catch((error) => {
         console.error('验证或设置 API Key 失败:', error)

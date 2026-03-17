@@ -47,6 +47,8 @@ export interface MessageHandlers {
     force_update: boolean
     changelog: string
   }) => void
+  /** API Key 异常（如设备超限），后端通过 SSE 推送；弹窗不可关闭，需用户更换 API Key */
+  onApiKeyException?: (data: { message?: string }) => void
 }
 
 export class RealtimeMessageHandler {
@@ -84,6 +86,9 @@ export class RealtimeMessageHandler {
         break
       case 'version_update':
         this.handleVersionUpdate(data)
+        break
+      case 'api_key_exception':
+        this.handleApiKeyException(data)
         break
       default:
         console.log('Unknown message type:', data.type, data)
@@ -154,6 +159,12 @@ export class RealtimeMessageHandler {
       version: data.version ?? '',
       force_update: Boolean(data.force_update),
       changelog: data.changelog ?? ''
+    })
+  }
+
+  private handleApiKeyException(data: any): void {
+    this.handlers.onApiKeyException?.({
+      message: data.message ?? 'API Key 异常，请更换 API Key 后重试'
     })
   }
 }
