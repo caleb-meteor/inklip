@@ -10,7 +10,9 @@ import { RouterView, useRouter } from 'vue-router'
 import { onMounted } from 'vue'
 import { useRealtimeStore } from './stores/realtime'
 import { setBaseUrl } from './utils/request'
+import BannedUserModal from './components/BannedUserModal.vue'
 import VersionUpdateModal from './components/VersionUpdateModal.vue'
+import VipExpiredModal from './components/VipExpiredModal.vue'
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
@@ -70,6 +72,8 @@ onMounted(async () => {
         <div class="app-wrapper">
           <RouterView />
         </div>
+        <BannedUserModal />
+        <VipExpiredModal />
         <VersionUpdateModal />
       </n-dialog-provider>
     </n-message-provider>

@@ -19,6 +19,8 @@ export interface UsageInfo {
   isVip: boolean
   /** 过期日期（云端下发的过期时间） */
   expiredAt?: string
+  /** 用户状态：1=启用，非 1（如 0）= 封禁 */
+  status?: number
 }
 
 /** 版本更新信息（SSE type=version_update）；force_update 为 true 时弹窗不可关闭 */
@@ -55,13 +57,34 @@ export const useRealtimeStore = defineStore('realtime', () => {
     totalSeconds: 0,
     remainingSeconds: 0,
     isVip: false,
-    expiredAt: undefined
+    expiredAt: undefined,
+    status: undefined
   })
 
   /** 新版本信息（后端 SSE 推送）；有值时显示更新弹窗，force_update 时不可关闭 */
   const versionUpdateInfo = ref<VersionUpdateInfo | null>(null)
 
+  /** API Key 异常（如设备超限）；有值时弹窗不可关闭，提示用户更换 API Key */
+  const apiKeyExceptionInfo = ref<{ message: string } | null>(null)
+
+  /** 是否已从云端拿到当前 API Key 对应用户信息（收到 usage_info 后为 true） */
+  const userInfoReceivedFromCloud = ref(false)
+
   const isVipAvailable = computed(() => isUsageAvailable(usageInfo.value))
+
+  /** 用户是否被封禁：未拿到用户信息时视为封禁；已收到用量信息且 status !== 1 也为封禁 */
+  const isUserBanned = computed(
+    () =>
+      !userInfoReceivedFromCloud.value ||
+      (usageInfo.value.status !== undefined && usageInfo.value.status !== 1)
+  )
+
+  /** 会员是否已到期：已下发过期时间且当前时间超过 expiredAt */
+  const isMembershipExpired = computed(() => {
+    const at = usageInfo.value?.expiredAt
+    if (!at) return false
+    return new Date(at) <= new Date()
+  })
 
   let sseClient: SSEClient | null = null
   let messageHandler: RealtimeMessageHandler | null = null
@@ -185,9 +208,13 @@ export const useRealtimeStore = defineStore('realtime', () => {
       },
       onUsageInfo: (data) => {
         usageInfo.value = data
+        userInfoReceivedFromCloud.value = true
       },
       onVersionUpdate: (data) => {
         versionUpdateInfo.value = data
+      },
+      onApiKeyException: (data) => {
+        apiKeyExceptionInfo.value = { message: data.message ?? 'API Key 异常，请更换 API Key 后重试' }
       }
     })
 
@@ -216,6 +243,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     }
     messageHandler = null
     connected.value = false
+    userInfoReceivedFromCloud.value = false
   }
 
   const reauthenticate = (): void => {
@@ -224,6 +252,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
 
   const clearVersionUpdate = (): void => {
     versionUpdateInfo.value = null
+  }
+
+  const clearApiKeyException = (): void => {
+    apiKeyExceptionInfo.value = null
   }
 
   return {
@@ -238,9 +270,14 @@ export const useRealtimeStore = defineStore('realtime', () => {
     reauthenticate,
     updateVideoProgress,
     usageInfo,
+    userInfoReceivedFromCloud,
     isVipAvailable,
+    isUserBanned,
+    isMembershipExpired,
     versionUpdateInfo,
     clearVersionUpdate,
+    apiKeyExceptionInfo,
+    clearApiKeyException,
     clearVideoProgress,
     getVideoProgress
   }

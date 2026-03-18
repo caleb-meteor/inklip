@@ -10,10 +10,16 @@ const VERSION_DOWNLOAD_URL = 'https://inklip.caleb.center'
 const route = useRoute()
 const rtStore = useRealtimeStore()
 
-/** 有版本更新信息且当前在首页时才弹窗 */
+/** 优先级 4：无封禁、无异常、未到期时才可能弹本窗；有任一更高优先级则不弹 */
 const show = computed(
-  () => rtStore.versionUpdateInfo != null && route.path === '/home'
+  () =>
+    rtStore.versionUpdateInfo != null &&
+    route.path === '/home' &&
+    !rtStore.isUserBanned &&
+    !rtStore.apiKeyExceptionInfo &&
+    !rtStore.isMembershipExpired
 )
+
 const versionUpdateInfo = computed(() => rtStore.versionUpdateInfo)
 const isForceUpdate = computed(() => versionUpdateInfo.value?.force_update ?? false)
 
@@ -29,13 +35,13 @@ const onGo = (): void => {
 <template>
   <n-modal
     :show="show"
-    :mask-closable="false"
-    :close-on-esc="false"
-    :closable="false"
+    :mask-closable="!isForceUpdate"
+    :close-on-esc="!isForceUpdate"
+    :closable="!isForceUpdate"
     class="version-update-modal"
   >
     <div class="version-update-card">
-      <div class="version-header">
+      <div class="version-update-header">
         <div class="header-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -44,11 +50,15 @@ const onGo = (): void => {
           </svg>
         </div>
         <h2 class="header-title">发现新版本</h2>
-        <span class="version-badge">{{ versionUpdateInfo?.version }}</span>
+        <span v-if="versionUpdateInfo?.version" class="version-badge">{{ versionUpdateInfo.version }}</span>
       </div>
 
-      <div v-if="versionUpdateInfo?.changelog" class="version-content">
-        <div class="changelog-scroll-area">
+      <p class="version-update-desc">
+        发现新版本，建议更新以获得更好体验。
+      </p>
+
+      <div v-if="versionUpdateInfo?.changelog" class="changelog-wrap">
+        <div class="changelog-scroll">
           <pre class="changelog-text">{{ versionUpdateInfo.changelog }}</pre>
         </div>
       </div>
@@ -57,11 +67,11 @@ const onGo = (): void => {
         此版本包含重要更新，须更新后方可继续使用。
       </div>
 
-      <div class="version-actions">
-        <n-button v-if="!isForceUpdate" @click="onLater" secondary class="action-btn">
+      <div class="version-update-actions">
+        <n-button v-if="!isForceUpdate" secondary class="action-btn" @click="onLater">
           稍后提醒
         </n-button>
-        <n-button type="primary" @click="onGo" class="action-btn action-primary">
+        <n-button type="primary" class="action-btn action-primary" @click="onGo">
           立即更新
         </n-button>
       </div>
@@ -71,26 +81,26 @@ const onGo = (): void => {
 
 <style scoped>
 .version-update-modal {
-  width: 340px;
-  background: var(--n-color);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  width: 360px;
 }
 
 .version-update-card {
   display: flex;
   flex-direction: column;
+  background: var(--n-color, #1e1e1e);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
-.version-header {
+.version-update-header {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
   padding: 24px 20px 16px;
   gap: 8px;
-  background: linear-gradient(180deg, rgba(59, 130, 246, 0.05) 0%, transparent 100%);
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.1) 0%, transparent 100%);
 }
 
 .header-icon {
@@ -101,8 +111,8 @@ const onGo = (): void => {
 }
 
 .header-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 
 .header-title {
@@ -127,13 +137,19 @@ const onGo = (): void => {
   border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
-.version-content {
-  padding: 0 20px;
-  display: flex;
-  flex-direction: column;
+.version-update-desc {
+  margin: 0 20px;
+  padding: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--n-text-color-2);
 }
 
-.changelog-scroll-area {
+.changelog-wrap {
+  padding: 0 20px 12px;
+}
+
+.changelog-scroll {
   background: rgba(0, 0, 0, 0.2);
   border-radius: 6px;
   padding: 10px 12px;
@@ -142,10 +158,11 @@ const onGo = (): void => {
   border: 1px solid var(--n-border-color);
 }
 
-.changelog-scroll-area::-webkit-scrollbar {
+.changelog-scroll::-webkit-scrollbar {
   width: 4px;
 }
-.changelog-scroll-area::-webkit-scrollbar-thumb {
+
+.changelog-scroll::-webkit-scrollbar-thumb {
   background-color: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
 }
@@ -161,7 +178,7 @@ const onGo = (): void => {
 }
 
 .force-update-tip {
-  margin: 16px 20px 0;
+  margin: 0 20px 12px;
   padding: 10px;
   background: rgba(245, 158, 11, 0.1);
   border: 1px solid rgba(245, 158, 11, 0.2);
@@ -171,15 +188,19 @@ const onGo = (): void => {
   text-align: center;
 }
 
-.version-actions {
+.version-update-actions {
   display: flex;
   gap: 12px;
-  padding: 20px;
+  padding: 0 20px 20px;
 }
 
 .action-btn {
   flex: 1;
-  border-radius: 6px;
+  border-radius: 8px;
   font-weight: 500;
+}
+
+.action-primary {
+  flex: 1.2;
 }
 </style>
