@@ -12,13 +12,11 @@ import {
 import { getDictsByTypeApi, createDictApi } from '../../api/dict'
 import { uploadVideosBatchApi } from '../../api/video'
 
-const MAX_VIDEOS_PER_PRODUCT = 18
-
 interface Props {
   show: boolean
   preSelectedAnchor?: { id: number; name: string }
   preSelectedProduct?: { id: number; name: string }
-  /** 从首页产品入口打开时，该产品当前已有视频数量，用于限制每个产品最多 18 个视频 */
+  /** 从首页产品入口打开时，该产品当前已有视频数量（仅用于展示，已不再限制上传数量） */
   preSelectedProductVideoCount?: number
 }
 
@@ -151,14 +149,6 @@ const handleConfirm = async (): Promise<void> => {
         ? `该视频缺少对应字幕文件：${names[0]}`
         : `有 ${missingSubtitlePaths.length} 个视频缺少对应字幕文件：${names.slice(0, 3).join('、')}${names.length > 3 ? ' 等' : ''}`
     message.warning(tip)
-    return
-  }
-
-  const currentCount = props.preSelectedProductVideoCount ?? 0
-  if (props.preSelectedProduct && currentCount + videoPaths.value.length > MAX_VIDEOS_PER_PRODUCT) {
-    message.warning(
-      `每个产品下最多只能添加 ${MAX_VIDEOS_PER_PRODUCT} 个视频，当前已有 ${currentCount} 个`
-    )
     return
   }
 

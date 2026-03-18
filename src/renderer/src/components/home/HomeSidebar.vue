@@ -122,10 +122,7 @@ const editName = ref('')
 const editProductId = ref<number | null>(null)
 const editProductName = ref('')
 
-// 首页左侧数量限制（与后端 consts 保持一致）
-const MAX_ANCHORS = 3
-const MAX_PRODUCTS_PER_ANCHOR = 100
-const MAX_VIDEOS_PER_PRODUCT = 18
+// 首页数量限制已移除，不再校验主播/产品/视频数量上限
 
 const currentAnchor = computed(() => anchors.value.find((a) => a.id === selectedAnchorId.value))
 
@@ -270,10 +267,6 @@ const getAvatarColor = (name: string): string => {
 }
 
 const handleAddAnchor = async (): Promise<boolean> => {
-  if (anchors.value.length >= MAX_ANCHORS) {
-    message.warning(`主播最多只能添加 ${MAX_ANCHORS} 个`)
-    return false
-  }
   if (!newAnchorName.value.trim()) {
     message.warning('请输入主播名称')
     return false
@@ -294,10 +287,6 @@ const handleAddAnchor = async (): Promise<boolean> => {
 
 const handleAddProduct = async () => {
   if (!selectedAnchorId.value) return false
-  if (currentAnchorProducts.value.length >= MAX_PRODUCTS_PER_ANCHOR) {
-    message.warning(`每个主播下产品最多只能添加 ${MAX_PRODUCTS_PER_ANCHOR} 个`)
-    return false
-  }
   if (!newProductName.value.trim()) {
     message.warning('请输入产品名称')
     return false
@@ -577,17 +566,7 @@ const doDeleteProduct = async (product: Product) => {
       <div v-show="!collapsed" class="anchors-section">
         <div class="section-header">
           <div class="section-title" style="margin-bottom: 0; color: #3b82f6">主播选择</div>
-          <n-tooltip v-if="anchors.length >= MAX_ANCHORS" placement="right">
-            <template #trigger>
-              <div class="add-anchor-btn disabled">
-                <n-icon size="14"><PersonAddOutline /></n-icon>
-                <span>添加主播</span>
-              </div>
-            </template>
-            主播最多只能添加 {{ MAX_ANCHORS }} 个
-          </n-tooltip>
           <n-popconfirm
-            v-else
             :show-icon="false"
             placement="right"
             positive-text="添加"
@@ -709,20 +688,8 @@ const doDeleteProduct = async (product: Product) => {
         <!-- 产品管理 Header -->
         <div class="section-header" style="margin-top: 6px; margin-bottom: 4px">
           <div class="section-title" style="margin-bottom: 0; color: #10b981">产品列表</div>
-          <n-tooltip
-            v-if="selectedAnchorId && currentAnchorProducts.length >= MAX_PRODUCTS_PER_ANCHOR"
-            placement="right"
-          >
-            <template #trigger>
-              <div class="add-anchor-btn disabled">
-                <n-icon size="14"><FolderOpenOutline /></n-icon>
-                <span>添加产品</span>
-              </div>
-            </template>
-            每个主播下产品最多只能添加 {{ MAX_PRODUCTS_PER_ANCHOR }} 个
-          </n-tooltip>
           <n-popconfirm
-            v-else-if="selectedAnchorId"
+            v-if="selectedAnchorId"
             :show-icon="false"
             placement="right"
             positive-text="添加"
@@ -810,9 +777,8 @@ const doDeleteProduct = async (product: Product) => {
 
                 <!-- 视频列表 -->
                 <div v-show="expandedProductIds.includes(product.id)" class="videos-list">
-                  <!-- Upload Buttons -->
+                  <!-- Upload Buttons（已移除每产品视频数量限制，始终显示上传入口） -->
                   <div
-                    v-if="getProductVideos(product.id).length < MAX_VIDEOS_PER_PRODUCT"
                     class="video-preview-card upload-card"
                     @click="openUploadModal(product)"
                   >
