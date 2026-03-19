@@ -30,7 +30,7 @@ import { videoForMessagePayload } from '../utils/videoPayload'
 const router = useRouter()
 const route = useRoute()
 const rtStore = useRealtimeStore()
-const appVersion = ref<string>('1.0.0')
+const appVersion = ref<string>('0.0.1')
 const showUploadModal = ref(false)
 const leftSidebarCollapsed = ref(false)
 const rightSidebarCollapsed = ref(true)
@@ -51,6 +51,7 @@ const isTaskRunning = computed(() => {
 
 const currentPlayingVideo = ref<HomePlayPayload | null>(null)
 const currentSelectedAnchor = ref<any>(null)
+const currentSelectedWorkspace = ref<{ id: number; name: string } | null>(null)
 const currentSelectedProduct = ref<number | null>(null)
 
 const homeSidebarRef = ref<InstanceType<typeof HomeSidebar> | null>(null)
@@ -67,15 +68,14 @@ const handleClosePlayer = () => {
   currentPlayingVideo.value = null
 }
 
-/** 左侧当前主播视频区有改动时，若在字幕剪辑页则用已拉取的全量列表复用，避免再发请求 */
+/** 左侧视频区有改动时通知，将列表同步给 QuickClip 避免重复请求 */
 const onVideosUpdated = (list: import('../api/video').VideoItem[]): void => {
-  if (route.path === '/quick-clip') quickClipRef.value?.loadVideos?.(list)
+  quickClipRef.value?.setVideosFromParent?.(list)
 }
 
-/** 长时间未操作/休眠恢复后：重新拉取主播、产品、视频、聊天列表、当前对话消息、剪辑历史，避免信息丢失 */
+/** 长时间未操作/休眠恢复后：重新拉取工作区/视频、当前对话消息、剪辑历史（不再默认拉取 topic 列表） */
 const refreshPageData = (): void => {
   homeSidebarRef.value?.loadAll?.()
-  aiChatStore.loadAiChats()
   const chatId = aiChatStore.getCurrentAiChatId().value
   if (chatId != null) aiChatStore.loadAiChatMessages(chatId)
   homeRightSidebarRef.value?.refreshClipHistory?.()
@@ -99,8 +99,16 @@ const selectChatFromRoute = async (): Promise<void> => {
 }
 
 onMounted(async () => {
-  await aiChatStore.loadAiChats()
+  // 不再默认拉取 topic 列表；仅当路由带 chatId 时在 selectChatFromRoute 内拉取
   await selectChatFromRoute()
+
+  // 恢复上次的视图模式（字幕剪辑 / AI），仅当当前在 /home 且无 chatId 时
+  if (route.path === '/home' && !route.query.chatId) {
+    try {
+      const last = localStorage.getItem(LAST_VIEW_MODE_KEY)
+      if (last === 'quick-clip') router.replace('/quick-clip')
+    } catch {}
+  }
 
   aiChatStore.setOnNewChatCallback(() => {
     chatInputRef.value?.focus?.()
@@ -132,7 +140,15 @@ onBeforeUnmount(() => {
   if (stopReconnectWatch) stopReconnectWatch()
 })
 
+const LAST_VIEW_MODE_KEY = 'home.lastViewMode'
+
 const navigateTo = (path: string): void => {
+  const pathName = path.split('?')[0]
+  if (pathName === '/quick-clip' || pathName === '/home') {
+    try {
+      localStorage.setItem(LAST_VIEW_MODE_KEY, pathName === '/quick-clip' ? 'quick-clip' : 'home')
+    } catch {}
+  }
   router.push(path)
 }
 
@@ -278,6 +294,7 @@ const handleNewChat = (): void => {
             @toggle-left-collapse="leftSidebarCollapsed = !leftSidebarCollapsed"
             @play-video="handlePlayVideo"
             @update:selected-anchor="currentSelectedAnchor = $event"
+            @update:selected-workspace="currentSelectedWorkspace = $event"
             @select-product="currentSelectedProduct = $event"
             @click-video="quickClipRef?.scrollToVideoSubtitles?.($event)"
             @videos-updated="onVideosUpdated"
@@ -295,7 +312,7 @@ const handleNewChat = (): void => {
             <QuickClip
               v-show="route.path === '/quick-clip'"
               ref="quickClipRef"
-              :current-anchor="currentSelectedAnchor"
+              :current-workspace="currentSelectedWorkspace"
               @navigate="navigateTo"
             />
             <div v-show="route.path !== '/quick-clip'" class="chat-layout">

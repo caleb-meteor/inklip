@@ -5,6 +5,8 @@ export interface VideoItem {
   user_id: number
   name: string
   path: string
+  /** 该视频对应的其他文件路径（同内容不同名），与 path 一起表示所有路径 */
+  other_paths?: string[]
   size: number
   cover: string
   duration: number
@@ -30,6 +32,7 @@ export interface VideoItem {
   categories?: Array<{ id: number; name: string; type: string }>
   anchor_id?: number
   product_id?: number
+  workspace_id?: number
   created_at: string
   updated_at: string
 }
@@ -52,14 +55,15 @@ export interface VideoUploadResponse {
 }
 
 /**
- * Get all videos or filter by IDs, anchor, or product
- * @param params Optional filters
+ * 获取视频列表，支持按 ids / workspace_id / anchor_id / product_id 筛选；anchor_id 非必填
+ * @param params 可选筛选条件
  * @returns Promise with list of videos
  */
 export function getVideosApi(params?: {
   ids?: number[]
   anchor_id?: number
   product_id?: number
+  workspace_id?: number
 }): Promise<VideoItem[]> {
   return request({
     url: '/api/videos',
@@ -134,20 +138,20 @@ export interface SubtitleSearchResponse {
  * @param query 搜索词
  * @param limit 每页条数，默认 20
  * @param offset 偏移量，默认 0
- * @param anchorId 可选：限定在指定主播下的视频中搜索
+ * @param workspaceId 可选：限定在指定工作区下的视频中搜索
  */
 export function searchSubtitlesApi(
   query: string,
   limit?: number,
   offset?: number,
-  anchorId?: number | null
+  workspaceId?: number | null
 ): Promise<{ results: SubtitleSearchResultItem[]; total: number }> {
   const params: Record<string, string | number> = {
     query: query.trim(),
     limit: limit ?? 20,
     offset: offset ?? 0
   }
-  if (anchorId != null && anchorId > 0) params.anchor_id = anchorId
+  if (workspaceId != null && workspaceId > 0) params.workspace_id = workspaceId
   return request({
     url: '/api/videos/search-subtitles',
     method: 'get',
@@ -356,6 +360,20 @@ export function renameVideoApi(id: number, name: string): Promise<VideoItem> {
 }
 
 /**
+ * 更新视频关联产品
+ */
+export function updateVideoProductApi(videoId: number, productId: number): Promise<VideoItem> {
+  return request({
+    url: '/api/video/product',
+    method: 'put',
+    data: {
+      id: videoId,
+      product_id: productId
+    }
+  })
+}
+
+/**
  * Delete a video
  * @param id Video ID
  * @returns Promise with delete response
@@ -385,11 +403,19 @@ export interface ExportSegmentsRequestItem {
  */
 export function exportSegmentsApi(
   segments: ExportSegmentsRequestItem[],
-  anchorId?: number | null,
+  options?: { anchorId?: number | null; workspaceId?: number | null },
   suggestedName?: string | null,
   outputPath?: string | null
 ): Promise<ExportSegmentResult> {
-  const data: Record<string, unknown> = { segments, anchor_id: anchorId || 0 }
+  const data: Record<string, unknown> = { segments }
+  if (options?.workspaceId != null && options.workspaceId > 0) {
+    data.workspace_id = options.workspaceId
+    data.anchor_id = 0
+  } else if (options?.anchorId != null && options.anchorId > 0) {
+    data.anchor_id = options.anchorId
+  } else {
+    data.anchor_id = 0
+  }
   if (suggestedName != null && suggestedName.trim() !== '') {
     data.suggested_name = suggestedName.trim()
   }
@@ -415,13 +441,55 @@ export interface ExportHistoryItem {
 }
 
 /**
- * 获取该主播下的导出视频历史
+ * 获取导出视频历史，支持按工作区或主播筛选
  */
-export function getExportHistoryApi(anchorId: number): Promise<{ list: ExportHistoryItem[] }> {
+export function getExportHistoryApi(params: {
+  workspace_id?: number
+  anchor_id?: number
+}): Promise<{ list: ExportHistoryItem[] }> {
+  const p: Record<string, number> = {}
+  if (params.workspace_id != null && params.workspace_id > 0) {
+    p.workspace_id = params.workspace_id
+  }
+  if (params.anchor_id != null && params.anchor_id > 0) {
+    p.anchor_id = params.anchor_id
+  }
   return request({
     url: '/api/videos/export-history',
     method: 'get',
-    params: { anchor_id: anchorId }
+    params: p
+  })
+}
+
+/**
+ * 获取包含指定视频的导出历史
+ */
+export function getVideoRelatedExportsApi(videoId: number): Promise<{ list: ExportHistoryItem[] }> {
+  return request({
+    url: `/api/videos/${videoId}/related-exports`,
+    method: 'get'
+  })
+}
+
+/**
+ * 获取使用指定视频的智能剪辑记录（简化结构）
+ */
+export interface VideoRelatedSmartCutItem {
+  id: number
+  name: string
+  path: string
+  cover?: string
+  duration?: number
+  status: number
+  created_at: string
+}
+
+export function getVideoRelatedSmartCutsApi(
+  videoId: number
+): Promise<{ list: VideoRelatedSmartCutItem[] }> {
+  return request({
+    url: `/api/videos/${videoId}/related-smart-cuts`,
+    method: 'get'
   })
 }
 
@@ -475,13 +543,13 @@ export interface ReplicateHitMatchItem {
 }
 
 /**
- * 爆款复刻：将文案按句拆分，逐句在主播字幕中找最佳匹配
+ * 爆款复刻：将文案按句拆分，逐句在工作区字幕中找最佳匹配
  */
-export function replicateHitApi(text: string, anchorId: number | null): Promise<{ results: ReplicateHitMatchItem[] }> {
+export function replicateHitApi(text: string, workspaceId: number | null): Promise<{ results: ReplicateHitMatchItem[] }> {
   return request({
     url: '/api/videos/replicate-hit',
     method: 'post',
-    data: { text, anchor_id: anchorId },
+    data: { text, workspace_id: workspaceId },
     timeout: 60000
   })
 }

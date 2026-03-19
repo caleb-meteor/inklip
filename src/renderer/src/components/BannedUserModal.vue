@@ -9,9 +9,10 @@ import ContactSupportBlock from './ContactSupportBlock.vue'
 const route = useRoute()
 const rtStore = useRealtimeStore()
 
-/** 优先级 1：有封禁或异常时只弹本窗，不弹到期/更新 */
+/** 优先级 1：有封禁或异常时只弹本窗，不弹到期/更新。主界面 /home 与 /quick-clip 均显示 */
+const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
 const show = computed(
-  () => route.path === '/home' && (rtStore.isUserBanned || !!rtStore.apiKeyExceptionInfo)
+  () => isHomeRoute.value && (rtStore.isUserBanned || !!rtStore.apiKeyExceptionInfo)
 )
 
 /** 封禁优先于异常：两者同时存在时展示封禁 */

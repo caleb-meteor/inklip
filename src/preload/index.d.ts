@@ -17,12 +17,16 @@ declare global {
       onBackendStartFailed: (callback: (error: { code: string; message: string }) => void) => void
       getVideoDataDirectory: () => Promise<string>
       setVideoDataDirectory: (directory: string) => Promise<{ success: boolean; error?: string }>
-      selectVideoDataDirectory: () => Promise<{
+      /** 统一选择目录，options: title / defaultPath / buttonLabel */
+      selectDirectory: (options: {
+        title: string
+        defaultPath?: string
+        buttonLabel?: string
+      }) => Promise<{
         success: boolean
         canceled?: boolean
         error?: string
         directory?: string
-        oldDirectory?: string
       }>
       getAppConfig: () => Promise<{ videoDataDirectory?: string }>
       restartBackend: () => Promise<{ success: boolean }>

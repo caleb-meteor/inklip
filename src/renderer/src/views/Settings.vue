@@ -86,14 +86,17 @@ const selectDirectory = async (): Promise<void> => {
   migrateProgress.value = ''
 
   const doSelect = async (): Promise<void> => {
-    const result = await window.api.selectVideoDataDirectory()
+    const result = await window.api.selectDirectory({
+      title: '选择视频数据目录',
+      defaultPath: videoDataDirectory.value
+    })
     if (!result.success || !result.directory) {
       if (!result.canceled) message.error(result.error || '选择目录失败')
       return
     }
 
     const newDir = result.directory
-    const oldDir = result.oldDirectory || videoDataDirectory.value
+    const oldDir = videoDataDirectory.value
 
     if (oldDir !== newDir) {
       migrating.value = true

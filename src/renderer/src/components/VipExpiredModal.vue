@@ -12,10 +12,11 @@ const VIP_RENEW_URL = 'https://inklip.caleb.center'
 const route = useRoute()
 const rtStore = useRealtimeStore()
 
-/** 优先级 3：无封禁、无异常时才可能弹本窗；有封禁或异常时不弹。仅可更换 API Key 或去续费 */
+/** 优先级 3：无封禁、无异常时才可能弹本窗；有封禁或异常时不弹。主界面 /home 与 /quick-clip 均显示 */
+const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
 const show = computed(
   () =>
-    route.path === '/home' &&
+    isHomeRoute.value &&
     !rtStore.isUserBanned &&
     !rtStore.apiKeyExceptionInfo &&
     rtStore.isMembershipExpired

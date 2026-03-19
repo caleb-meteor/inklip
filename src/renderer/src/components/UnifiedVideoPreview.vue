@@ -18,13 +18,19 @@ const props = withDefaults(
     aspectRatio?: string
     disabled?: boolean
     showOverlay?: boolean
+    /** 为 true 时不显示「等待处理」「处理中」蒙版，仅保留「已删除」「失败」 */
+    hidePendingProcessing?: boolean
+    /** 为 true 时允许点击播放（即使 displayStatus 非 completed） */
+    allowPlayWhenPending?: boolean
     parseProgress?: VideoParseProgress | null
   }>(),
   {
     videoType: 'material',
     aspectRatio: '9/16',
     disabled: false,
-    showOverlay: true
+    showOverlay: true,
+    hidePendingProcessing: false,
+    allowPlayWhenPending: false
   }
 )
 
@@ -45,9 +51,12 @@ const parseProgress = computed(() => {
   return undefined
 })
 
-const overlayStatus = computed<VideoDisplayStatus | undefined>(() =>
-  props.showOverlay ? normalized.value.displayStatus : undefined
-)
+const overlayStatus = computed<VideoDisplayStatus | undefined>(() => {
+  if (!props.showOverlay) return undefined
+  const status = normalized.value.displayStatus
+  if (props.hidePendingProcessing && (status === 'pending' || status === 'processing')) return undefined
+  return status
+})
 
 const isDeleted = computed(() => !normalized.value.path)
 
@@ -73,7 +82,7 @@ defineExpose({
       :cover="normalized.cover"
       :duration="isDeleted ? 0 : normalized.duration"
       :aspect-ratio="aspectRatio"
-      :disabled="disabled || isDeleted || normalized.displayStatus !== 'completed'"
+      :disabled="disabled || isDeleted || (!allowPlayWhenPending && normalized.displayStatus !== 'completed')"
       :video-id="videoId"
       :video-type="normalized.videoType"
       :subtitle-data="normalized.subtitle"

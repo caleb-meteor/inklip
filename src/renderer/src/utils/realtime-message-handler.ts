@@ -49,6 +49,8 @@ export interface MessageHandlers {
   }) => void
   /** API Key 异常（如设备超限），后端通过 SSE 推送；弹窗不可关闭，需用户更换 API Key */
   onApiKeyException?: (data: { message?: string }) => void
+  /** 工作空间入库完成（ingest 或 watcher 处理完成），前端刷新工作区/视频列表 */
+  onWorkspaceUpdated?: (data: { workspace_id: number; added?: number; updated?: number; deleted?: number }) => void
 }
 
 export class RealtimeMessageHandler {
@@ -89,6 +91,10 @@ export class RealtimeMessageHandler {
         break
       case 'api_key_exception':
         this.handleApiKeyException(data)
+        break
+      case 'workspace_ingest_done':
+      case 'workspace_files_updated':
+        this.handleWorkspaceUpdated(data)
         break
       default:
         console.log('Unknown message type:', data.type, data)
@@ -165,6 +171,15 @@ export class RealtimeMessageHandler {
   private handleApiKeyException(data: any): void {
     this.handlers.onApiKeyException?.({
       message: data.message ?? 'API Key 异常，请更换 API Key 后重试'
+    })
+  }
+
+  private handleWorkspaceUpdated(data: any): void {
+    this.handlers.onWorkspaceUpdated?.({
+      workspace_id: data.workspace_id ?? 0,
+      added: data.added,
+      updated: data.updated,
+      deleted: data.deleted
     })
   }
 }

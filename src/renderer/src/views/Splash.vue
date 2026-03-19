@@ -46,7 +46,7 @@ onMounted(async () => {
 
   setTimeout(() => {
     router.push('/home')
-  }, 500)
+  }, 280)
 })
 </script>
 

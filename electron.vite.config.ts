@@ -11,6 +11,10 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [vue()]
+    plugins: [vue()],
+    // 开发模式预构建依赖，加快首屏加载
+    optimizeDeps: {
+      include: ['vue', 'vue-router', 'pinia', 'naive-ui', 'axios']
+    }
   }
 })

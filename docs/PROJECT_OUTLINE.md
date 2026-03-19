@@ -148,7 +148,7 @@ src/
 ## 7. 渲染进程与主进程/后端交互摘要
 
 - **拿后端端口**：`window.api.getBackendPort()` → 设置 `setBaseUrl('http://127.0.0.1:{port}')`，并让 `realtime` store 连接 `/api/sse`。
-- **选文件/目录**：`window.api.selectVideoFile()`、`selectVideoFolder()`、`selectVideoDataDirectory()`。
+- **选文件/目录**：`window.api.selectVideoFile()`、`selectVideoFolder()`、`selectDirectory({ title, defaultPath? })`（统一选择目录，用于视频数据目录、工作空间等）。
 - **下载视频**：`window.api.downloadVideo(sourcePath, fileName)`。
 - **其他**：`getVideoDataDirectory`、`getAppVersion`、`restartBackend`、`checkBackendHealth` 等见 `preload/index.d.ts`。
 

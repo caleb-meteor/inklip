@@ -45,6 +45,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
   const connected = ref(false)
   const smartCutUpdated = ref(0)
   const videoUploaded = ref(0)
+  /** 工作空间入库或监听处理完成时更新，前端监听后刷新工作区/视频列表 */
+  const workspaceUpdated = ref(0)
+  /** 正在选择/切换工作目录时为 true，用于抑制 QuickClip 等组件的重复视频请求 */
+  const workspaceSelecting = ref(false)
 
   /** 后端 HTTP 基地址，例如 http://127.0.0.1:12698 */
   const baseUrl = ref<string>(import.meta.env.VITE_API_URL || '')
@@ -215,6 +219,9 @@ export const useRealtimeStore = defineStore('realtime', () => {
       },
       onApiKeyException: (data) => {
         apiKeyExceptionInfo.value = { message: data.message ?? 'API Key 异常，请更换 API Key 后重试' }
+      },
+      onWorkspaceUpdated: () => {
+        workspaceUpdated.value = Date.now()
       }
     })
 
@@ -258,10 +265,16 @@ export const useRealtimeStore = defineStore('realtime', () => {
     apiKeyExceptionInfo.value = null
   }
 
+  const setWorkspaceSelecting = (v: boolean): void => {
+    workspaceSelecting.value = v
+  }
+
   return {
     connected,
     smartCutUpdated,
     videoUploaded,
+    workspaceUpdated,
+    workspaceSelecting,
     baseUrl,
     videoParseProgress,
     setBaseUrl,
@@ -279,6 +292,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     apiKeyExceptionInfo,
     clearApiKeyException,
     clearVideoProgress,
-    getVideoProgress
+    getVideoProgress,
+    setWorkspaceSelecting
   }
 })

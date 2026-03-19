@@ -17,7 +17,9 @@ const api = {
   onBackendStartFailed: (callback: (error: { code: string; message: string }) => void) =>
     electronAPI.ipcRenderer.on('backend-start-failed', (_event, error) => callback(error)),
   getVideoDataDirectory: () => electronAPI.ipcRenderer.invoke('get-video-data-directory'),
-  selectVideoDataDirectory: () => electronAPI.ipcRenderer.invoke('select-video-data-directory'),
+  /** 统一选择目录（标题、默认路径等通过 options 传入） */
+  selectDirectory: (options: { title: string; defaultPath?: string; buttonLabel?: string }) =>
+    electronAPI.ipcRenderer.invoke('select-directory', options),
   getAppConfig: () => electronAPI.ipcRenderer.invoke('get-app-config'),
   restartBackend: () => electronAPI.ipcRenderer.invoke('restart-backend'),
   checkBackendHealth: () => electronAPI.ipcRenderer.invoke('check-backend-health'),

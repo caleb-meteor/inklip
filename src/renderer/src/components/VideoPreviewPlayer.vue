@@ -43,6 +43,10 @@ const { isLoading, hasError, showPreview, hidePreview, isCurrentlyPreviewing } =
 
 const playAtTime = (startTime: number, endTime?: number): void => {
   if (!props.path || props.disabled || !videoContainerRef.value) return
+  if (leaveTimer) {
+    clearTimeout(leaveTimer)
+    leaveTimer = null
+  }
   isHovered.value = true
   showPreview(props.path, videoContainerRef.value, startTime, false, endTime)
 }
@@ -96,9 +100,6 @@ const handleMouseEnter = (): void => {
   }
 
   if (props.path && isCurrentlyPreviewing(props.path)) {
-    if (videoContainerRef.value) {
-      showPreview(props.path, videoContainerRef.value)
-    }
     return
   }
 

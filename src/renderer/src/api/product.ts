@@ -5,6 +5,7 @@ export interface Product {
   name: string
   cover: string
   anchor_id: number
+  workspace_id?: number
   created_at?: string
   updated_at?: string
 }
@@ -17,6 +18,7 @@ export interface ProductListResponse {
 export function getProductsApi(params?: {
   all?: boolean
   anchor_id?: number
+  workspace_id?: number
   page?: number
   page_size?: number
 }): Promise<ProductListResponse> {
@@ -30,6 +32,7 @@ export function getProductsApi(params?: {
 export function createProductApi(data: {
   name: string
   anchor_id: number
+  workspace_id?: number
   cover?: string
 }): Promise<Product> {
   return request({
@@ -43,6 +46,7 @@ export function updateProductApi(data: {
   id: number
   name?: string
   cover?: string
+  workspace_id?: number
 }): Promise<Product> {
   return request({
     url: '/api/product',

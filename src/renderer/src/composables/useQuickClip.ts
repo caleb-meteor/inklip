@@ -1,12 +1,16 @@
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useMessage } from 'naive-ui'
 import { getVideosApi, type VideoItem, exportSegmentsApi, getExportHistoryApi, getExportHistorySubtitlesApi, deleteExportHistoryApi, type ExportHistoryItem, searchSubtitlesApi, replicateHitApi, type ReplicateHitMatchItem } from '../api/video'
 import { parseSubtitleToSegments } from '../utils/subtitle'
 import { getMediaUrl } from '../utils/media'
 import type { SegmentWithVideo, VideoSegmentGroup, VirtualListItem } from '../views/quick-clip/types'
+import { useRealtimeStore } from '../stores/realtime'
 
-export function useQuickClip(selectedAnchorId: Ref<number | null>) {
+export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: { videosProvidedByParent?: boolean }) {
+  const videosProvidedByParent = options?.videosProvidedByParent ?? false
   const message = useMessage()
+  const { workspaceSelecting } = storeToRefs(useRealtimeStore())
 
   const sourceVideos = shallowRef<VideoItem[]>([])
   const loadingVideos = ref(false)
@@ -186,14 +190,14 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     lastSelectedSourceKey.value = null
   }
 
-  /** 仅拉取当前主播的导出历史列表（不打开弹窗） */
+  /** 仅拉取当前工作区的导出历史列表（不打开弹窗） */
   async function fetchExportHistoryList() {
-    if (!selectedAnchorId.value) {
+    if (!selectedWorkspaceId.value) {
       exportHistoryList.value = []
       return
     }
     try {
-      const res = await getExportHistoryApi(selectedAnchorId.value)
+      const res = await getExportHistoryApi({ workspace_id: selectedWorkspaceId.value })
       exportHistoryList.value = res.list || []
     } catch {
       exportHistoryList.value = []
@@ -201,8 +205,8 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   }
 
   async function loadExportHistory() {
-    if (!selectedAnchorId.value) {
-      message.warning('请先选择主播')
+    if (!selectedWorkspaceId.value) {
+      message.warning('请先选择工作空间')
       return
     }
     loadingExportHistory.value = true
@@ -346,7 +350,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   /** 请求字幕搜索（仅字幕全文检索，GET 翻页）；append 为 true 时追加到当前列表 */
   async function fetchSearchResults(append = false) {
     const q = subtitleSearch.value.trim()
-    const anchorId = selectedAnchorId.value ?? undefined
+    const workspaceId = selectedWorkspaceId.value ?? undefined
     if (!q) {
       searchResults.value = []
       searchTotal.value = 0
@@ -355,7 +359,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     const offset = append ? searchResults.value.length : 0
     searchLoading.value = true
     try {
-      const res = await searchSubtitlesApi(q, SEARCH_PAGE_SIZE, offset, anchorId ?? null)
+      const res = await searchSubtitlesApi(q, SEARCH_PAGE_SIZE, offset, workspaceId ?? null)
       const list = (res.results || []).map(mapSubtitleItemToSegment)
       if (append) {
         searchResults.value = [...searchResults.value, ...list]
@@ -379,7 +383,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
 
   let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
   watch(
-    [subtitleSearch, selectedAnchorId],
+    [subtitleSearch, selectedWorkspaceId],
     () => {
       const q = subtitleSearch.value.trim()
       if (!q) {
@@ -413,18 +417,21 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   )
 
   /**
-   * 加载当前主播的视频字幕。若传入全量列表则按 anchor_id 过滤复用，否则请求接口。
+   * 加载当前工作区的视频字幕。若传入全量列表则按 workspace_id 过滤复用，否则请求接口。
    * @param allVideos 可选，左侧已拉取的全量视频列表，传入则不再发请求
    */
   function loadVideos(allVideos?: VideoItem[]) {
-    if (!selectedAnchorId.value) {
+    if (!selectedWorkspaceId.value) {
       sourceVideos.value = []
       allSegments.value = []
       subtitleCache.clear()
       return
     }
     if (allVideos !== undefined) {
-      const list = allVideos.filter(v => v.anchor_id === selectedAnchorId.value)
+      // 父级传入的视频列表已是当前工作区的，直接使用；后端 VideoResponse 未返回 workspace_id，无法按此过滤
+      const list = videosProvidedByParent
+        ? allVideos
+        : allVideos.filter(v => (v as any).workspace_id === selectedWorkspaceId.value)
       subtitleCache.clear()
       sourceVideos.value = list
       collapsedGroups.value = new Set(list.map(v => v.id))
@@ -433,7 +440,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       return
     }
     loadingVideos.value = true
-    getVideosApi({ anchor_id: selectedAnchorId.value })
+    getVideosApi({ workspace_id: selectedWorkspaceId.value })
       .then(list => {
         subtitleCache.clear()
         sourceVideos.value = list
@@ -444,11 +451,16 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
       .finally(() => { loadingVideos.value = false })
   }
 
-  watch(selectedAnchorId, () => loadVideos(), { immediate: true })
+  watch(selectedWorkspaceId, () => {
+    if (workspaceSelecting.value) return
+    if (videosProvidedByParent) return
+    loadVideos()
+  }, { immediate: true })
 
-  // 切换主播时：清空选择字幕、重新请求导出历史
+
+  // 切换工作区时：清空选择字幕、重新请求导出历史
   watch(
-    selectedAnchorId,
+    selectedWorkspaceId,
     () => {
       clearSelectedSegments()
       fetchExportHistoryList()
@@ -896,7 +908,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
     replicateLoading.value = true
     replicateResults.value = []
     try {
-      const res = await replicateHitApi(text, selectedAnchorId.value)
+      const res = await replicateHitApi(text, selectedWorkspaceId.value ?? null)
       replicateResults.value = res.results || []
     } catch {
       message.error('爆款复刻匹配失败')
@@ -975,7 +987,12 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
         end_s: seg.toS,
         subtitle_text: seg.text || ''
       }))
-      const res = await exportSegmentsApi(requestSegments, selectedAnchorId.value, name, userChosenPath)
+      const res = await exportSegmentsApi(
+        requestSegments,
+        { workspaceId: selectedWorkspaceId.value },
+        name,
+        userChosenPath
+      )
       if (res?.path && res?.suggested_name) {
         message.success('导出成功，可在导出历史中打开所在文件夹')
         if (showExportHistoryModal.value) {
@@ -1000,7 +1017,7 @@ export function useQuickClip(selectedAnchorId: Ref<number | null>) {
   onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown))
 
   return {
-    selectedAnchorId,
+    selectedWorkspaceId,
     sourceVideos,
     loadingVideos,
     sourceSegmentVideoRef,

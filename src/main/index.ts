@@ -151,7 +151,8 @@ function createWindow(): void {
     icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      backgroundThrottling: false // 切到别的 app 时保持页面存活，不节流
     }
   })
 
@@ -209,36 +210,31 @@ if (app.isPackaged && process.platform === 'win32') {
   app.commandLine.appendSwitch('gpu-cache-dir', path.join(app.getPath('userData'), 'GPUCache'))
 }
 app.whenReady().then(() => {
-  // macOS：设置 Dock 图标（.icns）
-  if (process.platform === 'darwin' && app.dock) {
-    app.dock.setIcon(getAppIcon())
-  }
-
-  // 创建中文菜单
-  createMenu()
-
+  // 优先创建窗口，让用户尽早看到界面（Electron 启动性能）
   createWindow()
 
-  // Register custom protocol for local media
-  protocol.handle('media', handleMediaProtocol)
+  // Start backend（窗口需尽早拿到 port，与 createWindow 紧接）
+  BackendService.getInstance().start(mainWindow)
 
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('inklip')
-
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
-
-  // Register IPC handlers
+  // 注册 IPC（Splash 会立即调用 getBackendPort）
   registerIpcHandlers(
     () => mainWindow,
     () => isQuitting
   )
 
-  // Start backend
-  BackendService.getInstance().start(mainWindow)
+  // 非关键初始化延后执行，不阻塞首帧
+  setImmediate(() => {
+    if (process.platform === 'darwin' && app.dock) {
+      app.dock.setIcon(getAppIcon())
+    }
+    createMenu()
+    protocol.handle('media', handleMediaProtocol)
+    electronApp.setAppUserModelId('inklip')
+  })
+
+  app.on('browser-window-created', (_, window) => {
+    optimizer.watchWindowShortcuts(window)
+  })
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

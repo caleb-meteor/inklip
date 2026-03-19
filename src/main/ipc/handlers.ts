@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, app, dialog, Notification, net, shell } from 'electron'
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'node:url'
 import { BackendService } from '../services/backend'
 
 export function registerIpcHandlers(
@@ -24,11 +25,25 @@ export function registerIpcHandlers(
     return { canceled: false as const, filePath }
   })
 
+  /** 将 file:// URL 或路径转为本机文件系统路径（兼容 Windows / Mac） */
+  function toFileSystemPath(input: string): string {
+    if (!input || typeof input !== 'string') return ''
+    if (input.startsWith('file://')) {
+      try {
+        return fileURLToPath(input)
+      } catch {
+        return decodeURIComponent(input.replace(/^file:\/\//, ''))
+      }
+    }
+    return input
+  }
+
   /** 在资源管理器中定位到文件（打开所在文件夹并选中该文件） */
   ipcMain.handle('show-item-in-folder', async (_event, filePath: string) => {
     if (!filePath || typeof filePath !== 'string') return
     try {
-      shell.showItemInFolder(filePath)
+      const fsPath = toFileSystemPath(filePath)
+      if (fsPath) shell.showItemInFolder(fsPath)
     } catch (e) {
       console.error('[IPC] showItemInFolder failed:', e)
     }
@@ -168,32 +183,33 @@ export function registerIpcHandlers(
     return app.getPath('userData')
   })
 
-  ipcMain.handle('select-video-data-directory', async () => {
-    const win = BrowserWindow.getFocusedWindow()
-    if (!win) return { success: false, error: '没有活动窗口' }
+  /** 统一的选择目录对话框，供「视频数据目录」「工作空间目录」等场景复用 */
+  ipcMain.handle(
+    'select-directory',
+    async (
+      _event,
+      options: { title: string; defaultPath?: string; buttonLabel?: string }
+    ) => {
+      const win = BrowserWindow.getFocusedWindow()
+      if (!win) return { success: false, error: '没有活动窗口' }
 
-    // 注意：实际配置由 Go 后端管理，这里只返回默认值作为后备
-    const currentDir = app.getPath('userData')
-    const result = await dialog.showOpenDialog(win, {
-      title: '选择视频数据目录',
-      defaultPath: currentDir,
-      properties: ['openDirectory', 'createDirectory'],
-      buttonLabel: '选择'
-    })
+      const result = await dialog.showOpenDialog(win, {
+        title: options.title ?? '选择目录',
+        defaultPath: options.defaultPath,
+        properties: ['openDirectory', 'createDirectory'],
+        buttonLabel: options.buttonLabel ?? '选择'
+      })
 
-    if (result.canceled || !result.filePaths.length) {
-      return { success: false, canceled: true }
+      if (result.canceled || !result.filePaths.length) {
+        return { success: false, canceled: true }
+      }
+
+      return {
+        success: true,
+        directory: result.filePaths[0]
+      }
     }
-
-    const selectedDir = result.filePaths[0]
-
-    // 只返回选择的目录，迁移工作由前端调用 Python API 完成
-    return {
-      success: true,
-      directory: selectedDir,
-      oldDirectory: currentDir
-    }
-  })
+  )
 
   // 选择视频文件（使用中文对话框，支持多选，文件后缀大小写不敏感）
   ipcMain.handle('select-video-file', async () => {
