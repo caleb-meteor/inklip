@@ -27,6 +27,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   /** 字幕搜索总条数（来自接口 total），用于「共 x 条」与是否显示查看更多 */
   const searchTotal = ref(0)
   const SEARCH_PAGE_SIZE = 20
+  /** 已选列表某条字幕下的「相似字幕」搜索结果，按 getSegmentKey(该条) 索引 */
+  const similarSubtitlesBySegmentKey = ref<Record<string, { loading: boolean; results: SegmentWithVideo[] }>>({})
   const collapsedGroups = ref<Set<number>>(new Set())
   const locatedContexts = ref<Set<number>>(new Set())
   /** 是否显示全部字幕区域（仅在通过搜索结果「定位上下文」后显示） */
@@ -342,6 +344,22 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   /** 是否显示「查看更多」（已展示条数小于接口返回的 total 时可能还有更多） */
   const searchHasMore = computed(() => searchResults.value.length < searchTotal.value && searchTotal.value > 0)
 
+  function pruneSimilarSubtitlesState() {
+    const keys = new Set(selectedSegments.value.map((s) => getSegmentKey(s)))
+    const cur = similarSubtitlesBySegmentKey.value
+    let changed = false
+    const next: typeof cur = { ...cur }
+    for (const k of Object.keys(next)) {
+      if (!keys.has(k)) {
+        delete next[k]
+        changed = true
+      }
+    }
+    if (changed) similarSubtitlesBySegmentKey.value = next
+  }
+
+  watch(selectedSegments, pruneSimilarSubtitlesState, { deep: true })
+
   function mapSubtitleItemToSegment(item: { video: any; segment: any }): SegmentWithVideo {
     const video = item.video
     const path = video?.path ? getMediaUrl(video.path) : ''
@@ -402,6 +420,70 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
 
   function loadMoreSearchResults() {
     fetchSearchResults(true)
+  }
+
+  const SIMILAR_SUBTITLE_LIMIT = 20
+
+  /** 以当前已选条目的文案调用字幕搜索，结果展示在该卡片下方（排除与自身完全相同的片段） */
+  async function searchSimilarSubtitlesForSelected(seg: SegmentWithVideo) {
+    const segmentKey = getSegmentKey(seg)
+    const q = (seg.text ?? '').trim()
+    if (!q) {
+      message.warning('当前字幕无文本，无法搜索')
+      return
+    }
+    const workspaceId = selectedWorkspaceId.value ?? null
+    similarSubtitlesBySegmentKey.value = {
+      ...similarSubtitlesBySegmentKey.value,
+      [segmentKey]: { loading: true, results: [] }
+    }
+    try {
+      const res = await searchSubtitlesApi(q, SIMILAR_SUBTITLE_LIMIT, 0, workspaceId)
+      const raw = res.results || []
+      const nextHits = new Map(searchHitVideoById.value)
+      for (const row of raw) {
+        const v = row.video as VideoItem
+        if (v?.id) nextHits.set(v.id, v)
+      }
+      searchHitVideoById.value = nextHits
+      const list = raw
+        .map(mapSubtitleItemToSegment)
+        .filter((s) => getSegmentKey(s) !== segmentKey)
+        .slice(0, SIMILAR_SUBTITLE_LIMIT)
+      similarSubtitlesBySegmentKey.value = {
+        ...similarSubtitlesBySegmentKey.value,
+        [segmentKey]: {
+          loading: false,
+          results: list
+        }
+      }
+    } catch {
+      similarSubtitlesBySegmentKey.value = {
+        ...similarSubtitlesBySegmentKey.value,
+        [segmentKey]: { loading: false, results: [] }
+      }
+      message.error('相似字幕搜索失败')
+    }
+  }
+
+  function clearSimilarSubtitlesForSegment(seg: SegmentWithVideo) {
+    const k = getSegmentKey(seg)
+    if (!similarSubtitlesBySegmentKey.value[k]) return
+    const next = { ...similarSubtitlesBySegmentKey.value }
+    delete next[k]
+    similarSubtitlesBySegmentKey.value = next
+  }
+
+  /** 用搜索结果替换已选列表中指定下标的片段 */
+  function replaceSelectedSegmentAtIndex(index: number, currentSeg: SegmentWithVideo, newSeg: SegmentWithVideo) {
+    if (index < 0 || index >= selectedSegments.value.length) return
+    const oldKey = getSegmentKey(currentSeg)
+    const nextSimilar = { ...similarSubtitlesBySegmentKey.value }
+    delete nextSimilar[oldKey]
+    similarSubtitlesBySegmentKey.value = nextSimilar
+    const arr = [...selectedSegments.value]
+    arr[index] = { ...newSeg }
+    selectedSegments.value = arr
   }
 
   let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -595,8 +677,16 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       }
       return
     }
-    selectedSegmentIndexes.value = new Set([index])
-    lastSelectedSegmentIndex.value = index
+    // 普通点击：已选中的条目再次点击则取消选中；未选中则仅选中该项
+    if (selectedSegmentIndexes.value.has(index)) {
+      const next = new Set(selectedSegmentIndexes.value)
+      next.delete(index)
+      selectedSegmentIndexes.value = next
+      lastSelectedSegmentIndex.value = next.size > 0 ? Math.max(...next) : null
+    } else {
+      selectedSegmentIndexes.value = new Set([index])
+      lastSelectedSegmentIndex.value = index
+    }
   }
 
   function onDragStart(event: DragEvent, index: number) {
@@ -1155,6 +1245,10 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     searchTotal,
     searchHasMore,
     loadMoreSearchResults,
+    similarSubtitlesBySegmentKey,
+    searchSimilarSubtitlesForSelected,
+    clearSimilarSubtitlesForSegment,
+    replaceSelectedSegmentAtIndex,
     flatVirtualList,
     selectedSegments,
     selectedSegmentKeys,

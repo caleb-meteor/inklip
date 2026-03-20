@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { NIcon, NScrollbar, NButton, NSpin, NEmpty, NTooltip } from 'naive-ui'
-import { ListOutline, RemoveOutline, TimeOutline, CloseOutline, PlayOutline, ArrowUpCircleOutline, FolderOpenOutline, TrashOutline } from '@vicons/ionicons5'
+import { ListOutline, RemoveOutline, TimeOutline, CloseOutline, PlayOutline, ArrowUpCircleOutline, FolderOpenOutline, TrashOutline, SearchOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
 import { inject } from 'vue'
+import type { SegmentWithVideo } from './types'
 
 const qc = inject('quickClip') as any
+
+function similarBlockForSeg(seg: { videoId: number; fromS: number; toS: number }) {
+  const key = qc.getSegmentKey(seg)
+  return qc.similarSubtitlesBySegmentKey[key] as
+    | { loading: boolean; results: SegmentWithVideo[] }
+    | undefined
+}
 
 const emit = defineEmits<{
   (e: 'apply-export', exportVideoId: number): void
@@ -78,32 +86,90 @@ function openExportFolder(filePath: string) {
               </div>
               <div
                 v-else
-                class="selected-row"
-                :class="{
-                  'is-selected': qc.selectedSegmentIndexes.has(row.index),
-                  'is-dragging': qc.draggedIndexes.includes(row.index)
-                }"
-                :draggable="!qc.isPreviewPlaying"
-                @click="!qc.isPreviewPlaying && qc.toggleSegmentSelection(row.index, $event)"
-                @dragstart="!qc.isPreviewPlaying && qc.onDragStart($event, row.index)"
-                @dragenter.prevent
-                @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOver($event, row.index)"
-                @drop.prevent.stop="!qc.isPreviewPlaying && qc.onDrop($event, row.index)"
-                @dragend="qc.onDragEnd"
+                class="selected-row-block"
               >
-                <div class="selected-content">
-                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                    <span class="selected-time">{{ qc.formatTime(row.seg.fromS) }} - {{ qc.formatTime(row.seg.toS) }}</span>
-                    <span class="selected-video">{{ row.seg.videoName }}</span>
+                <div
+                  class="selected-row"
+                  :class="{
+                    'is-selected': qc.selectedSegmentIndexes.has(row.index),
+                    'is-dragging': qc.draggedIndexes.includes(row.index)
+                  }"
+                  :draggable="!qc.isPreviewPlaying"
+                  @click="!qc.isPreviewPlaying && qc.toggleSegmentSelection(row.index, $event)"
+                  @dragstart="!qc.isPreviewPlaying && qc.onDragStart($event, row.index)"
+                  @dragenter.prevent
+                  @dragover.prevent.stop="!qc.isPreviewPlaying && qc.onDragOver($event, row.index)"
+                  @drop.prevent.stop="!qc.isPreviewPlaying && qc.onDrop($event, row.index)"
+                  @dragend="qc.onDragEnd"
+                >
+                  <div class="selected-content">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                      <span class="selected-time">{{ qc.formatTime(row.seg.fromS) }} - {{ qc.formatTime(row.seg.toS) }}</span>
+                      <span class="selected-video">{{ row.seg.videoName }}</span>
+                    </div>
+                    <span class="selected-text" :title="row.seg.text">{{ row.seg.text }}</span>
                   </div>
-                  <span class="selected-text" :title="row.seg.text">{{ row.seg.text }}</span>
+                  <n-button
+                    quaternary
+                    size="tiny"
+                    type="default"
+                    title="搜索相似字幕"
+                    :disabled="!String(row.seg.text || '').trim() || similarBlockForSeg(row.seg)?.loading"
+                    :loading="similarBlockForSeg(row.seg)?.loading"
+                    @click.stop="qc.searchSimilarSubtitlesForSelected(row.seg)"
+                  >
+                    <n-icon><SearchOutline /></n-icon>
+                  </n-button>
+                  <n-button quaternary size="tiny" type="info" title="播放" @click.stop="qc.playSourceSegment(row.seg)">
+                    <n-icon><PlayOutline /></n-icon>
+                  </n-button>
+                  <n-button quaternary size="tiny" type="error" v-show="!qc.isPreviewPlaying" @click.stop="qc.removeSegment(row.index)">
+                    <n-icon><RemoveOutline /></n-icon>
+                  </n-button>
                 </div>
-                <n-button quaternary size="tiny" type="info" title="播放" @click.stop="qc.playSourceSegment(row.seg)">
-                  <n-icon><PlayOutline /></n-icon>
-                </n-button>
-                <n-button quaternary size="tiny" type="error" v-show="!qc.isPreviewPlaying" @click.stop="qc.removeSegment(row.index)">
-                  <n-icon><RemoveOutline /></n-icon>
-                </n-button>
+                <div v-if="similarBlockForSeg(row.seg)" class="similar-subtitles-panel">
+                  <div class="similar-subtitles-header">
+                    <span class="similar-subtitles-title">相似字幕</span>
+                    <n-button quaternary size="tiny" @click.stop="qc.clearSimilarSubtitlesForSegment(row.seg)">
+                      收起
+                    </n-button>
+                  </div>
+                  <n-spin :show="similarBlockForSeg(row.seg)!.loading" size="small">
+                    <div v-if="!similarBlockForSeg(row.seg)!.loading && similarBlockForSeg(row.seg)!.results.length === 0" class="similar-subtitles-empty">
+                      暂无其他相似片段
+                    </div>
+                    <div v-else class="similar-subtitles-list">
+                      <div
+                        v-for="hit in similarBlockForSeg(row.seg)!.results"
+                        :key="qc.getSegmentKey(hit)"
+                        class="similar-subtitles-row"
+                      >
+                        <div class="similar-subtitles-text-wrap">
+                          <span class="similar-subtitles-time">{{ qc.formatTime(hit.fromS) }} - {{ qc.formatTime(hit.toS) }}</span>
+                          <span class="similar-subtitles-video" :title="hit.videoName">{{ hit.videoName }}</span>
+                          <span class="similar-subtitles-text" :title="hit.text">{{ hit.text }}</span>
+                        </div>
+                        <n-button quaternary size="tiny" type="info" title="播放" @click.stop="qc.playSourceSegment(hit)">
+                          <n-icon><PlayOutline /></n-icon>
+                        </n-button>
+                        <n-tooltip placement="top" trigger="hover">
+                          <template #trigger>
+                            <n-button
+                              quaternary
+                              size="tiny"
+                              type="warning"
+                              :disabled="qc.isPreviewPlaying"
+                              @click.stop="qc.replaceSelectedSegmentAtIndex(row.index, row.seg, hit)"
+                            >
+                              <n-icon><SwapHorizontalOutline /></n-icon>
+                            </n-button>
+                          </template>
+                          替换当前已选字幕
+                        </n-tooltip>
+                      </div>
+                    </div>
+                  </n-spin>
+                </div>
               </div>
             </template>
           </div>
@@ -320,6 +386,89 @@ function openExportFolder(filePath: string) {
   gap: 4px;
   padding: 6px;
   flex: 1;
+}
+.selected-row-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.selected-row-block > .selected-row {
+  border-radius: 6px;
+}
+.similar-subtitles-panel {
+  margin-top: 2px;
+  padding: 6px 8px 8px;
+  border-radius: 0 0 6px 6px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(79, 172, 254, 0.15);
+  border-top: none;
+}
+.similar-subtitles-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.similar-subtitles-title {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(79, 172, 254, 0.95);
+}
+.similar-subtitles-empty {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 6px 4px;
+  text-align: center;
+}
+.similar-subtitles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.similar-subtitles-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.similar-subtitles-text-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.similar-subtitles-time {
+  font-size: 10px;
+  color: rgba(79, 172, 254, 0.85);
+  font-family: monospace;
+}
+.similar-subtitles-video {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.similar-subtitles-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.88);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  white-space: normal;
 }
 .selected-row {
   display: flex;
