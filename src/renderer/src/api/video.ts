@@ -164,17 +164,23 @@ export interface SmartCutResponse {
 
 /**
  * Start smart cut processing for selected videos（工作区素材，不再传主播/产品）
+ * @param workspaceId 必填，与后端 ai_gen_videos.workspace_id 及所选视频的 workspace 一致
  */
 export function smartCutApi(
   videoIds: number[],
+  workspaceId: number,
   minDuration?: number,
   maxDuration?: number,
   prompt?: string,
   promptBuiltId?: number,
   aiChatId?: number
 ): Promise<SmartCutResponse> {
+  if (workspaceId == null || workspaceId <= 0) {
+    return Promise.reject(new Error('workspace_id 必填'))
+  }
   const data: Record<string, unknown> = {
     video_ids: videoIds,
+    workspace_id: workspaceId,
     min_duration: minDuration,
     max_duration: maxDuration,
     prompt_text: prompt,
@@ -436,7 +442,7 @@ export function getExportHistorySubtitlesApi(exportVideoId: number): Promise<{ l
   })
 }
 
-/** 爆款复刻：单句匹配结果 */
+/** 爆款复刻：单条结果（清洗文案子串 + 精排后的字幕；同宏观段可能多条，按 offset 序） */
 export interface ReplicateHitMatchItem {
   sentence: string
   match: {
@@ -451,12 +457,20 @@ export interface ReplicateHitMatchItem {
       score: number
     }
   } | null
+  /** 后端返回的剪辑思路：分层检索、多轮比较、首句回流等 */
+  debug?: Record<string, unknown>
+}
+
+/** 复刻接口顶层调试：宏观段拆分与精排参数说明 */
+export interface ReplicateHitDebugMeta {
+  debug_outline?: Array<Record<string, unknown>>
+  debug_constants?: Record<string, unknown>
 }
 
 /**
- * 爆款复刻：将文案按句拆分，逐句在工作区字幕中找最佳匹配
+ * 爆款复刻：去标点 → jieba → FTS Top30 → Levenshtein 滑窗精排，按原文 offset 输出
  */
-export function replicateHitApi(text: string, workspaceId: number | null): Promise<{ results: ReplicateHitMatchItem[] }> {
+export function replicateHitApi(text: string, workspaceId: number | null): Promise<{ results: ReplicateHitMatchItem[] } & ReplicateHitDebugMeta> {
   return request({
     url: '/api/videos/replicate-hit',
     method: 'post',

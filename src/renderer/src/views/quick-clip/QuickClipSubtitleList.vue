@@ -12,9 +12,15 @@ import {
   CheckmarkCircleOutline,
   CloseCircleOutline
 } from '@vicons/ionicons5'
-import { inject } from 'vue'
+import { inject, computed } from 'vue'
 
 const qc = inject('quickClip') as any
+
+/** 非 dev：仅展示有 match 的项，布局对齐「已选字幕」 */
+const replicateRowsForDisplay = computed(() => {
+  if (qc.replicateUiDebug) return qc.replicateResults
+  return qc.replicateResults.filter((r: { match: unknown }) => r.match)
+})
 
 function onSearchResultsScroll(e: Event) {
   const el = e.target as HTMLElement
@@ -211,9 +217,18 @@ function onSearchResultsScroll(e: Event) {
           </div>
         </div>
 
-        <div v-else-if="qc.replicateResults.length > 0 && qc.replicateResults.some(r => r.match)" class="replicate-results">
+        <div v-else-if="qc.replicateResults.length > 0" class="replicate-results">
+          <div
+            v-if="!qc.replicateResults.some(r => r.match)"
+            class="empty-hint replicate-no-match replicate-warn-banner"
+          >
+            <n-icon size="20" color="#ef4444" style="flex-shrink: 0;"><CloseCircleOutline /></n-icon>
+            <span v-if="qc.replicateUiDebug">未找到与文案匹配的字幕，可尝试调整文案；可展开下方「剪辑思路」查看分层检索与回流校验</span>
+            <span v-else>未找到与文案匹配的字幕，可尝试调整文案</span>
+          </div>
           <div class="replicate-results-header">
-            <span>匹配结果（{{ qc.replicateResults.filter(r => r.match).length }} / {{ qc.replicateResults.length }} 句匹配）</span>
+            <span v-if="qc.replicateUiDebug">匹配结果（{{ qc.replicateResults.filter(r => r.match).length }} / {{ qc.replicateResults.length }} 块）</span>
+            <span v-else>匹配字幕（{{ qc.replicateResults.filter(r => r.match).length }} 条）</span>
             <n-button
               size="tiny"
               type="primary"
@@ -222,36 +237,60 @@ function onSearchResultsScroll(e: Event) {
               一键添加
             </n-button>
           </div>
-          <div class="replicate-results-list">
+          <details
+            v-if="qc.replicateUiDebug && qc.replicateDebugMeta && (qc.replicateDebugMeta.debug_outline?.length || qc.replicateDebugMeta.debug_constants)"
+            class="replicate-debug-panel replicate-debug-global"
+          >
+            <summary>全局剪辑思路（宏观句拆分 / 阈值常量）</summary>
+            <pre class="replicate-debug-pre">{{ JSON.stringify(qc.replicateDebugMeta, null, 2) }}</pre>
+          </details>
+          <div class="replicate-results-list" :class="{ 'replicate-results-list-prod': !qc.replicateUiDebug }">
             <div
-              v-for="(item, idx) in qc.replicateResults"
+              v-for="(item, idx) in replicateRowsForDisplay"
               :key="idx"
               class="replicate-row"
-              :class="{ 'no-match': !item.match }"
+              :class="{
+                'no-match': !item.match,
+                'replicate-row-prod-seg': !qc.replicateUiDebug && item.match
+              }"
             >
-              <div class="replicate-sentence">
-                <n-icon size="14" :color="item.match ? '#52c41a' : 'rgba(255,255,255,0.25)'">
-                  <CheckmarkCircleOutline v-if="item.match" />
-                  <CloseCircleOutline v-else />
-                </n-icon>
-                <span class="replicate-sentence-text">{{ item.sentence }}</span>
-              </div>
-              <div v-if="item.match" class="replicate-match">
-                <span class="replicate-match-arrow">→</span>
-                <span class="replicate-match-text" :title="item.match.segment.text">{{ item.match.segment.text }}</span>
-                <span class="replicate-match-video">{{ item.match.video.name }}</span>
-              </div>
-              <div v-else class="replicate-match replicate-match-empty">
-                <span class="replicate-match-arrow">→</span>
-                <span class="replicate-match-text">未找到匹配</span>
-              </div>
+              <template v-if="qc.replicateUiDebug">
+                <div class="replicate-sentence">
+                  <n-icon size="14" :color="item.match ? '#52c41a' : 'rgba(255,255,255,0.25)'">
+                    <CheckmarkCircleOutline v-if="item.match" />
+                    <CloseCircleOutline v-else />
+                  </n-icon>
+                  <span class="replicate-sentence-text">{{ item.sentence }}</span>
+                </div>
+                <div v-if="item.match" class="replicate-match">
+                  <span class="replicate-match-arrow">→</span>
+                  <span class="replicate-match-text" :title="item.match.segment.text">{{ item.match.segment.text }}</span>
+                  <span class="replicate-match-video">{{ item.match.video.name }}</span>
+                </div>
+                <div v-else class="replicate-match replicate-match-empty">
+                  <span class="replicate-match-arrow">→</span>
+                  <span class="replicate-match-text">未找到匹配</span>
+                </div>
+                <details
+                  v-if="qc.replicateUiDebug && item.debug"
+                  class="replicate-debug-panel replicate-debug-row"
+                >
+                  <summary>本块剪辑思路（Q1–Q5 / 多轮比较 / 首句回流）</summary>
+                  <pre class="replicate-debug-pre">{{ JSON.stringify(item.debug, null, 2) }}</pre>
+                </details>
+              </template>
+              <template v-else-if="item.match">
+                <!-- 与 QuickClipSelectedList 已选行：时间 + 视频名 + 字幕正文 -->
+                <div class="replicate-prod-selected-inner">
+                  <div class="replicate-prod-selected-top">
+                    <span class="replicate-prod-time">{{ qc.formatTime(item.match.segment.start_s) }} - {{ qc.formatTime(item.match.segment.end_s) }}</span>
+                    <span class="replicate-prod-video">{{ item.match.video.name }}</span>
+                  </div>
+                  <span class="replicate-prod-text" :title="item.match.segment.text">{{ item.match.segment.text }}</span>
+                </div>
+              </template>
             </div>
           </div>
-        </div>
-
-        <div v-else-if="qc.replicateResults.length > 0 && !qc.replicateResults.some(r => r.match)" class="empty-hint replicate-no-match">
-          <n-icon size="20" color="#ef4444" style="flex-shrink: 0;"><CloseCircleOutline /></n-icon>
-          <span>未找到与文案匹配的字幕，可尝试调整文案</span>
         </div>
 
         <div v-else-if="!qc.replicateLoading" class="empty-hint">
@@ -530,6 +569,37 @@ function onSearchResultsScroll(e: Event) {
   flex-direction: column;
   overflow: hidden;
 }
+.replicate-warn-banner {
+  flex-shrink: 0;
+  margin: 0 10px 8px;
+}
+.replicate-debug-panel {
+  flex-shrink: 0;
+  margin: 6px 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+.replicate-debug-panel summary {
+  cursor: pointer;
+  color: rgba(79, 172, 254, 0.88);
+  user-select: none;
+}
+.replicate-debug-pre {
+  margin: 8px 0 0;
+  padding: 8px;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 10px;
+  line-height: 1.35;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: rgba(200, 200, 210, 0.92);
+}
+.replicate-debug-row {
+  margin-top: 8px;
+}
 .replicate-results-header {
   flex-shrink: 0;
   display: flex;
@@ -546,6 +616,55 @@ function onSearchResultsScroll(e: Event) {
   min-height: 0;
   overflow-y: auto;
   padding: 6px 10px;
+}
+/* 与 QuickClipSelectedList `.selected-list` 间距一致 */
+.replicate-results-list-prod {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+}
+/* 与已选字幕 `.selected-row` 视觉一致（无拖拽/按钮） */
+.replicate-row.replicate-row-prod-seg {
+  padding: 6px 8px;
+  margin-bottom: 0;
+  border-radius: 6px;
+  background: rgba(79, 172, 254, 0.08);
+  border: 1px solid rgba(79, 172, 254, 0.2);
+}
+.replicate-prod-selected-inner {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.replicate-prod-selected-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+/* 对齐 `.selected-time` / `.selected-video` / `.selected-text` */
+.replicate-prod-time {
+  font-size: 11px;
+  color: #4facfe;
+  font-family: monospace;
+}
+.replicate-prod-video {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.replicate-prod-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .replicate-row {
   padding: 8px 10px;

@@ -150,15 +150,17 @@ export class SmartCutAiService {
         msg.payload.videos.length > 0
       ) {
         // 从消息payload中恢复数据（用于加载历史消息的情况）
+        const po = msg.payload.options as SmartCutOptions | undefined
         data = {
           selectionType: 'video_selection' as const,
           msgId: msgId,
           videos: msg.payload.videos,
           options: {
-            minDuration: msg.payload.minDuration || 80,
-            maxDuration: msg.payload.maxDuration || 100,
-            maxRetries: msg.payload.maxRetries || 20,
-            retryInterval: msg.payload.retryInterval || 3000
+            minDuration: po?.minDuration ?? msg.payload.minDuration ?? 80,
+            maxDuration: po?.maxDuration ?? msg.payload.maxDuration ?? 100,
+            maxRetries: po?.maxRetries ?? msg.payload.maxRetries ?? 20,
+            retryInterval: po?.retryInterval ?? msg.payload.retryInterval ?? 3000,
+            workspaceId: po?.workspaceId ?? (msg.payload as { workspace_id?: number }).workspace_id
           },
           prompt: msg.payload.prompt || ''
         }
@@ -208,6 +210,31 @@ export class SmartCutAiService {
 
     // selectedVideos 已在上方根据 selectedVideoIds 计算
     const { minDuration = 80, maxDuration = 100 } = { ...data.options, ...durationOptions }
+
+    const scopeWid = aiChatStore.getWorkspaceScopeId()
+    const workspaceIdForCut =
+      data.options.workspaceId != null && data.options.workspaceId > 0
+        ? data.options.workspaceId
+        : scopeWid
+    if (workspaceIdForCut == null || workspaceIdForCut <= 0) {
+      const failureContent = '缺少工作空间信息，无法提交智能剪辑。请先在左侧选择工作区后重试。'
+      aiChatStore.addMessage({
+        id: `new_message_${Date.now()}`,
+        role: 'assistant',
+        content: failureContent,
+        timestamp: new Date()
+      })
+      if (currentAiChatId) {
+        await addAiChatMessageApi({
+          ai_chat_id: currentAiChatId,
+          role: 'assistant',
+          content: failureContent
+        })
+      }
+      this.state.isProcessing.value = false
+      aiChatStore.setCurrentChatProcessing(false)
+      return
+    }
 
     // Step 1: 创建剪辑任务卡片（三个步骤）
     const clipTaskCardPayload = {
@@ -281,6 +308,7 @@ export class SmartCutAiService {
 
     const res = await smartCutApi(
       targetVideoIds,
+      workspaceIdForCut,
       minDuration,
       maxDuration,
       '',
@@ -636,7 +664,8 @@ export class SmartCutAiService {
         minDuration,
         maxDuration,
         maxRetries,
-        retryInterval
+        retryInterval,
+        workspaceId
       },
       prompt: sanitizedPrompt
     }
@@ -662,7 +691,7 @@ export class SmartCutAiService {
       selectionType: 'video_selection',
       msgId: selectionMessageId,
       videos,
-      options: { minDuration, maxDuration, maxRetries, retryInterval },
+      options: { minDuration, maxDuration, maxRetries, retryInterval, workspaceId },
       prompt: sanitizedPrompt
     }
 

@@ -1,11 +1,12 @@
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMessage } from 'naive-ui'
-import { getVideosApi, type VideoItem, exportSegmentsApi, getExportHistoryApi, getExportHistorySubtitlesApi, deleteExportHistoryApi, type ExportHistoryItem, searchSubtitlesApi, replicateHitApi, type ReplicateHitMatchItem } from '../api/video'
+import { getVideosApi, type VideoItem, exportSegmentsApi, getExportHistoryApi, getExportHistorySubtitlesApi, deleteExportHistoryApi, type ExportHistoryItem, searchSubtitlesApi, replicateHitApi, type ReplicateHitMatchItem, type ReplicateHitDebugMeta } from '../api/video'
 import { parseSubtitleToSegments } from '../utils/subtitle'
 import { getMediaUrl } from '../utils/media'
 import type { SegmentWithVideo, VideoSegmentGroup, VirtualListItem } from '../views/quick-clip/types'
 import { useRealtimeStore } from '../stores/realtime'
+import { isDevRenderer } from '../utils/isDevRenderer'
 
 export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: { videosProvidedByParent?: boolean }) {
   const videosProvidedByParent = options?.videosProvidedByParent ?? false
@@ -41,6 +42,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   const replicateText = ref('')
   const replicateLoading = ref(false)
   const replicateResults = ref<ReplicateHitMatchItem[]>([])
+  const replicateDebugMeta = ref<ReplicateHitDebugMeta | null>(null)
 
   /** 懒解析字幕缓存：只有展开视频组时才解析该视频的字幕 */
   const subtitleCache = new Map<number, SegmentWithVideo[]>()
@@ -677,16 +679,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       }
       return
     }
-    // 普通点击：已选中的条目再次点击则取消选中；未选中则仅选中该项
-    if (selectedSegmentIndexes.value.has(index)) {
-      const next = new Set(selectedSegmentIndexes.value)
-      next.delete(index)
-      selectedSegmentIndexes.value = next
-      lastSelectedSegmentIndex.value = next.size > 0 ? Math.max(...next) : null
-    } else {
-      selectedSegmentIndexes.value = new Set([index])
-      lastSelectedSegmentIndex.value = index
-    }
+    selectedSegmentIndexes.value = new Set([index])
+    lastSelectedSegmentIndex.value = index
   }
 
   function onDragStart(event: DragEvent, index: number) {
@@ -1083,6 +1077,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     }
     replicateLoading.value = true
     replicateResults.value = []
+    replicateDebugMeta.value = null
     replicateFlowStep.value = 0
     const flowStart = Date.now()
     replicateStepTimers.forEach((t) => clearTimeout(t))
@@ -1096,9 +1091,20 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     ]
     try {
       const res = await replicateHitApi(text, selectedWorkspaceId.value ?? null)
-      replicateResults.value = res.results || []
-    } catch {
-      message.error('爆款复刻匹配失败')
+      if (!res || typeof res !== 'object') {
+        message.error('复刻结果异常')
+        return
+      }
+      replicateResults.value = Array.isArray(res.results) ? res.results : []
+      replicateDebugMeta.value = {
+        debug_outline: res.debug_outline,
+        debug_constants: res.debug_constants
+      }
+    } catch (e) {
+      // 业务码非 0 / 网络错误已在 request 拦截器里 message.error，此处避免重复弹窗
+      if (isDevRenderer) {
+        console.error('[startReplicate]', e)
+      }
     } finally {
       const elapsed = Date.now() - flowStart
       const remain = Math.max(0, REPLICATE_FLOW_MIN_MS - elapsed)
@@ -1240,6 +1246,9 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     replicateText,
     replicateLoading,
     replicateResults,
+    replicateDebugMeta,
+    /** 与 isDevRenderer 一致；false 时复刻结果区与「已选字幕」同款信息展示 */
+    replicateUiDebug: isDevRenderer,
     filteredSegmentGroups,
     searchResults,
     searchTotal,

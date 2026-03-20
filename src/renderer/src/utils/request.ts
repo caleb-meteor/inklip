@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { createDiscreteApi, darkTheme } from 'naive-ui'
+import { isDevRenderer } from './isDevRenderer'
 
 // Define the API Response structure
 export interface ApiResponse<T = any> {
@@ -51,7 +52,9 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>) => {
     const res = response.data
-    if (res.code !== 0) {
+    // 兼容 JSON 里 code 被序列化为字符串等情况
+    const ok = Number(res.code) === 0
+    if (!ok) {
       message.error(res.message || '请求失败')
       return Promise.reject(new Error(res.message || '请求失败'))
     }
@@ -64,7 +67,7 @@ service.interceptors.response.use(
       const text = getNetworkErrorMessage(error)
       message.error(text)
     }
-    if (import.meta.env.DEV) {
+    if (isDevRenderer) {
       console.error('[request]', error)
     }
     return Promise.reject(error)

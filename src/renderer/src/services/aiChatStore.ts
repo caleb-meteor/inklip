@@ -53,6 +53,13 @@ export class AiChatStore {
     this.workspaceScopeId.value = workspaceId
   }
 
+  /** 当前左侧选中的工作区（与 AI 会话 scope 一致），未选时返回 null */
+  getWorkspaceScopeId(): number | null {
+    const w = this.workspaceScopeId.value
+    if (w === null || w <= 0) return null
+    return w
+  }
+
   /**
    * 获取 AI 对话列表
    */
