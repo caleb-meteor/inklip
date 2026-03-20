@@ -1,12 +1,16 @@
-/* 本地字体，无需 CDN */
-@import '@fontsource/inter/300.css';
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/800.css';
-@import '@fontsource/noto-sans-sc/300.css';
-@import '@fontsource/noto-sans-sc/400.css';
-@import '@fontsource/noto-sans-sc/700.css';
-@import '@fontsource/noto-sans-sc/900.css';
+/* 本地字体：仅引入 latin / 简体中文子集，避免全量 CSS 打进 cyrillic、greek、上百个 CJK 切片 */
+@import '@fontsource/inter/latin-300.css';
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-800.css';
+@import '@fontsource/noto-sans-sc/latin-300.css';
+@import '@fontsource/noto-sans-sc/chinese-simplified-300.css';
+@import '@fontsource/noto-sans-sc/latin-400.css';
+@import '@fontsource/noto-sans-sc/chinese-simplified-400.css';
+@import '@fontsource/noto-sans-sc/latin-700.css';
+@import '@fontsource/noto-sans-sc/chinese-simplified-700.css';
+@import '@fontsource/noto-sans-sc/latin-900.css';
+@import '@fontsource/noto-sans-sc/chinese-simplified-900.css';
 
 :root {
   --ev-c-white: #ffffff;
