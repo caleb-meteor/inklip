@@ -29,6 +29,14 @@ export interface NormalizedVideo {
   subtitle?: any
 }
 
+/** 将后端或消息里的 duration 规范为秒（整数，>0 才采用） */
+function coerceDurationSeconds(v: unknown): number {
+  if (v == null) return 0
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return Math.max(1, Math.round(n))
+}
+
 function toDisplayStatus(
   status?: number,
   videoType: 'material' | 'edited' = 'material'
@@ -74,8 +82,8 @@ export function normalizeVideo(
     id: raw.id ?? 0,
     name: raw.name ?? raw.filename ?? '',
     path,
-    cover: raw.cover ?? '',
-    duration: raw.duration ?? 0,
+    cover: '', // 封面统一由前端根据 path 在 VideoPreviewPlayer 内提取，不使用后端字段
+    duration: coerceDurationSeconds(raw.duration),
     status: raw.status ?? 0,
     displayStatus: toDisplayStatus(status, resolvedType),
     videoType: resolvedType,

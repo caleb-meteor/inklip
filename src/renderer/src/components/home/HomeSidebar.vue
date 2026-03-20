@@ -1,60 +1,30 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, h, watch } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { NIcon, NAvatar, NPopconfirm, NInput, NPopover, NTooltip, useMessage } from 'naive-ui'
+import { NIcon, NPopover, useMessage } from 'naive-ui'
 import {
   FolderOpenOutline,
-  CubeOutline,
   ChevronForwardOutline,
   ChevronDownOutline,
-  PersonAddOutline,
-  PlanetOutline,
-  PencilOutline,
   TrashOutline,
   MenuOutline,
   ChevronBackOutline,
-  PeopleOutline,
-  LibraryOutline,
-  AddCircleOutline,
   CutOutline,
   VideocamOutline,
   SparklesOutline
 } from '@vicons/ionicons5'
-import {
-  getVideosApi,
-  deleteVideoApi,
-  renameVideoApi,
-  type VideoItem,
-  type HomePlayPayload
-} from '../../api/video'
+import { getVideosApi, type VideoItem, type HomePlayPayload } from '../../api/video'
 import {
   getWorkspacesApi,
   createWorkspaceApi,
-  updateWorkspaceApi,
   ingestWorkspaceApi,
   switchWorkspaceApi,
+  deleteWorkspaceApi,
   type WorkspaceItem
 } from '../../api/workspace'
-import {
-  getAnchorsApi,
-  createAnchorApi,
-  updateAnchorApi,
-  deleteAnchorApi,
-  type Anchor
-} from '../../api/anchor'
-import {
-  getProductsApi,
-  createProductApi,
-  updateProductApi,
-  deleteProductApi,
-  type Product
-} from '../../api/product'
 import { parseSubtitleToSegments } from '../../utils/subtitle'
-import VideoUploadChatModal from './VideoUploadChatModal.vue'
-import RenameModal from '../RenameModal.vue'
 import { storeToRefs } from 'pinia'
 import { useRealtimeStore } from '../../stores/realtime'
-import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
 import VideoOpPanel from './VideoOpPanel.vue'
 
 defineProps<{
@@ -65,9 +35,7 @@ const emit = defineEmits<{
   (e: 'navigate', path: string): void
   (e: 'toggle-left-collapse'): void
   (e: 'play-video', payload: HomePlayPayload): void
-  (e: 'update:selected-anchor', anchor: Anchor | null): void
   (e: 'update:selected-workspace', workspace: { id: number; name: string } | null): void
-  (e: 'select-product', productId: number): void
   (e: 'click-video', videoId: number): void
   (e: 'videos-updated', list: VideoItem[]): void
 }>()
@@ -76,32 +44,9 @@ const message = useMessage()
 const route = useRoute()
 const wsStore = useRealtimeStore()
 const { workspaceSelecting: storeWorkspaceSelecting } = storeToRefs(wsStore)
-const isVip = computed(() => wsStore.usageInfo?.isVip ?? false)
-const anchors = ref<Anchor[]>([])
-const products = ref<Product[]>([])
 const videos = ref<VideoItem[]>([])
-const ANCHOR_STORAGE_KEY = 'home.selectedAnchorId'
-const SIDEBAR_MODE_KEY = 'home.sidebarMode'
 const WORKSPACE_DIR_STORAGE_KEY = 'inklip_workspace_directory'
 const LAST_WORKSPACE_ID_KEY = 'home.lastWorkspaceId'
-
-type SidebarMode = 'workspace' | 'anchor'
-function readStoredSidebarMode(): SidebarMode {
-  const s = sessionStorage.getItem(SIDEBAR_MODE_KEY)
-  if (s === 'workspace' || s === 'anchor') return s
-  return 'anchor'
-}
-const sidebarMode = ref<SidebarMode>(readStoredSidebarMode())
-watch(
-  sidebarMode,
-  (m) => {
-    sessionStorage.setItem(SIDEBAR_MODE_KEY, m)
-    if (m === 'workspace' && workspaces.value.length > 0 && !selectedWorkspaceId.value) {
-      selectedWorkspaceId.value = workspaces.value[0].id
-    }
-  },
-  { flush: 'post' }
-)
 
 function readStoredLastWorkspaceId(): number | null {
   if (typeof localStorage === 'undefined') return null
@@ -322,17 +267,6 @@ watch(
   { flush: 'post' }
 )
 
-function readStoredAnchorId(): number | null {
-  const s = sessionStorage.getItem(ANCHOR_STORAGE_KEY)
-  if (s) {
-    const n = Number(s)
-    if (Number.isInteger(n)) return n
-  }
-  return null
-}
-const selectedAnchorId = ref<number | null>(readStoredAnchorId())
-const expandedProductIds = ref<number[]>([])
-
 // 全局空间：选择目录
 const workspaceDirectory = ref<string>(
   typeof localStorage !== 'undefined' ? localStorage.getItem(WORKSPACE_DIR_STORAGE_KEY) ?? '' : ''
@@ -359,14 +293,11 @@ const selectWorkspaceDir = async (): Promise<void> => {
     if (existing) {
       selectedWorkspaceId.value = existing.id
       await ingestWorkspaceApi(existing.id)
-      message.success('已切换到该工作空间，正在同步视频…')
     } else {
       const name = dir.split(/[/\\]/).filter(Boolean).pop() || '工作空间'
       const created = await createWorkspaceApi({ name, path: dir })
-      message.success('工作空间已创建，正在同步视频…')
       if (created?.id) selectedWorkspaceId.value = created.id
     }
-    sidebarMode.value = 'workspace'
     await loadAll()
   } catch (e) {
     message.error('选择或同步失败')
@@ -388,69 +319,31 @@ async function onSelectWorkspaceDir() {
   await selectWorkspaceDir()
 }
 
+async function onDeleteWorkspace(ws: WorkspaceItem) {
+  try {
+    await deleteWorkspaceApi(ws.id)
+    workspaces.value = workspaces.value.filter((w) => w.id !== ws.id)
+    if (selectedWorkspaceId.value === ws.id) {
+      selectedWorkspaceId.value = workspaces.value[0]?.id ?? null
+      if (!selectedWorkspaceId.value) {
+        workspaceVideos.value = []
+        videos.value = []
+        emit('videos-updated', [])
+      }
+    }
+    message.success('工作空间已删除')
+    await loadWorkspaces()
+  } catch (err) {
+    message.error('删除失败')
+  }
+}
+
 /** 顶部当前工作空间显示名（用于触发条） */
 const currentWorkspaceLabel = computed(() => {
   const ws = selectedWorkspace.value
   if (ws?.name) return ws.name.length > 14 ? ws.name.slice(0, 12) + '…' : ws.name
   return '选择工作空间'
 })
-
-// 主播选中变化时写入 sessionStorage，切回页面时可恢复
-watch(
-  selectedAnchorId,
-  (id) => {
-    sessionStorage.setItem(ANCHOR_STORAGE_KEY, id != null ? String(id) : '')
-  },
-  { flush: 'post' }
-)
-
-// Anchor State
-const newAnchorName = ref('')
-
-// Product State
-const newProductName = ref('')
-
-const loading = ref(false)
-const showUploadModal = ref(false)
-const currentUploadProduct = ref<Product | null>(null)
-
-// Context Menu State
-const showDropdown = ref(false)
-const dropdownX = ref(0)
-const dropdownY = ref(0)
-const contextMenuAnchor = ref<Anchor | null>(null)
-const contextMenuProduct = ref<Product | null>(null)
-const contextMenuVideo = ref<VideoItem | null>(null)
-const contextMenuType = ref<'anchor' | 'product' | 'video'>('anchor')
-
-const dropdownOptions = [
-  { label: '编辑', key: 'edit', icon: () => h(NIcon, null, { default: () => h(PencilOutline) }) },
-  { label: '删除', key: 'delete', icon: () => h(NIcon, null, { default: () => h(TrashOutline) }) }
-]
-
-// Video Action State
-const showRenameModal = ref(false)
-const currentVideoForAction = ref<VideoItem | null>(null)
-
-// Edit Anchor State
-const editAnchorId = ref<number | null>(null)
-const editName = ref('')
-
-// Edit Product State
-const editProductId = ref<number | null>(null)
-const editProductName = ref('')
-
-// 首页数量限制已移除，不再校验主播/产品/视频数量上限
-
-const currentAnchor = computed(() => anchors.value.find((a) => a.id === selectedAnchorId.value))
-
-watch(
-  currentAnchor,
-  (newVal) => {
-    emit('update:selected-anchor', newVal || null)
-  },
-  { immediate: true }
-)
 
 watch(
   selectedWorkspace,
@@ -477,11 +370,6 @@ watch(
     await loadAll()
   }
 )
-
-const currentAnchorProducts = computed(() => {
-  if (!selectedAnchorId.value) return []
-  return products.value.filter((p) => p.anchor_id === selectedAnchorId.value)
-})
 
 const goToQuickClip = () => {
   const query = new URLSearchParams()
@@ -523,36 +411,6 @@ onMounted(() => {
 
 defineExpose({ loadAll })
 
-const toggleAnchor = (id: number): void => {
-  if (selectedAnchorId.value === id) {
-    selectedAnchorId.value = null
-  } else {
-    selectedAnchorId.value = id
-  }
-}
-
-const toggleProduct = (id: number): void => {
-  const index = expandedProductIds.value.indexOf(id)
-  if (index > -1) {
-    expandedProductIds.value.splice(index, 1)
-  } else {
-    expandedProductIds.value.push(id)
-  }
-  emit('select-product', id)
-}
-
-const getProductVideos = (productId: number) => {
-  return videos.value.filter((v) => v.product_id === productId)
-}
-
-const handleVideoProductUpdated = (updated: VideoItem) => {
-  const replace = (arr: VideoItem[]) =>
-    arr.map((v) => (v.id === updated.id ? updated : v))
-  videos.value = replace(videos.value)
-  workspaceVideos.value = replace(workspaceVideos.value)
-  emit('videos-updated', videos.value)
-}
-
 /** 根据实时推送刷新首页左侧视频列表（只刷新当前工作空间视频） */
 const refreshVideosFromApi = async () => {
   const wid = selectedWorkspaceId.value
@@ -563,238 +421,6 @@ const refreshVideosFromApi = async () => {
   })
   if (wid) workspaceVideos.value = videos.value
   emit('videos-updated', videos.value)
-}
-
-const openUploadModal = (product: Product) => {
-  currentUploadProduct.value = product
-  showUploadModal.value = true
-}
-
-const handleUploadSuccess = async () => {
-  const wid = selectedWorkspaceId.value
-  const list = wid ? await getVideosApi({ workspace_id: wid }) : []
-  videos.value = list ?? []
-  if (wid) workspaceVideos.value = videos.value
-  emit('videos-updated', videos.value)
-}
-
-const getAvatarColor = (name: string): string => {
-  const colors = [
-    '#f56a00',
-    '#7265e6',
-    '#ffbf00',
-    '#00a2ae',
-    '#1890ff',
-    '#52c41a',
-    '#eb2f96',
-    '#e11d48',
-    '#0891b2',
-    '#4f46e5',
-    '#d97706',
-    '#059669',
-    '#7c3aed',
-    '#db2777'
-  ]
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return colors[Math.abs(hash) % colors.length]
-}
-
-const handleAddAnchor = async (): Promise<boolean> => {
-  if (!newAnchorName.value.trim()) {
-    message.warning('请输入主播名称')
-    return false
-  }
-
-  const newAnchor = await createAnchorApi({
-    name: newAnchorName.value.trim()
-  })
-
-  anchors.value.push(newAnchor)
-  // 选中新添加的主播
-  selectedAnchorId.value = newAnchor.id
-
-  // Reset inputs
-  newAnchorName.value = ''
-  return true
-}
-
-const handleAddProduct = async () => {
-  if (!selectedAnchorId.value) return false
-  if (!newProductName.value.trim()) {
-    message.warning('请输入产品名称')
-    return false
-  }
-
-  const newProduct = await createProductApi({
-    name: newProductName.value.trim(),
-    anchor_id: selectedAnchorId.value
-  })
-
-  products.value.push(newProduct)
-
-  // Reset inputs
-  newProductName.value = ''
-
-  // message.success('添加产品成功')
-  return true
-}
-
-const handleContextMenu = (
-  e: MouseEvent,
-  item: Anchor | Product | VideoItem,
-  type: 'anchor' | 'product' | 'video'
-) => {
-  e.preventDefault()
-  showDropdown.value = false
-  contextMenuType.value = type
-
-  if (type === 'anchor') {
-    contextMenuAnchor.value = item as Anchor
-    contextMenuProduct.value = null
-    contextMenuVideo.value = null
-  } else if (type === 'product') {
-    contextMenuProduct.value = item as Product
-    contextMenuAnchor.value = null
-    contextMenuVideo.value = null
-  } else {
-    contextMenuVideo.value = item as VideoItem
-    contextMenuAnchor.value = null
-    contextMenuProduct.value = null
-  }
-
-  nextTick().then(() => {
-    dropdownX.value = e.clientX
-    dropdownY.value = e.clientY
-    showDropdown.value = true
-  })
-}
-
-const handleClickOutside = () => {
-  showDropdown.value = false
-}
-
-const handleSelectDropdown = (key: string) => {
-  showDropdown.value = false
-
-  if (key === 'edit') {
-    if (contextMenuType.value === 'anchor' && contextMenuAnchor.value) {
-      startEdit(contextMenuAnchor.value)
-    } else if (contextMenuType.value === 'product' && contextMenuProduct.value) {
-      startEditProduct(contextMenuProduct.value)
-    } else if (contextMenuType.value === 'video' && contextMenuVideo.value) {
-      currentVideoForAction.value = contextMenuVideo.value
-      showRenameModal.value = true
-    }
-  } else if (key === 'delete') {
-    if (contextMenuType.value === 'anchor' && contextMenuAnchor.value) {
-      doDeleteAnchor(contextMenuAnchor.value)
-    } else if (contextMenuType.value === 'product' && contextMenuProduct.value) {
-      doDeleteProduct(contextMenuProduct.value)
-    } else if (contextMenuType.value === 'video' && contextMenuVideo.value) {
-      currentVideoForAction.value = contextMenuVideo.value
-      handleDeleteVideoConfirm()
-    }
-  }
-}
-
-const handleRenameVideoConfirm = async (newName: string) => {
-  if (!currentVideoForAction.value || !newName.trim()) return
-
-  // Preserve extension if implementation requires, but usually renameVideoApi might handle just name or require full name.
-  // Assuming the user types the new name without extension in the RenameModal,
-  // we might need to append the original extension.
-  let finalName = newName.trim()
-  const originalName = currentVideoForAction.value.name
-  const lastDotIndex = originalName.lastIndexOf('.')
-  const ext = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : ''
-
-  // Checking if newName already has the extension (user might have typed it)
-  if (ext && !finalName.endsWith(ext)) {
-    finalName += ext
-  }
-
-  const updatedVideo = await renameVideoApi(currentVideoForAction.value.id, finalName)
-  const index = videos.value.findIndex((v) => v.id === updatedVideo.id)
-  if (index !== -1) videos.value[index] = updatedVideo
-  showRenameModal.value = false
-}
-
-const handleDeleteVideoConfirm = async () => {
-  if (!currentVideoForAction.value) return
-
-  await deleteVideoApi(currentVideoForAction.value.id)
-  videos.value = videos.value.filter((v) => v.id !== currentVideoForAction.value!.id)
-  currentVideoForAction.value = null
-}
-
-const startEdit = (anchor: Anchor) => {
-  editAnchorId.value = anchor.id
-  editName.value = anchor.name
-}
-
-const startEditProduct = (product: Product) => {
-  editProductId.value = product.id
-  editProductName.value = product.name
-}
-
-const cancelEdit = () => {
-  editAnchorId.value = null
-}
-
-const cancelEditProduct = () => {
-  editProductId.value = null
-}
-
-const handleUpdateAnchor = async () => {
-  if (!editAnchorId.value || !editName.value.trim()) return
-
-  loading.value = true
-  const doUpdate = async () => {
-    const updated = await updateAnchorApi({
-      id: editAnchorId.value!,
-      name: editName.value.trim()
-    })
-    const index = anchors.value.findIndex((a) => a.id === updated.id)
-    if (index !== -1) anchors.value[index] = updated
-    editAnchorId.value = null
-  }
-  await doUpdate().finally(() => {
-    loading.value = false
-  })
-}
-
-const handleUpdateProduct = async () => {
-  if (!editProductId.value || !editProductName.value.trim()) return
-
-  loading.value = true
-  const doUpdate = async () => {
-    const updated = await updateProductApi({
-      id: editProductId.value!,
-      name: editProductName.value.trim()
-    })
-    const index = products.value.findIndex((p) => p.id === updated.id)
-    if (index !== -1) products.value[index] = updated
-    editProductId.value = null
-  }
-  await doUpdate().finally(() => {
-    loading.value = false
-  })
-}
-
-const doDeleteAnchor = async (anchor: Anchor) => {
-  await deleteAnchorApi(anchor.id)
-  anchors.value = anchors.value.filter((a) => a.id !== anchor.id)
-  if (selectedAnchorId.value === anchor.id) selectedAnchorId.value = null
-}
-
-const doDeleteProduct = async (product: Product) => {
-  await deleteProductApi(product.id)
-  products.value = products.value.filter((p) => p.id !== product.id)
-  const expandIndex = expandedProductIds.value.indexOf(product.id)
-  if (expandIndex > -1) expandedProductIds.value.splice(expandIndex, 1)
 }
 </script>
 
@@ -846,8 +472,17 @@ const doDeleteProduct = async (product: Product) => {
                 :class="{ 'is-active': selectedWorkspaceId === ws.id }"
                 @click="onSelectWorkspace(ws)"
               >
-                <div class="workspace-switcher-item__name">{{ ws.name }}</div>
-                <div v-if="ws.path" class="workspace-switcher-item__path" :title="ws.path">{{ ws.path }}</div>
+                <div class="workspace-switcher-item__main">
+                  <div class="workspace-switcher-item__name">{{ ws.name }}</div>
+                  <div v-if="ws.path" class="workspace-switcher-item__path" :title="ws.path">{{ ws.path }}</div>
+                </div>
+                <div
+                  class="workspace-switcher-item__delete"
+                  title="删除工作空间"
+                  @click.stop="onDeleteWorkspace(ws)"
+                >
+                  <n-icon :size="14"><TrashOutline /></n-icon>
+                </div>
               </div>
               <div class="workspace-switcher-item workspace-switcher-item--action" @click="onSelectWorkspaceDir">
                 选择目录…
@@ -938,10 +573,7 @@ const doDeleteProduct = async (product: Product) => {
                         </span>
                       </div>
                     </template>
-                    <VideoOpPanel
-                      :video="item.node.video"
-                      @video-updated="handleVideoProductUpdated"
-                    />
+                    <VideoOpPanel :video="item.node.video" />
                   </n-popover>
                   <div
                     v-else
@@ -973,42 +605,6 @@ const doDeleteProduct = async (product: Product) => {
       <!-- 主播选择区域已移除，仅保留树形结构 -->
     </div>
 
-    <!-- Context Menu -->
-    <n-dropdown
-      placement="bottom-start"
-      trigger="manual"
-      :x="dropdownX"
-      :y="dropdownY"
-      :options="dropdownOptions"
-      :show="showDropdown"
-      :on-clickoutside="handleClickOutside"
-      @select="handleSelectDropdown"
-    />
-
-    <!-- Edit Modal Removed -->
-
-    <VideoUploadChatModal
-      v-model:show="showUploadModal"
-      :pre-selected-anchor="
-        currentAnchor ? { id: currentAnchor.id, name: currentAnchor.name } : undefined
-      "
-      :pre-selected-product="
-        currentUploadProduct
-          ? { id: currentUploadProduct.id, name: currentUploadProduct.name }
-          : undefined
-      "
-      :pre-selected-product-video-count="
-        currentUploadProduct ? getProductVideos(currentUploadProduct.id).length : undefined
-      "
-      @success="handleUploadSuccess"
-    />
-
-    <RenameModal
-      v-if="currentVideoForAction"
-      v-model:show="showRenameModal"
-      :video-name="currentVideoForAction.name"
-      @confirm="handleRenameVideoConfirm"
-    />
   </div>
 </template>
 
@@ -1233,11 +829,18 @@ const doDeleteProduct = async (product: Product) => {
   border-radius: 8px;
 }
 .workspace-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 12px;
   cursor: pointer;
   border-radius: 6px;
   transition: background 0.15s;
   margin-bottom: 2px;
+}
+.workspace-switcher-item__main {
+  flex: 1;
+  min-width: 0;
 }
 .workspace-switcher-item:last-child {
   margin-bottom: 0;
@@ -1267,12 +870,28 @@ const doDeleteProduct = async (product: Product) => {
   line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+.workspace-switcher-item__delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.workspace-switcher-item__delete:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
 .workspace-switcher-item--action {
   color: #818cf8;
   font-size: 12px;
 }
-.workspace-switcher-item--action .workspace-switcher-item__name,
-.workspace-switcher-item--action .workspace-switcher-item__path {
+.workspace-switcher-item--action .workspace-switcher-item__main,
+.workspace-switcher-item--action .workspace-switcher-item__delete {
   display: none;
 }
 

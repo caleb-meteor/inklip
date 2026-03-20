@@ -3,6 +3,8 @@ import request from '../utils/request'
 export interface AiChatTopic {
   id: number
   topic: string
+  /** 所属工作区，与后端 workspace_id 一致（创建后必有） */
+  workspace_id: number
   created_at: string
   updated_at: string
   /** 该主题下未读的 assistant 消息数 */
@@ -34,19 +36,29 @@ export interface AiChatListResponse {
   total: number
 }
 
-export function getAiChatListApi(page = 1, pageSize = 20): Promise<AiChatListResponse> {
+export function getAiChatListApi(
+  page = 1,
+  pageSize = 20,
+  workspaceId: number
+): Promise<AiChatListResponse> {
+  if (workspaceId <= 0) {
+    return Promise.reject(new Error('workspace_id 必填'))
+  }
   return request({
     url: '/api/ai_chat/topic',
     method: 'get',
-    params: { page, page_size: pageSize }
+    params: { page, page_size: pageSize, workspace_id: workspaceId }
   })
 }
 
-export function createAiChatApi(topic: string): Promise<AiChatTopic> {
+export function createAiChatApi(topic: string, workspaceId: number): Promise<AiChatTopic> {
+  if (workspaceId <= 0) {
+    return Promise.reject(new Error('workspace_id 必填'))
+  }
   return request({
     url: '/api/ai_chat/topic',
     method: 'post',
-    data: { topic }
+    data: { topic, workspace_id: workspaceId }
   })
 }
 

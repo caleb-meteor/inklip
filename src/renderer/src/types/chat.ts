@@ -1,10 +1,15 @@
-import type { DictItem } from '../api/dict'
-
 export type StepState = 'wait' | 'process' | 'finish' | 'error'
 
 export interface WorkflowStep {
   label: string
   state: StepState
+}
+
+/** 筛选/任务卡片等使用的步骤（与思考步骤的 `state` 不同，此处为 `status`） */
+export interface FilterTaskStep {
+  label: string
+  status: 'pending' | 'processing' | 'completed' | 'error'
+  detail?: string
 }
 
 export interface SmartCutTaskPayload {
@@ -21,9 +26,9 @@ export interface SmartCutTaskPayload {
 }
 
 export interface MessagePayload {
-  dicts?: DictItem[]
+  dicts?: Array<{ id: number; name: string; type?: string }>
   videos?: any[]
-  steps?: WorkflowStep[]
+  steps?: WorkflowStep[] | FilterTaskStep[]
   smartCutTask?: SmartCutTaskPayload
   error?: {
     message: string
@@ -59,13 +64,21 @@ export interface MessagePayload {
   // 产品多选一（智能剪辑）
   products?: Array<{ id: number; name: string; cover?: string; anchor_id: number }>
   anchorName?: string
+  /** 智能剪辑记录 ID（常与 task_card 并列保存在 payload 根上） */
+  aiGenVideoId?: number
+  /** 扁平字段：与 smartCutTask 二选一或并存，供 SmartCutResultMessage */
+  status?: number
+  videoCount?: number
+  durationMin?: number
+  durationMax?: number
+  fileUrl?: string
 }
 export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   steps?: any[]
-  dicts?: DictItem[]
+  dicts?: Array<{ id: number; name: string; type?: string }>
   videos?: any[]
   isAnalyzing?: boolean
   payload?: MessagePayload

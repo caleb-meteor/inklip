@@ -25,7 +25,7 @@ function openExportFolder(filePath: string) {
     <div class="panel-header" style="justify-content: space-between;">
       <div style="display: flex; align-items: center; gap: 8px;">
         <n-icon size="18"><ListOutline /></n-icon>
-        <span>选择的字幕</span>
+        <span>已选字幕</span>
         <span v-if="qc.selectedSegments.length > 0" class="total-duration">总时长 {{ qc.formatTime(qc.selectedTotalDurationSeconds) }}</span>
       </div>
       <div style="display: flex; align-items: center; gap: 6px;">
@@ -40,14 +40,13 @@ function openExportFolder(filePath: string) {
         <n-button
           size="tiny"
           type="default"
-          :disabled="!qc.selectedAnchorId"
+          :disabled="!qc.selectedWorkspaceId"
           :loading="qc.loadingExportHistory"
           @click="qc.loadExportHistory"
         >
           <template #icon>
             <n-icon size="14"><TimeOutline /></n-icon>
           </template>
-          查看导出历史
         </n-button>
       </div>
     </div>

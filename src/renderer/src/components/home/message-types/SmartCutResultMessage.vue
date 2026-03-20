@@ -17,7 +17,8 @@ interface SmartCutTask {
   videoCount?: number
   durationMin?: number
   durationMax?: number
-  status: number
+  /** 未写入前可能缺失，按「处理中」展示 */
+  status?: number
   fileUrl?: string
   duration?: number
   cover?: string

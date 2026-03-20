@@ -46,3 +46,11 @@ export function ingestWorkspaceApi(id: number): Promise<{ added: number; updated
     method: 'post'
   })
 }
+
+/** 删除工作空间（会停止监听，删除后需切换至其他工作空间） */
+export function deleteWorkspaceApi(id: number): Promise<void> {
+  return request({
+    url: `/api/workspaces/${id}`,
+    method: 'delete'
+  })
+}

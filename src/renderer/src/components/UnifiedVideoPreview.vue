@@ -69,7 +69,7 @@ const showPathMissing = computed(() => {
 const playerRef = ref<InstanceType<typeof VideoPreviewPlayer> | null>(null)
 
 defineExpose({
-  playAtTime: (startTime: number, endTime?: number) =>
+  playAtTime: (startTime?: number, endTime?: number) =>
     playerRef.value?.playAtTime?.(startTime, endTime)
 })
 </script>

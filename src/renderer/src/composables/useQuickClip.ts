@@ -10,7 +10,8 @@ import { useRealtimeStore } from '../stores/realtime'
 export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: { videosProvidedByParent?: boolean }) {
   const videosProvidedByParent = options?.videosProvidedByParent ?? false
   const message = useMessage()
-  const { workspaceSelecting } = storeToRefs(useRealtimeStore())
+  const rtStore = useRealtimeStore()
+  const { workspaceSelecting, exportSegmentsProgress } = storeToRefs(rtStore)
 
   const sourceVideos = shallowRef<VideoItem[]>([])
   const loadingVideos = ref(false)
@@ -20,6 +21,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   const allSegments = shallowRef<SegmentWithVideo[]>([])
   const subtitleSearch = ref('')
   const searchResults = shallowRef<SegmentWithVideo[]>([])
+  /** 搜索结果里每条自带的完整 video（含 subtitle），用于定位时补全左侧列表可能缺失的字幕 */
+  const searchHitVideoById = shallowRef(new Map<number, VideoItem>())
   const searchLoading = ref(false)
   /** 字幕搜索总条数（来自接口 total），用于「共 x 条」与是否显示查看更多 */
   const searchTotal = ref(0)
@@ -28,6 +31,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   const locatedContexts = ref<Set<number>>(new Set())
   /** 是否显示全部字幕区域（仅在通过搜索结果「定位上下文」后显示） */
   const showSubtitleContext = ref(false)
+  /** 定位时递增，强制 n-virtual-list 重挂载，避免从隐藏态首次展示时内部高度为 0 不渲染 */
+  const subtitleListRenderKey = ref(0)
 
   /** 视频字幕区 Tab：subtitles=视频字幕 replicate=爆款复刻 */
   const subtitleTab = ref<'subtitles' | 'replicate'>('subtitles')
@@ -49,8 +54,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   }
 
   const filteredSegmentGroups = computed(() => {
-    // 只有在搜索且未点击定位时，才不渲染数据；无搜索词时默认显示
-    if (subtitleSearch.value && !showSubtitleContext.value) return []
+    // 默认不渲染整轨字幕；仅在「定位上下文」后展示（与搜索联动）
+    if (!showSubtitleContext.value) return []
     const result: VideoSegmentGroup[] = []
     sourceVideos.value.forEach(v => {
       const segments = getVideoSegments(v)
@@ -69,7 +74,6 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   }
 
   const flatVirtualList = computed(() => {
-    if (subtitleSearch.value && !showSubtitleContext.value) return []
     const list: VirtualListItem[] = []
     filteredSegmentGroups.value.forEach(group => {
       list.push({ type: 'header', key: `header-${group.videoId}`, videoId: group.videoId, videoName: group.videoName })
@@ -177,6 +181,15 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
 
   const subtitleScrollbarRef = ref<any>(null)
   const isExporting = ref(false)
+  /** 导出拼接进度 0–100（由 SSE export_segments_progress + FFmpeg -progress 驱动） */
+  const exportProgress = ref(0)
+  const activeExportRequestId = ref<string | null>(null)
+
+  watch(exportSegmentsProgress, (ev) => {
+    if (!ev || !activeExportRequestId.value) return
+    if (ev.export_request_id !== activeExportRequestId.value) return
+    exportProgress.value = Math.max(exportProgress.value, ev.percentage)
+  })
 
   const exportHistoryList = ref<ExportHistoryItem[]>([])
   const showExportHistoryModal = ref(false)
@@ -323,6 +336,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   watch(subtitleSearch, () => {
     locatedContexts.value.clear()
     showSubtitleContext.value = false
+    searchHitVideoById.value = new Map()
   })
 
   /** 是否显示「查看更多」（已展示条数小于接口返回的 total 时可能还有更多） */
@@ -360,7 +374,15 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     searchLoading.value = true
     try {
       const res = await searchSubtitlesApi(q, SEARCH_PAGE_SIZE, offset, workspaceId ?? null)
-      const list = (res.results || []).map(mapSubtitleItemToSegment)
+      const raw = res.results || []
+      const nextHits =
+        append ? new Map(searchHitVideoById.value) : new Map<number, VideoItem>()
+      for (const row of raw) {
+        const v = row.video as VideoItem
+        if (v?.id) nextHits.set(v.id, v)
+      }
+      searchHitVideoById.value = nextHits
+      const list = raw.map(mapSubtitleItemToSegment)
       if (append) {
         searchResults.value = [...searchResults.value, ...list]
       } else {
@@ -371,6 +393,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       if (!append) {
         searchResults.value = []
         searchTotal.value = 0
+        searchHitVideoById.value = new Map()
       }
     } finally {
       searchLoading.value = false
@@ -389,6 +412,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       if (!q) {
         searchResults.value = []
         searchTotal.value = 0
+        searchHitVideoById.value = new Map()
         return
       }
       if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
@@ -425,6 +449,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       sourceVideos.value = []
       allSegments.value = []
       subtitleCache.clear()
+      searchHitVideoById.value = new Map()
       return
     }
     if (allVideos !== undefined) {
@@ -437,6 +462,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       collapsedGroups.value = new Set(list.map(v => v.id))
       showSubtitleContext.value = false
       allSegments.value = []
+      searchHitVideoById.value = new Map()
       return
     }
     loadingVideos.value = true
@@ -447,6 +473,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
         collapsedGroups.value = new Set(list.map(v => v.id))
         showSubtitleContext.value = false
         allSegments.value = []
+        searchHitVideoById.value = new Map()
       })
       .finally(() => { loadingVideos.value = false })
   }
@@ -846,57 +873,116 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     }, 100)
   }
 
-  function scrollToVideoSubtitles(videoId: number) {
-    const allIds = sourceVideos.value.map(v => v.id)
-    collapsedGroups.value = new Set(allIds.filter(id => id !== videoId))
-    showSubtitleContext.value = true
+  /** 整表由 v-show 控制，需在布局完成后再 scroll（否则 clientHeight 为 0） */
+  function runAfterSubtitleListLayout(fn: () => void) {
     nextTick(() => {
-      const group = filteredSegmentGroups.value.find(g => g.videoId === videoId)
-      if (!group || group.segments.length === 0) {
-        message.info('该视频暂无字幕')
-        return
-      }
-      const doScroll = (retryCount = 0) => {
-        const headerKey = `header-${videoId}`
-        const firstSegment = group.segments[0]
-        const key = `seg-${getSegmentKey(firstSegment)}`
-        const index = flatVirtualList.value.findIndex(item => item.key === headerKey)
-        const containerEl = document.querySelector('.subtitle-virtual-list')
-        
-        if (index !== -1 && containerEl && containerEl.clientHeight > 0) {
-          const topOffset = index * 34
-          subtitleScrollbarRef.value?.scrollTo({ top: topOffset, behavior: 'auto' })
-          setTimeout(() => flashItem(key), 200)
-        } else if (retryCount < 20) {
-          setTimeout(() => doScroll(retryCount + 1), 50)
-        }
-      }
-      doScroll()
+      requestAnimationFrame(() => {
+        requestAnimationFrame(fn)
+      })
     })
   }
 
-  function locateContext(seg: SegmentWithVideo) {
+  /** 字幕剪辑以「搜索 → 定位」为主路径；左侧点视频仅提示，不自动展开整轨列表 */
+  function scrollToVideoSubtitles(_videoId: number) {
+    message.info('请在上方搜索字幕，在结果中点击「定位」查看该条的完整上下文')
+  }
+
+  function videoHasRenderableSubtitles(videoId: number): boolean {
+    const v = sourceVideos.value.find((x) => x.id === videoId)
+    return !!v && parseSubtitleToSegments(v.subtitle).length > 0
+  }
+
+  /** 用搜索命中接口返回的 video 补全 sourceVideos 中缺失的字幕字段 */
+  function patchSourceVideoSubtitleFromSearchHit(videoId: number): boolean {
+    const hit = searchHitVideoById.value.get(videoId)
+    const sub = hit?.subtitle
+    if (sub == null || (Array.isArray(sub) && sub.length === 0)) return false
+    const list = sourceVideos.value
+    const idx = list.findIndex((v) => v.id === videoId)
+    if (idx === -1) return false
+    const cur = list[idx]
+    if (parseSubtitleToSegments(cur.subtitle).length > 0) return true
+    const nextList = [...list]
+    nextList[idx] = { ...cur, subtitle: sub }
+    sourceVideos.value = nextList
+    subtitleCache.delete(videoId)
+    return parseSubtitleToSegments(sub).length > 0
+  }
+
+  function mergeVideoIntoSourceVideos(v: VideoItem) {
+    const list = sourceVideos.value
+    const idx = list.findIndex((x) => x.id === v.id)
+    const nextList = [...list]
+    if (idx >= 0) {
+      nextList[idx] = { ...nextList[idx], ...v }
+    } else {
+      nextList.push(v)
+    }
+    sourceVideos.value = nextList
+    subtitleCache.delete(v.id)
+  }
+
+  async function locateContext(seg: SegmentWithVideo) {
     clearSourceSelection()
-    const allIds = sourceVideos.value.map(v => v.id)
-    collapsedGroups.value = new Set(allIds.filter(id => id !== seg.videoId))
+    if (!videoHasRenderableSubtitles(seg.videoId)) {
+      patchSourceVideoSubtitleFromSearchHit(seg.videoId)
+    }
+    if (!videoHasRenderableSubtitles(seg.videoId)) {
+      try {
+        const list = await getVideosApi({ ids: [seg.videoId] })
+        const v = list[0]
+        if (v) mergeVideoIntoSourceVideos(v)
+      } catch {
+        message.error('加载视频字幕失败')
+      }
+    }
+    if (!videoHasRenderableSubtitles(seg.videoId)) {
+      message.warning('该视频暂无可用字幕数据，无法展示上下文')
+      return
+    }
+
+    const allIds = sourceVideos.value.map((v) => v.id)
+    collapsedGroups.value = new Set(allIds.filter((id) => id !== seg.videoId))
     showSubtitleContext.value = true
+    subtitleListRenderKey.value += 1
+
     const virtualKey = `seg-${getSegmentKey(seg)}`
+    const resolveSegmentIndex = (): number => {
+      const list = flatVirtualList.value
+      let index = list.findIndex((item) => item.key === virtualKey)
+      if (index !== -1) return index
+      const tol = 0.08
+      return list.findIndex(
+        (item) =>
+          item.type === 'segment' &&
+          item.segment != null &&
+          item.segment.videoId === seg.videoId &&
+          Math.abs(item.segment.fromS - seg.fromS) < tol &&
+          Math.abs(item.segment.toS - seg.toS) < tol
+      )
+    }
     const doScroll = (retryCount = 0) => {
-      const index = flatVirtualList.value.findIndex(item => item.key === virtualKey)
+      const index = resolveSegmentIndex()
       const containerEl = document.querySelector('.subtitle-virtual-list')
-      
+
       if (index !== -1 && containerEl && containerEl.clientHeight > 0) {
         const topOffset = index * 34
         const containerHeight = containerEl.clientHeight
         const centerTop = Math.max(0, topOffset - containerHeight / 2 + 17)
+        const flashKey = flatVirtualList.value[index]?.key ?? virtualKey
         subtitleScrollbarRef.value?.scrollTo({ top: centerTop, behavior: 'auto' })
-        setTimeout(() => flashItem(virtualKey), 200)
-      } else if (retryCount < 20) {
+        setTimeout(() => flashItem(flashKey), 200)
+      } else if (retryCount < 40) {
         setTimeout(() => doScroll(retryCount + 1), 50)
       }
     }
-    nextTick(() => doScroll())
+    runAfterSubtitleListLayout(() => doScroll())
   }
+
+  /** 复刻流程步骤：0=理解文案 1=匹配字幕 2=还原字幕，-1=不显示流程。流程最少展示 2s */
+  const REPLICATE_FLOW_MIN_MS = 2000
+  const replicateFlowStep = ref(-1)
+  let replicateStepTimers: ReturnType<typeof setTimeout>[] = []
 
   /** 按 videoId + fromS + toS 检测重复，返回重复组（同一时间段被选了多次） */
   async function startReplicate() {
@@ -907,12 +993,31 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     }
     replicateLoading.value = true
     replicateResults.value = []
+    replicateFlowStep.value = 0
+    const flowStart = Date.now()
+    replicateStepTimers.forEach((t) => clearTimeout(t))
+    replicateStepTimers = [
+      setTimeout(() => {
+        if (replicateFlowStep.value >= 0) replicateFlowStep.value = 1
+      }, 700),
+      setTimeout(() => {
+        if (replicateFlowStep.value >= 1) replicateFlowStep.value = 2
+      }, 1400)
+    ]
     try {
       const res = await replicateHitApi(text, selectedWorkspaceId.value ?? null)
       replicateResults.value = res.results || []
     } catch {
       message.error('爆款复刻匹配失败')
     } finally {
+      const elapsed = Date.now() - flowStart
+      const remain = Math.max(0, REPLICATE_FLOW_MIN_MS - elapsed)
+      if (remain > 0) {
+        await new Promise((r) => setTimeout(r, remain))
+      }
+      replicateStepTimers.forEach((t) => clearTimeout(t))
+      replicateStepTimers = []
+      replicateFlowStep.value = -1
       replicateLoading.value = false
     }
   }
@@ -979,6 +1084,10 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       return
     }
     const userChosenPath = dialogResult.filePath
+    rtStore.clearExportSegmentsProgress()
+    const exportRequestId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+    activeExportRequestId.value = exportRequestId
+    exportProgress.value = 2
     isExporting.value = true
     try {
       const requestSegments = selectedSegments.value.map(seg => ({
@@ -991,8 +1100,11 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
         requestSegments,
         { workspaceId: selectedWorkspaceId.value },
         name,
-        userChosenPath
+        userChosenPath,
+        exportRequestId
       )
+      exportProgress.value = 100
+      await new Promise((r) => setTimeout(r, 280))
       if (res?.path && res?.suggested_name) {
         message.success('导出成功，可在导出历史中打开所在文件夹')
         if (showExportHistoryModal.value) {
@@ -1000,9 +1112,13 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
         }
       }
     } catch (error: any) {
+      exportProgress.value = 0
       message.error(error?.message || '导出视频失败')
     } finally {
+      activeExportRequestId.value = null
+      rtStore.clearExportSegmentsProgress()
       isExporting.value = false
+      exportProgress.value = 0
     }
   }
 
@@ -1014,7 +1130,9 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   }
 
   onMounted(() => window.addEventListener('keydown', handleGlobalKeydown))
-  onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown))
+  onUnmounted(() => {
+    window.removeEventListener('keydown', handleGlobalKeydown)
+  })
 
   return {
     selectedWorkspaceId,
@@ -1027,6 +1145,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     searchLoading,
     collapsedGroups,
     showSubtitleContext,
+    subtitleListRenderKey,
     subtitleTab,
     replicateText,
     replicateLoading,
@@ -1056,6 +1175,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     stickyHeaderOffset,
     onSubtitleScroll,
     isExporting,
+    exportProgress,
+    replicateFlowStep,
     exportHistoryList,
     showExportHistoryModal,
     loadExportHistory,

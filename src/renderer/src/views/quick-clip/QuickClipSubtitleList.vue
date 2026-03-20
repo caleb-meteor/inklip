@@ -53,7 +53,7 @@ function onSearchResultsScroll(e: Event) {
         />
       </div>
 
-      <div v-if="qc.subtitleSearch" class="search-results-panel">
+      <div v-if="qc.subtitleSearch && String(qc.subtitleSearch).trim()" class="search-results-panel">
         <div class="search-results-header">搜索结果（共 {{ qc.searchLoading ? '...' : qc.searchTotal }} 条）</div>
         <div class="search-results-body">
           <n-spin :show="qc.searchLoading">
@@ -89,7 +89,10 @@ function onSearchResultsScroll(e: Event) {
         </div>
       </div>
 
-      <div class="subtitle-panel-body" :class="{ 'has-search': qc.subtitleSearch }">
+      <div
+        class="subtitle-panel-body"
+        :class="{ 'has-search': !!(qc.subtitleSearch && String(qc.subtitleSearch).trim()) }"
+      >
         <div v-if="qc.showSubtitleContext || qc.selectedSourceKeys.size > 0" class="context-header">
           <span v-if="qc.showSubtitleContext">字幕上下文</span>
           <span v-else></span>
@@ -102,12 +105,16 @@ function onSearchResultsScroll(e: Event) {
             </n-button>
           </div>
         </div>
-        <div v-else-if="qc.subtitleSearch" class="empty-hint">
-          点击搜索结果中的「定位」查看完整视频字幕
+        <div v-else-if="qc.subtitleSearch && String(qc.subtitleSearch).trim()" class="empty-hint">
+          在搜索结果中点击「定位」查看完整字幕上下文
+        </div>
+        <div v-else class="empty-hint">
+          请先在上方搜索，再在结果中点击「定位」展开上下文
         </div>
 
         <n-virtual-list
-          v-show="!qc.subtitleSearch || qc.showSubtitleContext"
+          v-if="qc.showSubtitleContext"
+          :key="qc.subtitleListRenderKey"
           :ref="(el) => { if (el) qc.subtitleScrollbarRef = el }"
           :items="qc.flatVirtualList"
           :item-size="34"
@@ -161,7 +168,7 @@ function onSearchResultsScroll(e: Event) {
           <n-input
             v-model:value="qc.replicateText"
             type="textarea"
-            placeholder="粘贴爆款视频文案，系统将从当前主播的字幕中匹配最相似的内容..."
+            placeholder="粘贴爆款文案，将智能拆句并在工作区内还原为对应字幕片段"
             :rows="5"
             size="small"
           />
@@ -177,13 +184,39 @@ function onSearchResultsScroll(e: Event) {
           </n-button>
         </div>
 
-        <div v-if="qc.replicateResults.length > 0" class="replicate-results">
+        <!-- 复刻流程动画 -->
+        <div v-if="qc.replicateLoading" class="replicate-flow">
+          <div
+            class="replicate-flow-step"
+            :class="{ 'is-active': qc.replicateFlowStep === 0, 'is-done': qc.replicateFlowStep > 0 }"
+          >
+            <n-icon v-if="qc.replicateFlowStep > 0" size="16" color="#52c41a"><CheckmarkCircleOutline /></n-icon>
+            <span v-else class="replicate-flow-spin"><n-spin size="small" :stroke-width="14" /></span>
+            <span>开始理解爆款文案</span>
+          </div>
+          <div
+            class="replicate-flow-step"
+            :class="{ 'is-active': qc.replicateFlowStep === 1, 'is-done': qc.replicateFlowStep > 1 }"
+          >
+            <n-icon v-if="qc.replicateFlowStep > 1" size="16" color="#52c41a"><CheckmarkCircleOutline /></n-icon>
+            <span v-else-if="qc.replicateFlowStep >= 1" class="replicate-flow-spin"><n-spin size="small" :stroke-width="14" /></span>
+            <span>开始匹配视频字幕</span>
+          </div>
+          <div
+            class="replicate-flow-step"
+            :class="{ 'is-active': qc.replicateFlowStep === 2 }"
+          >
+            <span v-if="qc.replicateFlowStep === 2" class="replicate-flow-spin"><n-spin size="small" :stroke-width="14" /></span>
+            <span>开始还原视频字幕</span>
+          </div>
+        </div>
+
+        <div v-else-if="qc.replicateResults.length > 0 && qc.replicateResults.some(r => r.match)" class="replicate-results">
           <div class="replicate-results-header">
             <span>匹配结果（{{ qc.replicateResults.filter(r => r.match).length }} / {{ qc.replicateResults.length }} 句匹配）</span>
             <n-button
               size="tiny"
               type="primary"
-              :disabled="qc.replicateResults.filter(r => r.match).length === 0"
               @click="qc.applyReplicateResults"
             >
               一键添加
@@ -216,8 +249,13 @@ function onSearchResultsScroll(e: Event) {
           </div>
         </div>
 
+        <div v-else-if="qc.replicateResults.length > 0 && !qc.replicateResults.some(r => r.match)" class="empty-hint replicate-no-match">
+          <n-icon size="20" color="#ef4444" style="flex-shrink: 0;"><CloseCircleOutline /></n-icon>
+          <span>未找到与文案匹配的字幕，可尝试调整文案</span>
+        </div>
+
         <div v-else-if="!qc.replicateLoading" class="empty-hint">
-          输入爆款文案后点击「开始复刻」
+          粘贴文案后点击「开始复刻」，在工作区内还原为对应字幕
         </div>
       </div>
     </template>
@@ -422,6 +460,11 @@ function onSearchResultsScroll(e: Event) {
   padding: 20px;
   text-align: center;
 }
+.empty-hint.replicate-no-match {
+  color: rgba(148, 163, 184, 0.95);
+  flex-direction: row;
+  gap: 8px;
+}
 .context-header {
   display: flex;
   justify-content: space-between;
@@ -452,6 +495,33 @@ function onSearchResultsScroll(e: Event) {
   flex-shrink: 0;
   padding: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.replicate-flow {
+  flex-shrink: 0;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.replicate-flow-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+  transition: color 0.25s ease;
+}
+.replicate-flow-step.is-active {
+  color: rgba(79, 172, 254, 0.95);
+}
+.replicate-flow-step.is-done {
+  color: rgba(82, 196, 26, 0.9);
+}
+.replicate-flow-spin {
+  display: inline-flex;
+  transform: scale(0.5);
+  transform-origin: center;
 }
 .replicate-results {
   flex: 1;

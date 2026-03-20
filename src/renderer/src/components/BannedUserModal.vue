@@ -9,14 +9,20 @@ import ContactSupportBlock from './ContactSupportBlock.vue'
 const route = useRoute()
 const rtStore = useRealtimeStore()
 
-/** 优先级 1：有封禁或异常时只弹本窗，不弹到期/更新。主界面 /home 与 /quick-clip 均显示 */
+/** 优先级 1：待激活、封禁或 API Key 异常时只弹本窗，不弹到期/更新。主界面 /home 与 /quick-clip 均显示 */
 const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
 const show = computed(
-  () => isHomeRoute.value && (rtStore.isUserBanned || !!rtStore.apiKeyExceptionInfo)
+  () =>
+    isHomeRoute.value &&
+    (rtStore.isAwaitingCloudActivation || rtStore.isUserBanned || !!rtStore.apiKeyExceptionInfo)
 )
 
-/** 封禁优先于异常：两者同时存在时展示封禁 */
-const isBanned = computed(() => rtStore.isUserBanned)
+/** 展示优先级：API Key 异常 > 已封禁 > 待激活（未拿到云端信息） */
+const modalKind = computed<'api_key' | 'banned' | 'pending'>(() => {
+  if (rtStore.apiKeyExceptionInfo) return 'api_key'
+  if (rtStore.isUserBanned) return 'banned'
+  return 'pending'
+})
 
 const showApiKeyForm = ref(false)
 
@@ -46,23 +52,65 @@ const onApiKeySuccess = (): void => {
     :bordered="false"
     :style="{ width: '360px', borderRadius: '12px' }"
     class="banned-user-modal"
+    :class="{ 'banned-user-modal--pending': modalKind === 'pending' }"
   >
     <template #header>
       <div class="banned-header">
-        <div class="header-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <div
+          class="header-icon"
+          :class="{ 'header-icon--pending': modalKind === 'pending' }"
+        >
+          <!-- 待激活：云端同步 / 连接中 -->
+          <svg
+            v-if="modalKind === 'pending'"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="header-icon-svg"
+          >
+            <!-- 云端同步 / 上传激活（云 + 向上箭头） -->
+            <path d="M4 14.9A7 7 0 0 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.24" />
+            <path d="M12 12v9" />
+            <path d="m16 16-4-4-4 4" />
+          </svg>
+          <!-- 封禁 / API Key 异常 -->
+          <svg
+            v-else
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="header-icon-svg"
+          >
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
           </svg>
         </div>
         <h2 class="header-title">
-          {{ isBanned ? '账号已被封禁' : 'API Key 异常' }}
+          {{
+            modalKind === 'api_key'
+              ? 'API Key 异常'
+              : modalKind === 'banned'
+                ? '账号已被封禁'
+                : '待激活'
+          }}
         </h2>
       </div>
     </template>
 
     <p class="banned-desc">
-      {{ isBanned ? '账号已被封禁，请更换 API Key 后重试。' : (rtStore.apiKeyExceptionInfo?.message ?? 'API Key 异常，请更换 API Key 后重试。') }}
+      {{
+        modalKind === 'api_key'
+          ? rtStore.apiKeyExceptionInfo?.message ?? 'API Key 异常，请更换 API Key 后重试。'
+          : modalKind === 'banned'
+            ? '账号已被封禁，请更换 API Key 后重试。'
+            : '正在连接云端以同步账户信息，请稍候。若长时间无响应，请检查网络或在设置中填写 API Key。'
+      }}
     </p>
 
     <ApiKeyChangeBlock
@@ -98,9 +146,13 @@ const onApiKeySuccess = (): void => {
   justify-content: center;
 }
 
-.header-icon svg {
+.header-icon-svg {
   width: 26px;
   height: 26px;
+}
+
+.header-icon--pending {
+  color: #38bdf8;
 }
 
 .header-title {
@@ -127,6 +179,10 @@ const onApiKeySuccess = (): void => {
 :deep(.n-card-header) {
   padding-bottom: 12px;
   background: linear-gradient(180deg, rgba(239, 68, 68, 0.08) 0%, transparent 100%);
+}
+
+.banned-user-modal--pending :deep(.n-card-header) {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.12) 0%, transparent 100%);
 }
 
 :deep(.n-card__footer) {

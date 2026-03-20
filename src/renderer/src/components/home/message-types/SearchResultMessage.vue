@@ -3,7 +3,7 @@ import { type PropType, ref } from 'vue'
 import { NIcon, NCollapse, NCollapseItem, NButton } from 'naive-ui'
 import { VideocamOutline, DownloadOutline } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import UnifiedVideoPreview from '../../UnifiedVideoPreview.vue'
+import VideoOpCard from '../VideoOpCard.vue'
 import type { VideoSearchResultItem } from '../../../api/video'
 import type { SearchSegment } from '../../../api/video'
 import { exportSegmentApi } from '../../../api/video'
@@ -18,10 +18,6 @@ defineProps({
     default: () => []
   }
 })
-
-const emit = defineEmits<{
-  (e: 'play-video', video: any): void
-}>()
 
 const message = useMessage()
 const videoPlayers = ref<Record<number, any>>({})
@@ -41,10 +37,6 @@ const handleSegmentClick = (video: any, startTime: number, endTime: number) => {
   if (isVideoDeleted(video)) return
   const player = videoPlayers.value[video?.id]
   if (player) player.playAtTime(startTime, endTime)
-}
-
-const handlePlayVideo = (video: any) => {
-  if (!isVideoDeleted(video)) emit('play-video', { video, videoType: 'material' })
 }
 
 const handleExportSegment = async (video: any, seg: SearchSegment, segIndex: number) => {
@@ -91,17 +83,14 @@ const handleExportSegment = async (video: any, seg: SearchSegment, segIndex: num
 
           <div class="video-row">
             <div class="video-preview-wrap">
-              <UnifiedVideoPreview
+              <VideoOpCard
                 :ref="
                   (el) => {
                     if (item.video?.id) videoPlayers[item.video.id] = el
                   }
                 "
                 :video="item.video"
-                video-type="material"
-                aspect-ratio="9/16"
-                class="video-player"
-                @dblclick="handlePlayVideo(item.video)"
+                class="search-result-video-card"
               />
               <div class="video-info-below">
                 <div class="video-header">
@@ -209,17 +198,12 @@ const handleExportSegment = async (video: any, seg: SearchSegment, segIndex: num
 .video-preview-wrap {
   position: relative;
   flex-shrink: 0;
-  width: 130px; /* 进一步缩小视频宽度 */
+  width: 160px; /* 与 VideoOpCard 一致 */
 }
 
-.video-player {
+.search-result-video-card {
   width: 100%;
-  height: auto;
-  display: block;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  max-width: 160px;
 }
 
 .video-info-below {

@@ -44,8 +44,9 @@ export function parseSubtitleToSegments(subtitleData: unknown): SubtitleSegmentI
         typeof (item as { offsets: { from: number; to: number } }).offsets.to === 'number'
     )
     .map((item) => {
-      const from = item.offsets.from
-      const to = item.offsets.to
+      const off = item.offsets!
+      const from = off.from
+      const to = off.to
       return {
         text: typeof item.text === 'string' ? item.text : '',
         fromMs: from,

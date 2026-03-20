@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
 import HomeSidebar from '../components/home/HomeSidebar.vue'
@@ -8,7 +8,6 @@ import HomeChatMessages from '../components/home/HomeChatMessages.vue'
 import HomeVideoPlayer from '../components/home/HomeVideoPlayer.vue'
 import QuickClip from './QuickClip.vue'
 import ChatInput from '../components/ChatInput.vue'
-import VideoUploadChatModal from '../components/home/VideoUploadChatModal.vue'
 import AppStatusBar from '../components/AppStatusBar.vue'
 import { smartCutAiService, type AiChatTopic } from '../services/smartCutAiService'
 import { aiChatStore } from '../services/aiChatStore'
@@ -20,8 +19,11 @@ const INTENT_SEARCH = 1
 const INTENT_CLIP = 2
 
 const UNSUPPORTED_INTENT_TIP = `我可能还没有完全理解你的意思，可以再详细说明一下吗？`
+
+/** 未选工作区时仅在对话区提示，不抛错 */
+const WORKSPACE_REQUIRED_TIP =
+  '请先在左侧选择一个工作区，再开始对话或搜索、剪辑。选择工作区后，该工作区下的视频会参与 AI 搜索与智能剪辑。'
 import { useRealtimeSync } from '../composables/useRealtimeSync'
-import { useVideoUpload } from '../composables/useVideoUpload'
 import { useRealtimeStore } from '../stores/realtime'
 import type { HomePlayPayload } from '../api/video'
 import { searchVideosApi } from '../api/video'
@@ -31,13 +33,11 @@ const router = useRouter()
 const route = useRoute()
 const rtStore = useRealtimeStore()
 const appVersion = ref<string>('0.0.1')
-const showUploadModal = ref(false)
 const leftSidebarCollapsed = ref(false)
 const rightSidebarCollapsed = ref(true)
 
 // 使用 composables
 useRealtimeSync()
-const { handleUploadSuccess } = useVideoUpload()
 
 // 获取共享的 AI 对话存储
 const messages = computed(() => aiChatStore.getMessages().value)
@@ -50,9 +50,7 @@ const isTaskRunning = computed(() => {
 })
 
 const currentPlayingVideo = ref<HomePlayPayload | null>(null)
-const currentSelectedAnchor = ref<any>(null)
 const currentSelectedWorkspace = ref<{ id: number; name: string } | null>(null)
-const currentSelectedProduct = ref<number | null>(null)
 
 const homeSidebarRef = ref<InstanceType<typeof HomeSidebar> | null>(null)
 const homeRightSidebarRef = ref<InstanceType<typeof HomeRightSidebar> | null>(null)
@@ -85,12 +83,15 @@ const onVisibilityChange = (): void => {
   if (document.visibilityState === 'visible') refreshPageData()
 }
 
-/** 根据路由 query.chatId 定位到对应聊天（通知点击跳转用） */
+/** 根据路由 query.chatId 定位到对应聊天（通知点击跳转用）；需已选工作区才能拉取列表 */
 const selectChatFromRoute = async (): Promise<void> => {
+  if (route.path !== '/home') return
   const chatIdStr = route.query.chatId
   if (!chatIdStr) return
   const chatId = Number(chatIdStr)
   if (!Number.isInteger(chatId)) return
+  const wid = currentSelectedWorkspace.value?.id
+  if (wid == null || wid <= 0) return
   await aiChatStore.loadAiChats()
   const chat =
     aiChatStore.getAiChats().value.find((c) => c.id === chatId) ?? ({ id: chatId } as AiChatTopic)
@@ -123,8 +124,13 @@ onMounted(async () => {
     }
   )
 
-  // 通知点击跳转带 chatId 时定位到对应聊天
-  watch(() => route.query.chatId, selectChatFromRoute)
+  // 通知带 chatId 跳转：须等工作区就绪后再拉列表并选中会话
+  watch(
+    () => [route.query.chatId, currentSelectedWorkspace.value?.id ?? null, route.path] as const,
+    () => {
+      void selectChatFromRoute()
+    }
+  )
 
   // 获取应用版本号
   if (window.api?.getAppVersion) {
@@ -132,13 +138,44 @@ onMounted(async () => {
       appVersion.value = version
     })
   }
+
+  // 当前在 AI 页时加载右侧「最近记录」与预拉剪辑历史（侧栏 v-if 在 /quick-clip 下不挂载，切换 tab 后需主动拉取）
+  await nextTick()
+  if (route.path === '/home') {
+    await aiChatStore.loadAiChats()
+    await nextTick()
+    homeRightSidebarRef.value?.refreshClipHistory?.()
+  }
 })
+
+/** 从字幕剪辑切回 AI 时右侧栏重新挂载，需拉取 topic 列表与剪辑历史 */
+watch(
+  () => route.path,
+  async (path) => {
+    if (path !== '/home') return
+    await aiChatStore.loadAiChats()
+    await nextTick()
+    homeRightSidebarRef.value?.refreshClipHistory?.()
+  }
+)
 
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
   aiChatStore.setOnNewChatCallback(null)
   if (stopReconnectWatch) stopReconnectWatch()
 })
+
+/** AI 对话列表按当前工作区过滤；切换工作区后重拉 topic */
+watch(
+  currentSelectedWorkspace,
+  (ws) => {
+    aiChatStore.setWorkspaceScope(ws?.id ?? null)
+    if (route.path === '/home') {
+      void aiChatStore.loadAiChats()
+    }
+  },
+  { immediate: true }
+)
 
 const LAST_VIEW_MODE_KEY = 'home.lastViewMode'
 
@@ -176,19 +213,40 @@ const handleSend = async (val: string): Promise<void> => {
   // 识别到剪辑意图后，直接进入智能剪辑流程（会创建对话、添加用户消息并执行剪辑；传入 recognize 结果供主播/产品匹配不到时用关键词兜底）
   const intent = intentPayload?.intent as IntentType | undefined
   if (intent === INTENT_CLIP) {
-    await smartCutAiService.startSmartCut(trimmed, undefined, {
-      keywords: intentPayload.keywords,
-      keyword_weights: intentPayload.keyword_weights
-    })
+    await smartCutAiService.startSmartCut(
+      trimmed,
+      { workspaceId: currentSelectedWorkspace.value?.id ?? null },
+      {
+        keywords: intentPayload.keywords,
+        keyword_weights: intentPayload.keyword_weights
+      }
+    )
     return
   }
 
-  // 如果没有当前对话，才创建新对话
+  // 如果没有当前对话，才创建新对话（未选工作区时在对话中提示，不请求后端）
   let currentAiChatId = aiChatStore.getCurrentAiChatId().value
   if (!currentAiChatId) {
     const topic = trimmed.length > 30 ? trimmed.slice(0, 30) + '…' : trimmed
-    await aiChatStore.createAiChat(topic || '新对话')
-    currentAiChatId = aiChatStore.getCurrentAiChatId().value
+    const created = await aiChatStore.createAiChat(topic || '新对话')
+    if (!created) {
+      const userMsgId = `new_message_${Date.now()}`
+      aiChatStore.addMessage({
+        id: userMsgId,
+        role: 'user',
+        content: trimmed,
+        timestamp: new Date(),
+        payload: intentPayload ?? undefined
+      })
+      aiChatStore.addMessage({
+        id: `assistant_${Date.now()}`,
+        role: 'assistant',
+        content: WORKSPACE_REQUIRED_TIP,
+        timestamp: new Date()
+      })
+      return
+    }
+    currentAiChatId = created.id
   }
 
   const userMsgId = `new_message_${Date.now()}`
@@ -209,7 +267,8 @@ const handleSend = async (val: string): Promise<void> => {
   }
 
   if (intent === INTENT_SEARCH) {
-    const searchRes = await searchVideosApi(trimmed, 5)
+    const workspaceId = currentSelectedWorkspace.value?.id ?? undefined
+    const searchRes = await searchVideosApi(trimmed, 5, null, workspaceId)
     const summary =
       searchRes.results.length > 0
         ? `共找到 ${searchRes.results.length} 个相关视频`
@@ -293,9 +352,7 @@ const handleNewChat = (): void => {
             @navigate="navigateTo"
             @toggle-left-collapse="leftSidebarCollapsed = !leftSidebarCollapsed"
             @play-video="handlePlayVideo"
-            @update:selected-anchor="currentSelectedAnchor = $event"
             @update:selected-workspace="currentSelectedWorkspace = $event"
-            @select-product="currentSelectedProduct = $event"
             @click-video="quickClipRef?.scrollToVideoSubtitles?.($event)"
             @videos-updated="onVideosUpdated"
           />
@@ -328,7 +385,6 @@ const handleNewChat = (): void => {
             </div>
           </div>
 
-          <VideoUploadChatModal v-model:show="showUploadModal" @success="handleUploadSuccess" />
         </n-layout-content>
 
         <n-layout-sider
@@ -345,7 +401,7 @@ const handleNewChat = (): void => {
             :ai-chats="aiChats"
             :is-loading-ai-chats="isLoadingAiChats"
             :collapsed="rightSidebarCollapsed"
-            :current-anchor="currentSelectedAnchor"
+            :current-workspace="currentSelectedWorkspace"
             @select-chat="handleSelectChat"
             @new-chat="handleNewChat"
             @toggle="rightSidebarCollapsed = !rightSidebarCollapsed"

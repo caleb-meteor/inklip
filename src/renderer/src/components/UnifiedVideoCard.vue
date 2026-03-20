@@ -4,8 +4,10 @@ import { NIcon, NEllipsis } from 'naive-ui'
 import { FolderOutline, PersonOutline, CubeOutline } from '@vicons/ionicons5'
 import UnifiedVideoPreview from './UnifiedVideoPreview.vue'
 import { normalizeVideo, type UnifiedVideoSource } from '../utils/unifiedVideo'
-import type { DictItem } from '../api/dict'
 import type { VideoParseProgress } from '../stores/realtime'
+
+/** 角标展示用（原字典/主播/产品标签已废弃，保留 props 以兼容旧用法） */
+type BadgeLabel = { id: number; name: string }
 
 const props = withDefaults(
   defineProps<{
@@ -14,9 +16,9 @@ const props = withDefaults(
     selected?: boolean
     aspectRatio?: string
     showBadges?: boolean
-    group?: DictItem | null
-    anchor?: DictItem | null
-    product?: DictItem | null
+    group?: BadgeLabel | null
+    anchor?: BadgeLabel | null
+    product?: BadgeLabel | null
     parseProgress?: VideoParseProgress | null
   }>(),
   {

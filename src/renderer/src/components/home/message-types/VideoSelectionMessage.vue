@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, type PropType } from 'vue'
-import UnifiedVideoPreview from '../../UnifiedVideoPreview.vue'
+import { ref, computed, type PropType } from 'vue'
+import VideoOpCard from '../VideoOpCard.vue'
 
 const props = defineProps({
   messageId: {
@@ -44,38 +44,41 @@ const selectedVideos = ref<Set<number>>(new Set())
 /** 视频是否已删除（路径缺失） */
 const isVideoDeleted = (v: any) => !v?.path && !v?.fileUrl
 
+/** 时长仅使用后端写入的 duration（秒） */
+const getDurationSeconds = (video: any): number => {
+  if (!video?.id || isVideoDeleted(video)) return 0
+  const n = Number(video.duration)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+/** 已选视频总时长（秒） */
+const selectedTotalSeconds = computed(() => {
+  let sum = 0
+  for (const id of selectedVideos.value) {
+    const video = props.videos.find((v: any) => v.id === id)
+    if (video) sum += getDurationSeconds(video)
+  }
+  return sum
+})
+
 /**
  * 切换视频选中状态
  */
-const toggleVideoSelection = (videoId: number, duration: number): void => {
+const toggleVideoSelection = (video: any): void => {
+  if (!video?.id || isVideoDeleted(video)) return
+  const videoId = video.id
   const selected = selectedVideos.value.has(videoId)
 
   if (selected) {
     selectedVideos.value.delete(videoId)
   } else {
-    if (selectedVideos.value.size >= 3) {
-      return
+    const dur = getDurationSeconds(video)
+    if (selectedTotalSeconds.value + dur > 30 * 60) {
+      return // 源视频总时长不超过 30 分钟
     }
-
-    // 检查总时长
-    const totalDuration = getSelectedDuration()
-    if (totalDuration + duration > 30 * 60) {
-      return
-    }
-
     selectedVideos.value.add(videoId)
   }
-}
-
-/**
- * 计算已选择的总时长（秒）
- */
-const getSelectedDuration = (): number => {
-  return Array.from(selectedVideos.value).reduce((sum, id) => {
-    const video = props.videos.find((v: any) => v.id === id)
-    if (!video || isVideoDeleted(video)) return sum
-    return sum + (video.duration || 0)
-  }, 0)
+  selectedVideos.value = new Set(selectedVideos.value)
 }
 
 /**
@@ -106,15 +109,13 @@ const handleCancel = (): void => {
     <div v-if="!hideTitle" class="videos-title">
       📹 找到 {{ videos.length }} 个符合条件的视频
       <span v-if="awaitingConfirmation && isInteractive" class="selection-stats">
-        （已选 {{ selectedVideos.size }} / 3 个，{{ formatDurationMinutes(getSelectedDuration()) }}
-        / 30分钟）
+        （已选 {{ selectedVideos.size }} 个，{{ formatDurationMinutes(selectedTotalSeconds) }} / 30分钟）
       </span>
       <span v-if="cancelled" class="cancelled-badge">已取消</span>
     </div>
     <div v-else-if="awaitingConfirmation && isInteractive" class="selection-indicator-bar">
       <span class="selection-stats-inline">
-        已选 {{ selectedVideos.size }} / 3 个，{{ formatDurationMinutes(getSelectedDuration()) }} /
-        30分钟
+        已选 {{ selectedVideos.size }} 个，{{ formatDurationMinutes(selectedTotalSeconds) }} / 30分钟
       </span>
     </div>
     <div class="videos-list-compact">
@@ -131,18 +132,10 @@ const handleCancel = (): void => {
           isInteractive &&
           awaitingConfirmation &&
           !isVideoDeleted(video) &&
-          toggleVideoSelection(video.id, video.duration)
+          toggleVideoSelection(video)
         "
       >
-        <div v-if="awaitingConfirmation && isInteractive" class="video-selection-badge">
-          <div class="checkbox" :class="{ checked: selectedVideos.has(video.id) }">
-            <span v-if="selectedVideos.has(video.id)">✓</span>
-          </div>
-        </div>
-        <UnifiedVideoPreview :video="video" video-type="material" aspect-ratio="9/16" />
-        <div class="compact-card-info">
-          <div class="compact-name">{{ video.filename || video.name }}</div>
-        </div>
+        <VideoOpCard :video="video" class="selection-card-op" />
       </div>
     </div>
     <div v-if="awaitingConfirmation && isInteractive" class="duration-settings">
@@ -207,7 +200,7 @@ const handleCancel = (): void => {
 
 .videos-list-compact {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
 }
 
@@ -244,55 +237,9 @@ const handleCancel = (): void => {
   box-shadow: none;
 }
 
-.video-selection-badge {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 10;
-}
-
-.checkbox {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  color: #fff;
-  transition: all 0.2s ease;
-}
-
-.checkbox.checked {
-  background: linear-gradient(135deg, #4facfe, #00f2fe);
-  border-color: transparent;
-  box-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
-}
-
-.compact-card-info {
-  padding: 8px 6px;
-  background: #18181b;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.compact-name {
-  font-size: 10px;
-  font-weight: 600;
-  color: #efeff1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.compact-duration {
-  font-size: 9px;
-  color: #71717a;
-  font-weight: 500;
+.selection-card-op {
+  width: 100%;
+  max-width: 160px;
 }
 
 .duration-settings {

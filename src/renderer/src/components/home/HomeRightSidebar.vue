@@ -26,7 +26,7 @@ const props = defineProps<{
   aiChats: AiChatTopic[]
   isLoadingAiChats?: boolean
   collapsed?: boolean
-  currentAnchor?: { id: number; name: string } | null
+  currentWorkspace?: { id: number; name: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -100,8 +100,8 @@ const fetchHistory = async () => {
   if (loadingHistory.value || !historyHasMore.value) return
   loadingHistory.value = true
   const doFetch = async () => {
-    const anchorId = props.currentAnchor?.id
-    const res = await getSmartCutsApi(historyPage.value, 20, anchorId)
+    const wid = props.currentWorkspace?.id
+    const res = await getSmartCutsApi(historyPage.value, 20, wid)
     if (historyPage.value === 1) clipHistory.value = res.list
     else clipHistory.value.push(...res.list)
     historyHasMore.value = clipHistory.value.length < res.total
@@ -112,11 +112,11 @@ const fetchHistory = async () => {
   })
 }
 
-/** 重新拉取剪辑历史（用于休眠/长时间未操作后恢复） */
+/** 重新拉取剪辑历史（进入 AI 页、休眠恢复等；不限于当前是否在「剪辑历史」标签） */
 const refreshClipHistory = (): void => {
   historyPage.value = 1
   historyHasMore.value = true
-  if (activeTab.value === 'history') fetchHistory()
+  void fetchHistory()
 }
 
 defineExpose({ refreshClipHistory })
@@ -150,9 +150,10 @@ watch(
           name: latest.name ?? clipHistory.value[idx].name
         }
       } else {
-        // 若当前页中暂时还没有这条记录，但属于当前主播，则插入到最前面
-        const anchorId = props.currentAnchor?.id
-        if (!anchorId || latest.anchor_id === anchorId) {
+        // 若当前页中暂时还没有这条记录，但属于当前工作区，则插入到最前面
+        const wid = props.currentWorkspace?.id
+        const lw = (latest as SmartCutItem).workspace_id
+        if (!wid || lw === wid) {
           clipHistory.value = [latest as SmartCutItem, ...clipHistory.value]
         }
       }
@@ -172,14 +173,13 @@ watch(activeTab, (val) => {
 })
 
 watch(
-  () => props.currentAnchor,
+  () => props.currentWorkspace,
   () => {
     if (activeTab.value === 'history') {
       historyPage.value = 1
       historyHasMore.value = true
       fetchHistory()
     }
-    // 切换主播时不清空剪辑历史，仅在实际请求成功时替换，失败时保留旧数据
   }
 )
 
@@ -406,8 +406,8 @@ const onRecentScroll = (ev: Event) => {
 
       <div v-else class="tab-content" @scroll="onHistoryScroll">
         <div v-if="clipHistory.length === 0" class="history-empty">
-          <div class="empty-text">当前主播下暂无剪辑历史</div>
-          <div v-if="currentAnchor" class="empty-subtext">({{ currentAnchor.name }})</div>
+          <div class="empty-text">当前工作区下暂无剪辑历史</div>
+          <div v-if="currentWorkspace" class="empty-subtext">({{ currentWorkspace.name }})</div>
         </div>
         <div v-else class="history-list">
           <div

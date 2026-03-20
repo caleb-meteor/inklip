@@ -40,6 +40,8 @@ export interface MessageHandlers {
     expiredAt?: string
     /** 用户状态：1=启用，非1=封禁 */
     status?: number
+    /** 与本地 Go 约定：true 表示数据已由云端 SSE 同步到桌面端 */
+    syncedFromCloud?: boolean
   }) => void
   /** 发现新版本（后端通过 SSE 推送），用于弹窗更新；force_update 为 true 时弹窗不可关闭 */
   onVersionUpdate?: (data: {
@@ -51,6 +53,8 @@ export interface MessageHandlers {
   onApiKeyException?: (data: { message?: string }) => void
   /** 工作空间入库完成（ingest 或 watcher 处理完成），前端刷新工作区/视频列表 */
   onWorkspaceUpdated?: (data: { workspace_id: number; added?: number; updated?: number; deleted?: number }) => void
+  /** 字幕剪辑批量导出：FFmpeg -progress 解析后的百分比 */
+  onExportSegmentsProgress?: (data: { export_request_id: string; percentage: number }) => void
 }
 
 export class RealtimeMessageHandler {
@@ -95,6 +99,9 @@ export class RealtimeMessageHandler {
       case 'workspace_ingest_done':
       case 'workspace_files_updated':
         this.handleWorkspaceUpdated(data)
+        break
+      case 'export_segments_progress':
+        this.handleExportSegmentsProgress(data)
         break
       default:
         console.log('Unknown message type:', data.type, data)
@@ -156,7 +163,8 @@ export class RealtimeMessageHandler {
       remainingSeconds: data.remainingSeconds,
       isVip: data.isVip,
       expiredAt: data.expiredAt,
-      status: data.status
+      status: data.status,
+      syncedFromCloud: data.syncedFromCloud
     })
   }
 
@@ -180,6 +188,15 @@ export class RealtimeMessageHandler {
       added: data.added,
       updated: data.updated,
       deleted: data.deleted
+    })
+  }
+
+  private handleExportSegmentsProgress(data: any): void {
+    const id = data.export_request_id
+    if (id == null || id === '') return
+    this.handlers.onExportSegmentsProgress?.({
+      export_request_id: String(id),
+      percentage: Math.min(100, Math.max(0, Number(data.percentage) || 0))
     })
   }
 }

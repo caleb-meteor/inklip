@@ -37,32 +37,11 @@ export interface VideoItem {
   updated_at: string
 }
 
-export interface VideoUploadResponse {
-  id: number
-  path: string
-  name?: string
-  size: number
-  cover?: string
-  duration?: number
-  width?: number
-  height?: number
-  status?: number
-  parse_percentage?: number
-  anchor_id?: number
-  product_id?: number
-  created_at?: string
-  updated_at: string
-}
-
 /**
- * 获取视频列表，支持按 ids / workspace_id / anchor_id / product_id 筛选；anchor_id 非必填
- * @param params 可选筛选条件
- * @returns Promise with list of videos
+ * 获取视频列表，支持按 ids / workspace_id 筛选
  */
 export function getVideosApi(params?: {
   ids?: number[]
-  anchor_id?: number
-  product_id?: number
   workspace_id?: number
 }): Promise<VideoItem[]> {
   return request({
@@ -101,20 +80,18 @@ export interface VideoSearchResponse {
 
 /**
  * 全文搜索视频（字幕 + 名称，带关键词权重）
- * @param query 搜索词
- * @param limit 返回条数
- * @param anchorId 可选：限定在指定主播下的视频中搜索
  */
 export function searchVideosApi(
   query: string,
   limit?: number,
-  anchorId?: number | null
+  _deprecatedAnchor?: number | null,
+  workspaceId?: number | null
 ): Promise<VideoSearchResponse> {
-  const data: { query: string; limit: number; anchor_id?: number } = {
+  const data: { query: string; limit: number; workspace_id?: number } = {
     query: query.trim(),
     limit: limit ?? 50
   }
-  if (anchorId != null && anchorId > 0) data.anchor_id = anchorId
+  if (workspaceId != null && workspaceId > 0) data.workspace_id = workspaceId
   return request({
     url: '/api/videos/search',
     method: 'post',
@@ -181,34 +158,6 @@ export function exportSegmentApi(
   })
 }
 
-/**
- * Upload multiple video files by their local paths
- * @param paths Array of absolute paths of video files
- * @param categoryIds Optional list of category IDs to assign to all videos
- * @param subtitleFiles Optional map of video path to subtitle file path
- * @returns Promise with array of upload responses (Python backend) or object with videos array (Go backend)
- */
-export function uploadVideosBatchApi(
-  paths: string[],
-  subtitleFiles?: Record<string, string>,
-  anchorId?: number,
-  productId?: number
-): Promise<
-  VideoUploadResponse[] | { videos: VideoUploadResponse[]; task_ids?: string[]; status?: string }
-> {
-  return request({
-    url: '/api/video/upload/batch',
-    method: 'post',
-    data: {
-      video_paths: paths,
-      subtitle_files: subtitleFiles,
-      anchor_id: anchorId,
-      product_id: productId
-    },
-    timeout: 10 * 60 * 1000 // 10 minutes in milliseconds
-  })
-}
-
 export interface SmartCutResponse {
   id: number // ai_gen_video 的 ID
   task_id?: number
@@ -217,23 +166,10 @@ export interface SmartCutResponse {
 }
 
 /**
- * Start smart cut processing for selected videos
- * @param videoIds Array of video IDs to process
- * @param anchorId Anchor ID (required)
- * @param productId Product ID (required)
- * @param productName Product name (required)
- * @param minDuration Optional minimum duration of the output video in seconds
- * @param maxDuration Optional maximum duration of the output video in seconds
- * @param prompt Optional editing ideas or instructions
- * @param promptBuiltId Optional built-in prompt ID (0 for custom prompt)
- * @param aiChatId Optional AI 对话 ID，后端用于完成/异常时标记该会话下任务卡片未读
- * @returns Promise with smart cut task response
+ * Start smart cut processing for selected videos（工作区素材，不再传主播/产品）
  */
 export function smartCutApi(
   videoIds: number[],
-  anchorId: number,
-  productId: number,
-  productName: string,
   minDuration?: number,
   maxDuration?: number,
   prompt?: string,
@@ -242,9 +178,6 @@ export function smartCutApi(
 ): Promise<SmartCutResponse> {
   const data: Record<string, unknown> = {
     video_ids: videoIds,
-    anchor_id: anchorId,
-    product_id: productId,
-    product_name: productName,
     min_duration: minDuration,
     max_duration: maxDuration,
     prompt_text: prompt,
@@ -262,10 +195,15 @@ export function smartCutApi(
 }
 export interface SmartCutItem {
   id: number
+  workspace_id?: number
+  anchor_id?: number
+  product_id?: number
   user_id: number
   name: string
   subtitle: string | any // Can be array or string
   path: string
+  /** 部分历史数据或接口可能仍返回 fileUrl */
+  fileUrl?: string
   size?: number
   cover?: string
   duration?: number
@@ -278,7 +216,10 @@ export interface SmartCutItem {
 
 /** 首页播放载荷：区分素材/智能剪辑/导出历史，以便无字幕时正确拉取字幕接口 */
 export type HomePlayPayload = {
-  video: VideoItem | SmartCutItem | { id: number; name: string; path: string }
+  video:
+    | VideoItem
+    | SmartCutItem
+    | { id: number; name: string; path: string; subtitle?: string | any }
   videoType: 'material' | 'edited' | 'exported'
 }
 
@@ -290,18 +231,12 @@ export interface SmartCutsResponse {
 }
 
 /**
- * Get smart cut history with pagination
- * @param page Page number
- * @param pageSize Items per page
- * @param anchorId Filter by anchor
- * @param productId Filter by product
- * @returns Promise with paginated smart cut items
+ * Get smart cut history with pagination（按工作区筛选）
  */
 export function getSmartCutsApi(
   page: number,
   pageSize: number,
-  anchorId?: number,
-  productId?: number
+  workspaceId?: number
 ): Promise<SmartCutsResponse> {
   return request({
     url: '/api/smart-cuts',
@@ -309,8 +244,7 @@ export function getSmartCutsApi(
     params: {
       page,
       page_size: pageSize,
-      anchor_id: anchorId,
-      product_id: productId
+      ...(workspaceId != null && workspaceId > 0 ? { workspace_id: workspaceId } : {})
     }
   })
 }
@@ -360,20 +294,6 @@ export function renameVideoApi(id: number, name: string): Promise<VideoItem> {
 }
 
 /**
- * 更新视频关联产品
- */
-export function updateVideoProductApi(videoId: number, productId: number): Promise<VideoItem> {
-  return request({
-    url: '/api/video/product',
-    method: 'put',
-    data: {
-      id: videoId,
-      product_id: productId
-    }
-  })
-}
-
-/**
  * Delete a video
  * @param id Video ID
  * @returns Promise with delete response
@@ -400,27 +320,27 @@ export interface ExportSegmentsRequestItem {
  * 批量导出并拼接视频片段
  * @param suggestedName 可选，自定义导出文件名（如 "我的剪辑.mp4"）
  * @param outputPath 可选，用户通过另存为选择的完整保存路径；若提供则后端直接写入该路径，你可通过 path.dirname(outputPath) 得到目录
+ * @param exportRequestId 可选；若传则后端用 FFmpeg -progress 并通过 SSE 推送 export_segments_progress
  */
 export function exportSegmentsApi(
   segments: ExportSegmentsRequestItem[],
-  options?: { anchorId?: number | null; workspaceId?: number | null },
+  options?: { workspaceId?: number | null },
   suggestedName?: string | null,
-  outputPath?: string | null
+  outputPath?: string | null,
+  exportRequestId?: string | null
 ): Promise<ExportSegmentResult> {
   const data: Record<string, unknown> = { segments }
   if (options?.workspaceId != null && options.workspaceId > 0) {
     data.workspace_id = options.workspaceId
-    data.anchor_id = 0
-  } else if (options?.anchorId != null && options.anchorId > 0) {
-    data.anchor_id = options.anchorId
-  } else {
-    data.anchor_id = 0
   }
   if (suggestedName != null && suggestedName.trim() !== '') {
     data.suggested_name = suggestedName.trim()
   }
   if (outputPath != null && outputPath.trim() !== '') {
     data.output_path = outputPath.trim()
+  }
+  if (exportRequestId != null && exportRequestId.trim() !== '') {
+    data.export_request_id = exportRequestId.trim()
   }
   return request({
     url: '/api/videos/export-segments',
@@ -433,7 +353,8 @@ export function exportSegmentsApi(
 /** 导出视频历史项（与 export_videos 表对应） */
 export interface ExportHistoryItem {
   id: number
-  anchor_id: number
+  workspace_id?: number
+  anchor_id?: number
   suggested_name: string
   output_path: string
   segment_count: number
@@ -441,18 +362,14 @@ export interface ExportHistoryItem {
 }
 
 /**
- * 获取导出视频历史，支持按工作区或主播筛选
+ * 获取导出视频历史（按工作区）
  */
 export function getExportHistoryApi(params: {
   workspace_id?: number
-  anchor_id?: number
 }): Promise<{ list: ExportHistoryItem[] }> {
   const p: Record<string, number> = {}
   if (params.workspace_id != null && params.workspace_id > 0) {
     p.workspace_id = params.workspace_id
-  }
-  if (params.anchor_id != null && params.anchor_id > 0) {
-    p.anchor_id = params.anchor_id
   }
   return request({
     url: '/api/videos/export-history',

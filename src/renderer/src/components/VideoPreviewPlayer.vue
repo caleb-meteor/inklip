@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, useTemplateRef } from 'vue'
 import { FilmOutline, SyncOutline } from '@vicons/ionicons5'
 import { NIcon } from 'naive-ui'
-import { getMediaUrl } from '../utils/media'
 import { useGlobalVideoPreview } from '../composables/useGlobalVideoPreview'
+import { extractVideoCover } from '../utils/extractVideoCover'
 
 const props = withDefaults(
   defineProps<{
@@ -25,37 +25,42 @@ const emit = defineEmits<{
   (e: 'dblclick'): void
 }>()
 
-const videoContainerRef = ref<HTMLElement | null>(null)
-const isHovered = ref(false)
+/** useTemplateRef 保证与 targetContainer 比较时响应式更新正确（Vue 3.5） */
+const videoContainerRef = useTemplateRef<HTMLElement>('videoContainerRef')
 const coverLoadError = ref(false)
+/** 封面仍可从本地 path 提取；时长仅展示后端 duration，不在前端计算 */
+const extractedCover = ref('')
 
 watch(
-  () => props.cover,
-  () => {
+  () => props.path,
+  (path) => {
     coverLoadError.value = false
-  }
+    extractedCover.value = ''
+    if (!path) return
+    extractVideoCover(path)
+      .then((m) => {
+        extractedCover.value = m.coverBase64
+          ? `data:image/jpeg;base64,${m.coverBase64}`
+          : ''
+      })
+      .catch(() => {
+        extractedCover.value = ''
+      })
+  },
+  { immediate: true }
 )
-let hoverTimer: ReturnType<typeof setTimeout> | null = null
-let leaveTimer: ReturnType<typeof setTimeout> | null = null
-
-const { isLoading, hasError, showPreview, hidePreview, isCurrentlyPreviewing } =
+const { isLoading, hasError, showPreview, hidePreview, isCurrentlyPreviewing, targetContainer } =
   useGlobalVideoPreview()
 
-const playAtTime = (startTime: number, endTime?: number): void => {
-  if (!props.path || props.disabled || !videoContainerRef.value) return
-  if (leaveTimer) {
-    clearTimeout(leaveTimer)
-    leaveTimer = null
-  }
-  isHovered.value = true
-  showPreview(props.path, videoContainerRef.value, startTime, false, endTime)
-}
+/** 仅使用前端提取的封面，不使用后端 cover */
+const coverUrl = computed(() =>
+  props.path ? extractedCover.value : ''
+)
 
-defineExpose({
-  playAtTime
-})
-
-const coverUrl = computed(() => getMediaUrl(props.cover))
+/** 时长仅用后端传入的 props.duration */
+const displayDuration = computed(() =>
+  props.duration != null && props.duration > 0 ? props.duration : 0
+)
 
 const onCoverError = (): void => {
   coverLoadError.value = true
@@ -71,6 +76,42 @@ const isDeleted = computed(
 // 是否展示「已删除」UI：父组件可控制，处理中时传 false 以显示处理状态
 const shouldShowDeleted = computed(() => props.showDeletedOverlay !== false && isDeleted.value)
 
+/** 当前卡片是否为全局内联预览的挂载目标（避免切换视频后旧卡片仍显示激活态） */
+const isThisPreviewTarget = computed(
+  () =>
+    !!props.path &&
+    !!videoContainerRef.value &&
+    targetContainer.value === videoContainerRef.value
+)
+
+/** 仅 playAtTime / 显式 showPreview 时展示内联视频，不响应鼠标悬停 */
+const isInlinePreviewActive = computed(
+  () =>
+    !!props.path &&
+    !props.disabled &&
+    !shouldShowDeleted.value &&
+    isCurrentlyPreviewing(props.path) &&
+    isThisPreviewTarget.value
+)
+
+const showPreviewLoading = computed(
+  () =>
+    !!props.path &&
+    isCurrentlyPreviewing(props.path) &&
+    isThisPreviewTarget.value &&
+    isLoading.value
+)
+
+/** startTime 不传时不跳转时间，不从片头强制 seek */
+const playAtTime = (startTime?: number, endTime?: number): void => {
+  if (!props.path || props.disabled || !videoContainerRef.value) return
+  showPreview(props.path, videoContainerRef.value, startTime, false, endTime)
+}
+
+defineExpose({
+  playAtTime
+})
+
 const formatDuration = (seconds?: number): string => {
   if (!seconds) return ''
   const m = Math.floor(seconds / 60)
@@ -84,59 +125,7 @@ const handleDblClick = (e: MouseEvent): void => {
   emit('dblclick')
 }
 
-const handleMouseEnter = (): void => {
-  if (isDeleted.value || props.disabled) return
-
-  if (leaveTimer) {
-    clearTimeout(leaveTimer)
-    leaveTimer = null
-  }
-
-  isHovered.value = true
-
-  if (hoverTimer) {
-    clearTimeout(hoverTimer)
-    hoverTimer = null
-  }
-
-  if (props.path && isCurrentlyPreviewing(props.path)) {
-    return
-  }
-
-  hoverTimer = setTimeout(() => {
-    if (!props.path || !videoContainerRef.value) return
-
-    if (hasError.value && isCurrentlyPreviewing(props.path)) {
-      return
-    }
-
-    showPreview(props.path, videoContainerRef.value!)
-    hoverTimer = null
-  }, 1000)
-}
-
-const handleMouseLeave = (): void => {
-  if (hoverTimer) {
-    clearTimeout(hoverTimer)
-    hoverTimer = null
-    isHovered.value = false
-    return
-  }
-
-  if (leaveTimer) clearTimeout(leaveTimer)
-
-  leaveTimer = setTimeout(() => {
-    isHovered.value = false
-    if (props.path && isCurrentlyPreviewing(props.path)) {
-      hidePreview()
-    }
-    leaveTimer = null
-  }, 5000)
-}
-
 onBeforeUnmount(() => {
-  if (hoverTimer) clearTimeout(hoverTimer)
-  if (leaveTimer) clearTimeout(leaveTimer)
   if (props.path && isCurrentlyPreviewing(props.path)) {
     hidePreview()
   }
@@ -148,8 +137,6 @@ onBeforeUnmount(() => {
     class="video-preview-player"
     :class="{ 'is-deleted': shouldShowDeleted }"
     :style="{ aspectRatio: aspectRatio || '9/16' }"
-    @mouseenter="handleMouseEnter"
-    @mouseleave="handleMouseLeave"
     @dblclick="handleDblClick"
   >
     <!-- Background Area: Cover Image -->
@@ -166,9 +153,9 @@ onBeforeUnmount(() => {
         </n-icon>
       </div>
 
-      <!-- Duration Badge（被删除时不显示） -->
-      <div v-if="duration && !shouldShowDeleted" class="v-duration-badge">
-        {{ formatDuration(duration) }}
+      <!-- Duration Badge（被删除时不显示；时长来自 props，由 normalizeVideo 传入后端 duration） -->
+      <div v-if="displayDuration && !shouldShowDeleted" class="v-duration-badge">
+        {{ formatDuration(displayDuration) }}
       </div>
 
       <!-- 路径为空、封面/视频文件加载失败时显示（处理中不显示） -->
@@ -181,21 +168,13 @@ onBeforeUnmount(() => {
     <div
       ref="videoContainerRef"
       class="video-preview-container"
-      :class="{ active: isHovered && path && !disabled && !shouldShowDeleted }"
-      @mouseenter.stop
-      @mouseleave.stop
+      :class="{ active: isInlinePreviewActive }"
     >
       <Transition name="fade">
-        <div
-          v-if="isHovered && (!path || !isCurrentlyPreviewing(path) || isLoading)"
-          class="loading-indicator"
-        >
+        <div v-if="showPreviewLoading" class="loading-indicator">
           <n-icon class="n-icon-spin" size="18">
             <SyncOutline />
           </n-icon>
-        </div>
-        <div v-else-if="path && isCurrentlyPreviewing(path) && !isLoading" class="preview-tag">
-          预览中
         </div>
       </Transition>
     </div>
@@ -239,19 +218,6 @@ onBeforeUnmount(() => {
 .video-preview-container.active {
   opacity: 1;
   pointer-events: auto;
-}
-
-.preview-tag {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  background: rgba(99, 226, 183, 0.8);
-  color: #000;
-  font-size: 10px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-weight: bold;
-  pointer-events: none;
 }
 
 .loading-indicator {

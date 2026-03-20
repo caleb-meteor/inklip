@@ -18,7 +18,8 @@ const show = computed(
     isHomeRoute.value &&
     !rtStore.isUserBanned &&
     !rtStore.apiKeyExceptionInfo &&
-    !rtStore.isMembershipExpired
+    !rtStore.isMembershipExpired &&
+    (rtStore.userInfoReceivedFromCloud || rtStore.versionUpdateInfo.force_update)
 )
 
 const versionUpdateInfo = computed(() => rtStore.versionUpdateInfo)

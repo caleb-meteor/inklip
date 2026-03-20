@@ -4,15 +4,12 @@ import { NIcon, useMessage, NTooltip } from 'naive-ui'
 import { submitFeedback } from '../../api/report'
 import { SparklesOutline, FolderOpenOutline, VideocamOutline, FlagOutline } from '@vicons/ionicons5'
 import VideoSelectionMessage from './message-types/VideoSelectionMessage.vue'
-import AnchorSelectionMessage from './message-types/AnchorSelectionMessage.vue'
-import ProductSelectionMessage from './message-types/ProductSelectionMessage.vue'
-import VideoUploadMessage from './message-types/VideoUploadMessage.vue'
 import SmartCutResultMessage from './message-types/SmartCutResultMessage.vue'
 import ThinkingStepsMessage from './message-types/ThinkingStepsMessage.vue'
 import TaskCardMessage from './message-types/TaskCardMessage.vue'
 import VideoFilteringTaskMessage from './message-types/VideoFilteringTaskMessage.vue'
 import SearchResultMessage from './message-types/SearchResultMessage.vue'
-import type { Message } from '../../types/chat'
+import type { Message, WorkflowStep, FilterTaskStep } from '../../types/chat'
 import { smartCutAiService } from '../../services/smartCutAiService'
 import { aiChatStore } from '../../services/aiChatStore'
 
@@ -110,14 +107,6 @@ const handleConfirmVideos = async (
 
 const handleCancelVideos = async (msgId: string): Promise<void> => {
   await smartCutAiService.cancelConfirmation(msgId)
-}
-
-const handleConfirmAnchor = async (msgId: string, anchorId: number): Promise<void> => {
-  await smartCutAiService.confirmAnchorAndProceed(msgId, anchorId)
-}
-
-const handleConfirmProduct = async (msgId: string, productId: number): Promise<void> => {
-  await smartCutAiService.confirmProductAndProceed(msgId, productId)
 }
 
 // Optimized typeMessage for faster/fluid output 'like AI'
@@ -253,12 +242,12 @@ const getMessageContent = (msg: Message): string => {
                 <!-- Thinking steps or other interactive elements here -->
                 <ThinkingStepsMessage
                   v-if="msg.role === 'assistant' && msg.payload?.steps && !msg.payload?.type"
-                  :steps="msg.payload.steps"
+                  :steps="msg.payload.steps as WorkflowStep[]"
                 />
 
                 <VideoFilteringTaskMessage
                   v-if="msg.payload?.type === 'video_filter_task' && msg.payload?.steps"
-                  :steps="msg.payload.steps"
+                  :steps="msg.payload.steps as FilterTaskStep[]"
                 />
 
                 <!-- TaskCardMessage is already rendered inside SmartCutResultMessage if aiGenVideoId exists -->
@@ -271,49 +260,17 @@ const getMessageContent = (msg: Message): string => {
                   :steps="msg.payload.taskCard.steps"
                 />
 
-                <!-- ... existing interactive components ... -->
-                <VideoUploadMessage
-                  v-if="msg.payload?.type === 'video_upload' && msg.payload?.videos"
-                  :videos="msg.payload.videos"
-                />
-
                 <SearchResultMessage
                   v-if="msg.payload?.type === 'search_result' && msg.payload?.results"
                   :results="msg.payload.results"
                   :keywords="msg.payload.keywords || []"
-                  @play-video="(video) => emit('play-video', video)"
-                />
-
-                <AnchorSelectionMessage
-                  v-if="msg.payload?.type === 'anchor_selection' && msg.payload?.anchors?.length"
-                  :message-id="msg.id"
-                  :anchors="msg.payload.anchors"
-                  :awaiting-confirmation="msg.payload?.awaitingConfirmation !== false"
-                  :is-interactive="msg.payload?.isInteractive !== false"
-                  :cancelled="!!msg.payload?.cancelled"
-                  @confirm="(anchorId) => handleConfirmAnchor(msg.id, anchorId)"
-                  @cancel="() => handleCancelVideos(msg.id)"
-                />
-
-                <ProductSelectionMessage
-                  v-if="msg.payload?.type === 'product_selection' && msg.payload?.products?.length"
-                  :message-id="msg.id"
-                  :products="msg.payload.products"
-                  :anchor-name="msg.payload?.anchorName"
-                  :awaiting-confirmation="msg.payload?.awaitingConfirmation !== false"
-                  :is-interactive="msg.payload?.isInteractive !== false"
-                  :cancelled="!!msg.payload?.cancelled"
-                  @confirm="(productId) => handleConfirmProduct(msg.id, productId)"
-                  @cancel="() => handleCancelVideos(msg.id)"
                 />
 
                 <VideoSelectionMessage
                   v-if="
                     msg.payload?.videos &&
                     msg.payload.videos.length > 0 &&
-                    msg.payload?.type !== 'video_upload' &&
-                    msg.payload?.type !== 'anchor_selection' &&
-                    msg.payload?.type !== 'product_selection'
+                    msg.payload?.type !== 'search_result'
                   "
                   :message-id="msg.id"
                   :videos="msg.payload.videos"

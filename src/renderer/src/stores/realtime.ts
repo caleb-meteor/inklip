@@ -19,8 +19,10 @@ export interface UsageInfo {
   isVip: boolean
   /** 过期日期（云端下发的过期时间） */
   expiredAt?: string
-  /** 用户状态：1=启用，非 1（如 0）= 封禁 */
+  /** 用户状态：1=启用，非 1（如 0）= 封禁（仅在与云端同步后由后端下发） */
   status?: number
+  /** 与 inklip-base-go 对齐：true 表示用量来自「本地 Go ← 云端 SSE」 */
+  syncedFromCloud?: boolean
 }
 
 /** 版本更新信息（SSE type=version_update）；force_update 为 true 时弹窗不可关闭 */
@@ -28,6 +30,12 @@ export interface VersionUpdateInfo {
   version: string
   force_update: boolean
   changelog: string
+}
+
+/** 批量导出拼接进度（SSE type=export_segments_progress） */
+export interface ExportSegmentsProgressEvent {
+  export_request_id: string
+  percentage: number
 }
 
 /** 判断余量是否可用：是 VIP、未过期、且有剩余额度 */
@@ -50,6 +58,9 @@ export const useRealtimeStore = defineStore('realtime', () => {
   /** 正在选择/切换工作目录时为 true，用于抑制 QuickClip 等组件的重复视频请求 */
   const workspaceSelecting = ref(false)
 
+  /** 最近一次导出进度（按 export_request_id 由 QuickClip 自行比对） */
+  const exportSegmentsProgress = ref<ExportSegmentsProgressEvent | null>(null)
+
   /** 后端 HTTP 基地址，例如 http://127.0.0.1:12698 */
   const baseUrl = ref<string>(import.meta.env.VITE_API_URL || '')
 
@@ -62,7 +73,8 @@ export const useRealtimeStore = defineStore('realtime', () => {
     remainingSeconds: 0,
     isVip: false,
     expiredAt: undefined,
-    status: undefined
+    status: undefined,
+    syncedFromCloud: false
   })
 
   /** 新版本信息（后端 SSE 推送）；有值时显示更新弹窗，force_update 时不可关闭 */
@@ -71,16 +83,33 @@ export const useRealtimeStore = defineStore('realtime', () => {
   /** API Key 异常（如设备超限）；有值时弹窗不可关闭，提示用户更换 API Key */
   const apiKeyExceptionInfo = ref<{ message: string } | null>(null)
 
-  /** 是否已从云端拿到当前 API Key 对应用户信息（收到 usage_info 后为 true） */
-  const userInfoReceivedFromCloud = ref(false)
+  /**
+   * 是否已从云端拿到当前 API Key 对应用户信息（完全由 usageInfo 推导，避免与 ref 双写不同步）。
+   * - syncedFromCloud === true → 已同步
+   * - syncedFromCloud === false → 本地占位，未同步
+   * - syncedFromCloud 缺省（旧后端）→ 有 status 则视为已同步
+   */
+  const userInfoReceivedFromCloud = computed(() => {
+    const u = usageInfo.value
+    if (u.syncedFromCloud === true) return true
+    if (u.syncedFromCloud === false) return false
+    return u.status !== undefined
+  })
 
   const isVipAvailable = computed(() => isUsageAvailable(usageInfo.value))
 
-  /** 用户是否被封禁：未拿到用户信息时视为封禁；已收到用量信息且 status !== 1 也为封禁 */
+  /**
+   * 尚未收到云端 usage_info（启动后 SSE 首次同步前）。
+   * 与「封禁」区分：未拿到信息时展示「待激活」，不视为已封禁。
+   */
+  const isAwaitingCloudActivation = computed(() => !userInfoReceivedFromCloud.value)
+
+  /** 用户是否被封禁：仅在与云端已同步且明确下发 status !== 1 时为 true */
   const isUserBanned = computed(
     () =>
-      !userInfoReceivedFromCloud.value ||
-      (usageInfo.value.status !== undefined && usageInfo.value.status !== 1)
+      userInfoReceivedFromCloud.value &&
+      usageInfo.value.status !== undefined &&
+      usageInfo.value.status !== 1
   )
 
   /** 会员是否已到期：已下发过期时间且当前时间超过 expiredAt */
@@ -211,8 +240,36 @@ export const useRealtimeStore = defineStore('realtime', () => {
         videoUploaded.value = Date.now()
       },
       onUsageInfo: (data) => {
-        usageInfo.value = data
-        userInfoReceivedFromCloud.value = true
+        const rawSync = data.syncedFromCloud as boolean | string | undefined
+        const syncedFromCloud: boolean | undefined =
+          rawSync === true || (typeof rawSync === 'string' && rawSync.toLowerCase() === 'true')
+            ? true
+            : rawSync === false || (typeof rawSync === 'string' && rawSync.toLowerCase() === 'false')
+              ? false
+              : undefined
+        const usageSeconds = Number(data.usageSeconds)
+        const dailyLimit = Number(data.dailyLimit)
+        const totalSeconds = Number(data.totalSeconds)
+        const remainingSeconds = Number(data.remainingSeconds)
+        const statusNum =
+          data.status === undefined || data.status === null ? undefined : Number(data.status)
+        usageInfo.value = {
+          usageSeconds: Number.isFinite(usageSeconds) ? usageSeconds : 0,
+          dailyLimit: Number.isFinite(dailyLimit) ? dailyLimit : 0,
+          totalSeconds: Number.isFinite(totalSeconds) ? totalSeconds : 0,
+          remainingSeconds: Number.isFinite(remainingSeconds) ? remainingSeconds : 0,
+          isVip: Boolean(data.isVip),
+          expiredAt: data.expiredAt,
+          status: statusNum,
+          syncedFromCloud
+        }
+        // 已能拿到云端用量时清除 API Key 异常，否则弹窗会因 apiKeyExceptionInfo 一直显示
+        const syncedNow =
+          syncedFromCloud === true ||
+          (syncedFromCloud === undefined && statusNum !== undefined)
+        if (syncedNow) {
+          apiKeyExceptionInfo.value = null
+        }
       },
       onVersionUpdate: (data) => {
         versionUpdateInfo.value = data
@@ -222,6 +279,12 @@ export const useRealtimeStore = defineStore('realtime', () => {
       },
       onWorkspaceUpdated: () => {
         workspaceUpdated.value = Date.now()
+      },
+      onExportSegmentsProgress: (data) => {
+        exportSegmentsProgress.value = {
+          export_request_id: data.export_request_id,
+          percentage: data.percentage
+        }
       }
     })
 
@@ -250,7 +313,16 @@ export const useRealtimeStore = defineStore('realtime', () => {
     }
     messageHandler = null
     connected.value = false
-    userInfoReceivedFromCloud.value = false
+    usageInfo.value = {
+      usageSeconds: 0,
+      dailyLimit: 0,
+      totalSeconds: 0,
+      remainingSeconds: 0,
+      isVip: false,
+      expiredAt: undefined,
+      status: undefined,
+      syncedFromCloud: false
+    }
   }
 
   const reauthenticate = (): void => {
@@ -269,12 +341,18 @@ export const useRealtimeStore = defineStore('realtime', () => {
     workspaceSelecting.value = v
   }
 
+  const clearExportSegmentsProgress = (): void => {
+    exportSegmentsProgress.value = null
+  }
+
   return {
     connected,
     smartCutUpdated,
     videoUploaded,
     workspaceUpdated,
     workspaceSelecting,
+    exportSegmentsProgress,
+    clearExportSegmentsProgress,
     baseUrl,
     videoParseProgress,
     setBaseUrl,
@@ -285,6 +363,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     usageInfo,
     userInfoReceivedFromCloud,
     isVipAvailable,
+    isAwaitingCloudActivation,
     isUserBanned,
     isMembershipExpired,
     versionUpdateInfo,

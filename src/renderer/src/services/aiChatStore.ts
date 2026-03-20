@@ -25,6 +25,9 @@ export class AiChatStore {
   private isCurrentChatProcessing: Ref<boolean>
   private aiChatPage: number
 
+  /** 当前工作区 ID（必填）；未选择时不请求列表/创建会话 */
+  private workspaceScopeId: Ref<number | null>
+
   /** 新建/创建聊天后的回调，用于 focus 输入框等 */
   private onNewChatCallback: (() => void) | null = null
 
@@ -40,6 +43,14 @@ export class AiChatStore {
     this.isLoadingAiChats = ref<boolean>(false)
     this.isCurrentChatProcessing = ref<boolean>(false)
     this.aiChatPage = 1
+    this.workspaceScopeId = ref<number | null>(null)
+  }
+
+  /**
+   * 设置当前工作区作用域（切换工作区时由 Home 调用，并应随后 loadAiChats）
+   */
+  setWorkspaceScope(workspaceId: number | null): void {
+    this.workspaceScopeId.value = workspaceId
   }
 
   /**
@@ -127,9 +138,16 @@ export class AiChatStore {
    */
   async loadAiChats(): Promise<void> {
     if (this.isLoadingAiChats.value) return
+    const wid = this.workspaceScopeId.value
+    if (wid === null || wid <= 0) {
+      this.aiChats.value = []
+      this.hasMoreAiChats.value = false
+      this.aiChatPage = 1
+      return
+    }
     this.isLoadingAiChats.value = true
     const doLoad = async () => {
-      const res = await getAiChatListApi(1, 20)
+      const res = await getAiChatListApi(1, 20, wid)
       this.aiChats.value = res.list || []
       this.aiChatPage = 1
       this.hasMoreAiChats.value = this.aiChats.value.length < res.total
@@ -145,9 +163,11 @@ export class AiChatStore {
    */
   async loadMoreAiChats(): Promise<void> {
     if (this.isLoadingAiChats.value || !this.hasMoreAiChats.value) return
+    const wid = this.workspaceScopeId.value
+    if (wid === null || wid <= 0) return
     this.isLoadingAiChats.value = true
     const doLoad = async () => {
-      const res = await getAiChatListApi(this.aiChatPage, 20)
+      const res = await getAiChatListApi(this.aiChatPage, 20, wid)
       if (res.list.length > 0) this.aiChats.value = [...this.aiChats.value, ...res.list]
       this.hasMoreAiChats.value = this.aiChats.value.length < res.total
       if (this.hasMoreAiChats.value) this.aiChatPage++
@@ -180,10 +200,14 @@ export class AiChatStore {
   /**
    * 创建新的 AI 对话
    * 这是所有 AI 流程的共同入口
+   * @returns 未选择工作区时返回 null（不抛错，由调用方在对话中提示用户）
    */
-  /** 创建新对话，网络异常由 request 拦截器统一提示 */
-  async createAiChat(topic: string): Promise<AiChatTopic> {
-    const aiTopic = await createAiChatApi(topic || '新建对话')
+  async createAiChat(topic: string): Promise<AiChatTopic | null> {
+    const wid = this.workspaceScopeId.value
+    if (wid === null || wid <= 0) {
+      return null
+    }
+    const aiTopic = await createAiChatApi(topic || '新建对话', wid)
     this.aiChats.value = [aiTopic, ...this.aiChats.value]
     this.currentAiChatId.value = aiTopic.id
     this.onNewChatCallback?.()

@@ -17,6 +17,7 @@ const isHomeRoute = computed(() => route.path === '/home' || route.path === '/qu
 const show = computed(
   () =>
     isHomeRoute.value &&
+    rtStore.userInfoReceivedFromCloud &&
     !rtStore.isUserBanned &&
     !rtStore.apiKeyExceptionInfo &&
     rtStore.isMembershipExpired

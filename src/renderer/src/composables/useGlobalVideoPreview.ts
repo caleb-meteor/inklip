@@ -7,6 +7,8 @@ const videoElement: Ref<HTMLVideoElement | null> = ref(null)
 const targetContainer: Ref<HTMLElement | null> = ref(null)
 const isLoading: Ref<boolean> = ref(false)
 const hasError: Ref<boolean> = ref(false)
+/** 当前全局预览视频是否处于播放中（非 paused），供 UI 切换播放/暂停按钮 */
+const previewIsPlaying: Ref<boolean> = ref(false)
 let cleanupTimer: ReturnType<typeof setTimeout> | null = null
 let currentEndTime: number | null = null
 
@@ -16,8 +18,10 @@ let currentEndTime: number | null = null
  */
 export function useGlobalVideoPreview(): {
   currentVideoPath: Ref<string | null>
+  targetContainer: Ref<HTMLElement | null>
   isLoading: Ref<boolean>
   hasError: Ref<boolean>
+  previewIsPlaying: Ref<boolean>
   showPreview: (
     path: string,
     container: HTMLElement,
@@ -27,6 +31,8 @@ export function useGlobalVideoPreview(): {
   ) => void
   hidePreview: () => void
   isCurrentlyPreviewing: (path: string) => boolean
+  pauseCurrentPreviewPlayback: () => void
+  resumeCurrentPreviewPlayback: () => void
 } {
   /**
    * Show video preview in the specified container
@@ -104,9 +110,17 @@ export function useGlobalVideoPreview(): {
         }
       })
 
+      videoElement.value.addEventListener('play', () => {
+        previewIsPlaying.value = true
+      })
+      videoElement.value.addEventListener('pause', () => {
+        previewIsPlaying.value = false
+      })
+
       videoElement.value.addEventListener('error', (e) => {
         hasError.value = true
         isLoading.value = false
+        previewIsPlaying.value = false
         // 立即清除 src，防止 404 后浏览器持续发送 Range 请求导致死循环
         if (videoElement.value) {
           videoElement.value.removeAttribute('src')
@@ -178,6 +192,7 @@ export function useGlobalVideoPreview(): {
       }
     }
 
+    previewIsPlaying.value = false
     currentVideoPath.value = null
     targetContainer.value = null
 
@@ -208,12 +223,32 @@ export function useGlobalVideoPreview(): {
     return currentVideoPath.value === path
   }
 
+  /** 仅暂停当前预览，不移除画面与路径（用于卡片「暂停」） */
+  const pauseCurrentPreviewPlayback = (): void => {
+    if (videoElement.value && !videoElement.value.paused) {
+      videoElement.value.pause()
+    }
+  }
+
+  /** 继续播放当前预览（路径不变、视频已在 DOM 中） */
+  const resumeCurrentPreviewPlayback = (): void => {
+    if (videoElement.value && currentVideoPath.value && videoElement.value.paused) {
+      videoElement.value.play().catch((err) => {
+        console.warn('[GlobalVideoPreview] Resume play error:', err)
+      })
+    }
+  }
+
   return {
     currentVideoPath,
+    targetContainer,
     isLoading,
     hasError,
+    previewIsPlaying,
     showPreview,
     hidePreview,
-    isCurrentlyPreviewing
+    isCurrentlyPreviewing,
+    pauseCurrentPreviewPlayback,
+    resumeCurrentPreviewPlayback
   }
 }

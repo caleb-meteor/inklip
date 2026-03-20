@@ -1,30 +1,21 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NButton, NIcon, NSelect, NSpin, NTooltip, useMessage } from 'naive-ui'
-import { VideocamOutline, DocumentTextOutline, SparklesOutline, FolderOpenOutline, TextOutline, CubeOutline } from '@vicons/ionicons5'
+import { NButton, NIcon, NSpin, NTooltip } from 'naive-ui'
+import { DocumentTextOutline, SparklesOutline, FolderOpenOutline, TextOutline } from '@vicons/ionicons5'
 import type { VideoItem } from '../../api/video'
 import {
   getVideoRelatedExportsApi,
   getVideoRelatedSmartCutsApi,
-  updateVideoProductApi,
   type ExportHistoryItem,
   type VideoRelatedSmartCutItem
 } from '../../api/video'
-import { getProductsApi, type Product } from '../../api/product'
-import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
-import { extractVideoMetadata, type VideoMetadata } from '../../utils/extractVideoMetadata'
+import VideoOpCard from './VideoOpCard.vue'
+import { extractVideoCover, type VideoCoverExtract } from '../../utils/extractVideoCover'
 import { parseSubtitleToSegments } from '../../utils/subtitle'
 
 const props = defineProps<{
   video: VideoItem
 }>()
-
-const emit = defineEmits<{
-  (e: 'video-updated', video: VideoItem): void
-}>()
-
-const message = useMessage()
-
 
 function formatDuration(seconds?: number): string {
   if (!seconds) return '-'
@@ -33,16 +24,13 @@ function formatDuration(seconds?: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-const products = ref<Product[]>([])
-const loadingProducts = ref(false)
-const savingProduct = ref(false)
 const relatedExports = ref<ExportHistoryItem[]>([])
 const relatedSmartCuts = ref<VideoRelatedSmartCutItem[]>([])
 const loadingExports = ref(false)
 const loadingSmartCuts = ref(false)
 
-// 卡片内实时提取的元数据（封面、时长等）
-const realtimeMeta = ref<VideoMetadata | null>(null)
+// 卡片内实时提取的封面（不含时长）
+const realtimeMeta = ref<VideoCoverExtract | null>(null)
 const loadingMeta = ref(false)
 
 async function fetchRealtimeMeta() {
@@ -51,7 +39,7 @@ async function fetchRealtimeMeta() {
   loadingMeta.value = true
   realtimeMeta.value = null
   try {
-    realtimeMeta.value = await extractVideoMetadata(path)
+    realtimeMeta.value = await extractVideoCover(path)
   } catch {
     // 提取失败则使用后端数据
   } finally {
@@ -59,7 +47,7 @@ async function fetchRealtimeMeta() {
   }
 }
 
-// 展示用视频对象：优先使用实时提取的封面/时长
+// 展示用视频对象：封面可本地提取；时长只用后端
 const displayVideo = computed(() => {
   const v = props.video
   if (!v) return v
@@ -68,13 +56,11 @@ const displayVideo = computed(() => {
   return {
     ...v,
     cover: v.cover || (m.coverBase64 ? `data:image/jpeg;base64,${m.coverBase64}` : v.cover),
-    duration: v.duration || m.duration
+    duration: v.duration
   }
 })
 
-const displayDuration = computed(() =>
-  formatDuration(realtimeMeta.value?.duration ?? props.video?.duration)
-)
+const displayDuration = computed(() => formatDuration(props.video?.duration))
 
 function displayPath(path: string | undefined): string {
   if (!path) return '-'
@@ -114,62 +100,23 @@ async function fetchRelated() {
   }
 }
 
-async function fetchProducts() {
-  const wid = props.video?.workspace_id
-  if (!wid) {
-    products.value = []
-    return
-  }
-  loadingProducts.value = true
-  try {
-    const res = await getProductsApi({ all: true, workspace_id: wid })
-    products.value = res?.list ?? []
-  } catch {
-    products.value = []
-  } finally {
-    loadingProducts.value = false
-  }
-}
-
-async function handleProductChange(value: number | null) {
-  if (!props.video?.id) return
-  const productId = value ?? 0
-  savingProduct.value = true
-  try {
-    const updated = await updateVideoProductApi(props.video.id, productId)
-    emit('video-updated', updated)
-    message.success(productId ? '已标记产品' : '已取消')
-  } catch {
-    message.error('保存失败')
-  } finally {
-    savingProduct.value = false
-  }
-}
-
-const productOptions = computed(() =>
-  products.value.map((p) => ({ label: p.name, value: p.id }))
-)
-
 watch(
   () => [props.video?.id, props.video?.path] as const,
   ([id, path]) => {
-    if (id) {
-      fetchRelated()
-      fetchProducts()
-    }
+    if (id) fetchRelated()
     if (path) fetchRealtimeMeta()
   },
   { immediate: true }
 )
 
-const previewRef = ref<InstanceType<typeof UnifiedVideoPreview> | null>(null)
+const cardRef = ref<InstanceType<typeof VideoOpCard> | null>(null)
 
 function handlePlay() {
-  previewRef.value?.playAtTime?.(0)
+  // 预览由 VideoOpCard 内触发，不再从片头 seek；此处保留钩子供扩展
 }
 
 function handleSubtitleClick(seg: { fromS: number; toS: number }) {
-  previewRef.value?.playAtTime?.(seg.fromS, seg.toS)
+  cardRef.value?.playAtTime?.(seg.fromS, seg.toS)
 }
 
 function openInFolder() {
@@ -183,40 +130,12 @@ function openInFolder() {
     <div class="video-op-layout">
       <!-- 左侧：视频 + 字幕 -->
       <div class="video-op-media">
-      <div class="video-op-card-wrap">
-        <div class="video-op-card">
-          <UnifiedVideoPreview
-            ref="previewRef"
-            :video="displayVideo"
-            video-type="material"
-            aspect-ratio="9/16"
-            :show-overlay="true"
-            :hide-pending-processing="true"
-            :allow-play-when-pending="true"
-          />
-        </div>
-        <n-button type="primary" size="medium" class="play-btn" @click="handlePlay">
-          <n-icon size="16"><VideocamOutline /></n-icon>
-          播放
-        </n-button>
-        <div class="product-block">
-          <span class="product-block-label">
-            <n-icon size="11"><CubeOutline /></n-icon>
-            产品
-          </span>
-          <n-select
-            :value="props.video?.product_id ?? null"
-            :options="productOptions"
-            :loading="loadingProducts || savingProduct"
-            size="small"
-            filterable
-            clearable
-            placeholder="搜索或选择"
-            class="product-select"
-            @update:value="handleProductChange"
-          />
-        </div>
-      </div>
+      <VideoOpCard
+        ref="cardRef"
+        :video="video"
+        :display-video="displayVideo"
+        @play="handlePlay"
+      />
         <div v-if="subtitleSegments.length" class="video-op-subtitle">
           <div class="subtitle-header">
             <n-icon size="14"><TextOutline /></n-icon>
@@ -345,80 +264,6 @@ function openInFolder() {
   gap: 12px;
   align-items: flex-start;
   flex-shrink: 0;
-}
-
-.video-op-card-wrap {
-  flex-shrink: 0;
-  width: 160px;
-}
-
-.video-op-card {
-  position: relative;
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--ev-c-black-mute, #282828);
-  aspect-ratio: 9/16;
-}
-
-.play-btn {
-  margin-top: 10px;
-  width: 100%;
-  height: 36px;
-  font-weight: 500;
-  border-radius: 8px;
-}
-
-/* 产品选择 - 与播放按钮视觉一致 */
-.product-block {
-  margin-top: 10px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.product-block-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ev-c-text-2, rgba(235, 235, 245, 0.6));
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.product-select {
-  flex: 1;
-  min-width: 0;
-}
-
-.product-select :deep(.n-base-selection) {
-  border-radius: 6px;
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  transition: border-color 0.2s, background 0.2s;
-}
-
-.product-select :deep(.n-base-selection:hover),
-.product-select :deep(.n-base-selection.n-base-selection--focus) {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.product-select :deep(.n-base-selection__state-border) {
-  border-radius: 6px;
-}
-
-.product-select :deep(.n-base-selection-input__content) {
-  color: var(--ev-c-text-1, rgba(255, 255, 245, 0.9));
-}
-
-.product-select :deep(.n-base-selection-placeholder) {
-  color: var(--ev-c-text-3, rgba(235, 235, 245, 0.38));
 }
 
 .video-op-info {
