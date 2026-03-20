@@ -20,10 +20,10 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0(electron@40.6.1)
       '@fontsource/inter':
-        specifier: ^5.1.0
+        specifier: ^5.2.8
         version: 5.2.8
       '@fontsource/noto-sans-sc':
-        specifier: ^5.1.0
+        specifier: ^5.2.9
         version: 5.2.9
       '@vicons/ionicons5':
         specifier: ^0.13.0
