@@ -29,9 +29,6 @@ export interface VideoItem {
   sha256: string
   parse_percentage?: number
   group_id?: number
-  categories?: Array<{ id: number; name: string; type: string }>
-  anchor_id?: number
-  product_id?: number
   workspace_id?: number
   created_at: string
   updated_at: string
@@ -196,8 +193,6 @@ export function smartCutApi(
 export interface SmartCutItem {
   id: number
   workspace_id?: number
-  anchor_id?: number
-  product_id?: number
   user_id: number
   name: string
   subtitle: string | any // Can be array or string
@@ -354,7 +349,6 @@ export function exportSegmentsApi(
 export interface ExportHistoryItem {
   id: number
   workspace_id?: number
-  anchor_id?: number
   suggested_name: string
   output_path: string
   segment_count: number
