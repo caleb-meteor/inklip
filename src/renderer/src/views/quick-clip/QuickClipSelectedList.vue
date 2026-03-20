@@ -35,7 +35,7 @@ function openExportFolder(filePath: string) {
           type="error"
           @click="qc.removeSelectedSegments"
         >
-          删除选中 ({{ qc.selectedSegmentIndexes.size }})
+          删除 ({{ qc.selectedSegmentIndexes.size }})
         </n-button>
         <n-button
           size="tiny"

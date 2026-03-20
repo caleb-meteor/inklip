@@ -77,7 +77,6 @@ src/
             ├── ChatInput.vue
             ├── VideoPlayer.vue / VideoPreviewPlayer.vue / UnifiedVideoPreview.vue / UnifiedVideoCard.vue
             ├── VideoStatusOverlay.vue
-            ├── RenameModal.vue / DeleteModal.vue
             └── home/
                 ├── HomeSidebar.vue        # 左侧：锚点/产品/视频树、上传
                 ├── HomeChatMessages.vue   # 中间：消息列表 + 各类消息卡片
