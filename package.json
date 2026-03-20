@@ -58,6 +58,9 @@
     "vue-tsc": "^3.2.5"
   },
   "pnpm": {
+    "overrides": {
+      "@electron/node-gyp": "10.2.0-electron.1"
+    },
     "onlyBuiltDependencies": [
       "electron",
       "esbuild",
