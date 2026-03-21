@@ -15,11 +15,9 @@ export interface VideoItem {
   subtitle: string | any // Backend may return parsed JSON object or string
   feature?: {
     main_content?: string
-    product_name?: string
     pain_points?: string
     selling_points?: string
     price?: string
-    anchor_info?: string
   } | null // 视频特征：字幕提取内容
   audio: string
   silent: string
@@ -81,7 +79,6 @@ export interface VideoSearchResponse {
 export function searchVideosApi(
   query: string,
   limit?: number,
-  _deprecatedAnchor?: number | null,
   workspaceId?: number | null
 ): Promise<VideoSearchResponse> {
   const data: { query: string; limit: number; workspace_id?: number } = {
@@ -163,7 +160,7 @@ export interface SmartCutResponse {
 }
 
 /**
- * Start smart cut processing for selected videos（工作区素材，不再传主播/产品）
+ * Start smart cut processing for selected videos（工作区素材）
  * @param workspaceId 必填，与后端 ai_gen_videos.workspace_id 及所选视频的 workspace 一致
  */
 export function smartCutApi(

@@ -26,7 +26,6 @@ export interface SmartCutTaskPayload {
 }
 
 export interface MessagePayload {
-  dicts?: Array<{ id: number; name: string; type?: string }>
   videos?: any[]
   steps?: WorkflowStep[] | FilterTaskStep[]
   smartCutTask?: SmartCutTaskPayload
@@ -59,11 +58,6 @@ export interface MessagePayload {
   // 搜索结果（assistant 消息）
   type?: string
   results?: any[]
-  // 主播多选一（智能剪辑）
-  anchors?: Array<{ id: number; name: string; avatar?: string }>
-  // 产品多选一（智能剪辑）
-  products?: Array<{ id: number; name: string; cover?: string; anchor_id: number }>
-  anchorName?: string
   /** 智能剪辑记录 ID（常与 task_card 并列保存在 payload 根上） */
   aiGenVideoId?: number
   /** 扁平字段：与 smartCutTask 二选一或并存，供 SmartCutResultMessage */
@@ -78,7 +72,6 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   steps?: any[]
-  dicts?: Array<{ id: number; name: string; type?: string }>
   videos?: any[]
   isAnalyzing?: boolean
   payload?: MessagePayload

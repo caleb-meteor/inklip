@@ -247,7 +247,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     }
   }
 
-  /** 加载某次导出视频的字幕片段并填入选择字幕区；视频路径与名称优先从当前主播下的 sourceVideos 解析，保证可正常播放 */
+  /** 加载某次导出视频的字幕片段并填入选择字幕区；视频路径与名称优先从当前 sourceVideos 解析 */
   async function loadExportHistorySubtitles(exportVideoId: number) {
     try {
       const res = await getExportHistorySubtitlesApi(exportVideoId)

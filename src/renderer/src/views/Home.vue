@@ -210,7 +210,7 @@ const handleSend = async (val: string): Promise<void> => {
     keyword_weights: intentResult.keyword_weights
   }
 
-  // 识别到剪辑意图后，直接进入智能剪辑流程（会创建对话、添加用户消息并执行剪辑；传入 recognize 结果供主播/产品匹配不到时用关键词兜底）
+  // 识别到剪辑意图后，直接进入智能剪辑流程（会创建对话、添加用户消息并执行剪辑；传入 recognize 结果作关键词兜底）
   const intent = intentPayload?.intent as IntentType | undefined
   if (intent === INTENT_CLIP) {
     await smartCutAiService.startSmartCut(
@@ -268,7 +268,7 @@ const handleSend = async (val: string): Promise<void> => {
 
   if (intent === INTENT_SEARCH) {
     const workspaceId = currentSelectedWorkspace.value?.id ?? undefined
-    const searchRes = await searchVideosApi(trimmed, 5, null, workspaceId)
+    const searchRes = await searchVideosApi(trimmed, 5, workspaceId)
     const summary =
       searchRes.results.length > 0
         ? `共找到 ${searchRes.results.length} 个相关视频`

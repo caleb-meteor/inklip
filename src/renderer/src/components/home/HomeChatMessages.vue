@@ -793,38 +793,6 @@ const getMessageContent = (msg: Message): string => {
   gap: 8px;
 }
 
-.dict-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.dict-tag {
-  background: #18181b;
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s ease;
-}
-
-.dict-tag:hover {
-  border-color: rgba(79, 172, 254, 0.5);
-  transform: translateY(-1px);
-}
-
-.dict-type-badge {
-  font-size: 11px;
-  background: rgba(79, 172, 254, 0.15);
-  padding: 2px 6px;
-  border-radius: 4px;
-  color: #4facfe;
-  font-weight: 600;
-}
-
 .videos-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

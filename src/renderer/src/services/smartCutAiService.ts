@@ -554,7 +554,7 @@ export class SmartCutAiService {
 
     // 流程：调用搜索接口确定视频 ID
     this.state.chatSteps.value[0].state = 'process'
-    const searchRes = await searchVideosApi(sanitizedPrompt, 20, null, workspaceId ?? undefined)
+    const searchRes = await searchVideosApi(sanitizedPrompt, 20, workspaceId ?? undefined)
 
     if (!searchRes?.results?.length) {
       const errorPayload = {

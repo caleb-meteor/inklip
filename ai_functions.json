@@ -99,10 +99,6 @@
           "type": "string",
           "description": "Editing instructions or creative ideas for the AI."
         },
-        "product_name": {
-          "type": "string",
-          "description": "Optional product name for context."
-        },
         "min_duration": {
           "type": "number",
           "description": "Desired minimum output duration in seconds."
