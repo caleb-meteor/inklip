@@ -54,6 +54,24 @@ fs.writeFileSync(
   'utf-8'
 )
 
+/** 返回 true 表示该路径不打进应用包（白名单之外全部丢弃） */
+function packagerIgnore(relativePath: string): boolean {
+  const p = relativePath.replace(/\\/g, '/')
+  if (p === '' || p === '/') {
+    return false
+  }
+  if (/^\/package\.json$/.test(p)) {
+    return false
+  }
+  if (/^\/dist(\/|$)/.test(p)) {
+    return false
+  }
+  if (/^\/resources(\/|$)/.test(p)) {
+    return false
+  }
+  return true
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
     name: '影氪',
@@ -78,20 +96,9 @@ const config: ForgeConfig = {
           }
         }
       : {}),
-    ignore: [
-      /^\/src/,
-      // 主进程/preload 由 electron-vite 打进 dist（build.externalizeDeps: false）；渲染进程在 dist/renderer。asar 内不再需要 node_modules。
-      // 若主进程/preload 改为 runtime require 某包，需恢复对应路径或对该依赖 externalize。
-      /^\/node_modules(\/|$)/,
-      /^\/assets/,
-      /^\/build/,
-      /^\/website/,
-      /^\/\.vscode/,
-      /^\/\.github/,
-      /^\/\.git/,
-      /^\/out/,
-      /(.eslintrc.json)|(.gitignore)|(electron.vite.config.ts)|(forge.config.ts)|(tsconfig.*)/
-    ]
+    // 白名单：仅 package.json、dist/、resources/ 进 asar；其余（含 node_modules、配置、源码）一律排除。
+    // 使用函数形式时不会套用 packager 默认 ignore，但白名单已覆盖需求。若运行时还要读其它根目录文件，在 packagerIgnore 里放行。
+    ignore: packagerIgnore
   },
   rebuildConfig: {},
   makers: [
