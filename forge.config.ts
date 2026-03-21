@@ -80,7 +80,9 @@ const config: ForgeConfig = {
       : {}),
     ignore: [
       /^\/src/,
-      /^\/resources\/(?!([a-z0-9]+-[a-z0-9]+|icon\.icns|icon\.ico|icon\.png))/, // Allow platform-arch folders and icons
+      // resources：仅允许图片类文件进入 asar；平台二进制、zip 等只走 extraResource，禁止打进 asar
+      /^\/resources$/,
+      /^\/resources\/(?!.+\.(png|jpe?g|gif|webp|bmp|avif|ico|icns|svg)$).+/i,
       /^\/assets/,
       /^\/build/,
       /^\/website/,
@@ -93,7 +95,13 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [
-    new MakerDMG({}, ['darwin']),
+    new MakerDMG(
+      {
+        // 未指定时 electron-installer-dmg 会用内置 electron.icns → 挂载后卷标不是产品图标
+        icon: path.join(__dirname, 'resources', 'icon.icns')
+      },
+      ['darwin']
+    ),
     new MakerZIP({}, ['win32']),
     new MakerAppX(
       {

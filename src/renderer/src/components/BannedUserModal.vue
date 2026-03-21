@@ -24,6 +24,14 @@ const modalKind = computed<'api_key' | 'banned' | 'pending'>(() => {
   return 'pending'
 })
 
+const apiKeyExceptionTitle = computed(() => {
+  const code = rtStore.apiKeyExceptionInfo?.code
+  if (code === 'api_key_device_limit') {
+    return 'API Key 绑定设备数已达上限'
+  }
+  return 'API Key 校验未通过'
+})
+
 const showApiKeyForm = ref(false)
 
 const onShowForm = (): void => {
@@ -94,7 +102,7 @@ const onApiKeySuccess = (): void => {
         <h2 class="header-title">
           {{
             modalKind === 'api_key'
-              ? 'API Key 异常'
+              ? apiKeyExceptionTitle
               : modalKind === 'banned'
                 ? '账号已被封禁'
                 : '待激活'

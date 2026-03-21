@@ -96,7 +96,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
   const versionUpdateInfo = ref<VersionUpdateInfo | null>(null)
 
   /** API Key 异常（如设备超限）；有值时弹窗不可关闭，提示用户更换 API Key */
-  const apiKeyExceptionInfo = ref<{ message: string } | null>(null)
+  const apiKeyExceptionInfo = ref<{ code?: string; message: string } | null>(null)
 
   /**
    * 是否已从云端拿到当前 API Key 对应用户信息（完全由 usageInfo 推导，避免与 ref 双写不同步）。
@@ -278,19 +278,16 @@ export const useRealtimeStore = defineStore('realtime', () => {
           status: statusNum,
           syncedFromCloud
         }
-        // 已能拿到云端用量时清除 API Key 异常，否则弹窗会因 apiKeyExceptionInfo 一直显示
-        const syncedNow =
-          syncedFromCloud === true ||
-          (syncedFromCloud === undefined && statusNum !== undefined)
-        if (syncedNow) {
-          apiKeyExceptionInfo.value = null
-        }
+        // 不因 usage_info 清除 apiKeyException：云端用量与校验接口（如设备绑定上限）可能同时成立，清除会导致弹窗概率性不出现
       },
       onVersionUpdate: (data) => {
         versionUpdateInfo.value = data
       },
       onApiKeyException: (data) => {
-        apiKeyExceptionInfo.value = { message: data.message ?? 'API Key 异常，请更换 API Key 后重试' }
+        apiKeyExceptionInfo.value = {
+          code: data.code,
+          message: data.message ?? 'API Key 异常，请更换 API Key 后重试'
+        }
       },
       onWorkspaceUpdated: () => {
         workspaceUpdated.value = Date.now()

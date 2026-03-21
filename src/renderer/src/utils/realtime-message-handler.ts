@@ -50,7 +50,7 @@ export interface MessageHandlers {
     changelog: string
   }) => void
   /** API Key 异常（如设备超限），后端通过 SSE 推送；弹窗不可关闭，需用户更换 API Key */
-  onApiKeyException?: (data: { message?: string }) => void
+  onApiKeyException?: (data: { code?: string; message?: string }) => void
   /** 工作空间入库完成（ingest 或 watcher 处理完成），前端刷新工作区/视频列表 */
   onWorkspaceUpdated?: (data: { workspace_id: number; added?: number; updated?: number; deleted?: number }) => void
   /** 字幕剪辑批量导出：FFmpeg -progress 解析后的百分比 */
@@ -190,6 +190,7 @@ export class RealtimeMessageHandler {
 
   private handleApiKeyException(data: any): void {
     this.handlers.onApiKeyException?.({
+      code: data.code != null && data.code !== '' ? String(data.code) : undefined,
       message: data.message ?? 'API Key 异常，请更换 API Key 后重试'
     })
   }
