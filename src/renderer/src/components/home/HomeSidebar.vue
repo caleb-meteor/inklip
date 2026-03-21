@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { NIcon, NPopover, useMessage } from 'naive-ui'
+import { NIcon, NPopover, NProgress, useMessage } from 'naive-ui'
 import {
   FolderOpenOutline,
   ChevronForwardOutline,
@@ -43,7 +43,7 @@ const emit = defineEmits<{
 const message = useMessage()
 const route = useRoute()
 const wsStore = useRealtimeStore()
-const { workspaceSelecting: storeWorkspaceSelecting } = storeToRefs(wsStore)
+const { workspaceSelecting: storeWorkspaceSelecting, workspaceIngestProgress } = storeToRefs(wsStore)
 const videos = ref<VideoItem[]>([])
 const WORKSPACE_DIR_STORAGE_KEY = 'inklip_workspace_directory'
 const LAST_WORKSPACE_ID_KEY = 'home.lastWorkspaceId'
@@ -251,6 +251,8 @@ watch(selectedWorkspaceId, async (id) => {
     if (selectedWorkspaceId.value !== id) return
     workspaceVideosLoading.value = false
     return
+  } finally {
+    wsStore.clearWorkspaceIngestProgress()
   }
   if (selectedWorkspaceId.value !== id) return
   loadWorkspaceVideos()
@@ -273,6 +275,23 @@ const workspaceDirectory = ref<string>(
 )
 const workspaceSelecting = ref(false)
 
+function workspaceIngestPhaseText(phase: string): string {
+  switch (phase) {
+    case 'starting':
+      return '正在准备扫描工作空间…'
+    case 'listing':
+      return '正在枚举视频文件…'
+    case 'scanning':
+      return '正在扫描…'
+    case 'cleanup':
+      return '正在清理…'
+    case 'done':
+      return '即将完成…'
+    default:
+      return '正在处理工作空间…'
+  }
+}
+
 /** 路径规范化，用于按路径判断唯一（统一斜杠、去首尾空格） */
 function normalizePath(p: string): string {
   return (p || '').trim().replace(/\\/g, '/')
@@ -290,6 +309,7 @@ const selectWorkspaceDir = async (): Promise<void> => {
     localStorage.setItem(WORKSPACE_DIR_STORAGE_KEY, dir)
     const dirNorm = normalizePath(dir)
     const existing = workspaces.value.find((ws) => normalizePath(ws.path) === dirNorm)
+    wsStore.beginWorkspaceIngestProgress()
     if (existing) {
       selectedWorkspaceId.value = existing.id
       await ingestWorkspaceApi(existing.id)
@@ -304,12 +324,16 @@ const selectWorkspaceDir = async (): Promise<void> => {
   } finally {
     workspaceSelecting.value = false
     wsStore.setWorkspaceSelecting(false)
+    wsStore.clearWorkspaceIngestProgress()
   }
 }
 /** 工作空间切换 Popover 显隐 */
 const showWorkspacePopover = ref(false)
 
 function onSelectWorkspace(ws: WorkspaceItem) {
+  if (ws.id !== selectedWorkspaceId.value) {
+    wsStore.beginWorkspaceIngestProgress()
+  }
   selectWorkspace(ws.id)
   showWorkspacePopover.value = false
 }
@@ -546,8 +570,38 @@ const refreshVideosFromApi = async () => {
             <div class="section-title workspace-tree-title">
               {{ selectedWorkspaceTreeTitle }}
             </div>
-            <div v-if="workspaceVideosLoading" class="workspace-videos-loading">加载中...</div>
-            <div v-else class="workspace-tree">
+          </template>
+          <div v-if="workspaceIngestProgress" class="workspace-ingest-bar">
+            <p class="workspace-ingest-desc">
+              {{ workspaceIngestPhaseText(workspaceIngestProgress.phase ?? '') }}
+            </p>
+            <p
+              v-if="workspaceIngestProgress.file"
+              class="workspace-ingest-file"
+              :title="workspaceIngestProgress.file"
+            >
+              {{ workspaceIngestProgress.file }}
+            </p>
+            <p
+              v-if="(workspaceIngestProgress.total ?? 0) > 0"
+              class="workspace-ingest-count"
+            >
+              {{ workspaceIngestProgress.current ?? 0 }} / {{ workspaceIngestProgress.total ?? 0 }} 个视频文件
+            </p>
+            <n-progress
+              type="line"
+              :percentage="Math.round(workspaceIngestProgress.percentage ?? 0)"
+              :height="8"
+              :border-radius="4"
+              indicator-placement="inside"
+              processing
+            />
+          </div>
+          <template v-if="selectedWorkspaceId">
+            <div v-if="!workspaceIngestProgress && workspaceVideosLoading" class="workspace-videos-loading">
+              加载中...
+            </div>
+            <div v-else-if="!workspaceIngestProgress" class="workspace-tree">
               <template v-if="workspaceTreeFlat.length > 0">
                 <template v-for="item in workspaceTreeFlat" :key="item.node.pathKey">
                   <n-popover
@@ -596,7 +650,7 @@ const refreshVideosFromApi = async () => {
               </div>
             </div>
           </template>
-          <div v-else class="empty-state" style="margin-top: 12px">
+          <div v-else-if="!workspaceIngestProgress" class="empty-state" style="margin-top: 12px">
             <span>请在上方选择工作空间</span>
           </div>
         </div>
@@ -604,11 +658,37 @@ const refreshVideosFromApi = async () => {
 
       <!-- 主播选择区域已移除，仅保留树形结构 -->
     </div>
-
   </div>
 </template>
 
 <style scoped>
+.workspace-ingest-bar {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.workspace-ingest-desc {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.4;
+}
+.workspace-ingest-file {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-ingest-count {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 .chat-sidebar {
   display: flex;
   flex-direction: column;

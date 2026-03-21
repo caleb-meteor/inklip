@@ -469,12 +469,13 @@ export interface ReplicateHitDebugMeta {
 
 /**
  * 爆款复刻：去标点 → jieba → FTS Top30 → Levenshtein 滑窗精排，按原文 offset 输出
+ * 长文案 / 大工作区 FTS 与顺序轮次耗时高，超时与全量扫描类接口对齐为 10 分钟
  */
 export function replicateHitApi(text: string, workspaceId: number | null): Promise<{ results: ReplicateHitMatchItem[] } & ReplicateHitDebugMeta> {
   return request({
     url: '/api/videos/replicate-hit',
     method: 'post',
     data: { text, workspace_id: workspaceId },
-    timeout: 60000
+    timeout: 10 * 60 * 1000
   })
 }

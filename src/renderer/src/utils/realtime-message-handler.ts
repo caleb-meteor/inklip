@@ -55,6 +55,15 @@ export interface MessageHandlers {
   onWorkspaceUpdated?: (data: { workspace_id: number; added?: number; updated?: number; deleted?: number }) => void
   /** 字幕剪辑批量导出：FFmpeg -progress 解析后的百分比 */
   onExportSegmentsProgress?: (data: { export_request_id: string; percentage: number }) => void
+  /** 工作空间目录入库进度（选择目录 / ingest / switch 扫描时由后端 SSE 推送） */
+  onWorkspaceIngestProgress?: (data: {
+    workspace_id: number
+    phase: string
+    current: number
+    total: number
+    percentage: number
+    file?: string
+  }) => void
 }
 
 export class RealtimeMessageHandler {
@@ -102,6 +111,9 @@ export class RealtimeMessageHandler {
         break
       case 'export_segments_progress':
         this.handleExportSegmentsProgress(data)
+        break
+      case 'workspace_ingest_progress':
+        this.handleWorkspaceIngestProgress(data)
         break
       default:
         console.log('Unknown message type:', data.type, data)
@@ -197,6 +209,18 @@ export class RealtimeMessageHandler {
     this.handlers.onExportSegmentsProgress?.({
       export_request_id: String(id),
       percentage: Math.min(100, Math.max(0, Number(data.percentage) || 0))
+    })
+  }
+
+  private handleWorkspaceIngestProgress(data: any): void {
+    const wid = data.workspace_id
+    this.handlers.onWorkspaceIngestProgress?.({
+      workspace_id: wid == null ? 0 : Number(wid),
+      phase: String(data.phase ?? ''),
+      current: Math.max(0, Number(data.current) || 0),
+      total: Math.max(0, Number(data.total) || 0),
+      percentage: Math.min(100, Math.max(0, Number(data.percentage) || 0)),
+      file: data.file != null && data.file !== '' ? String(data.file) : undefined
     })
   }
 }

@@ -38,6 +38,16 @@ export interface ExportSegmentsProgressEvent {
   percentage: number
 }
 
+/** 工作空间目录扫描入库进度（SSE type=workspace_ingest_progress） */
+export interface WorkspaceIngestProgressEvent {
+  workspace_id: number
+  phase: string
+  current: number
+  total: number
+  percentage: number
+  file?: string
+}
+
 /** 判断余量是否可用：是 VIP、未过期、且有剩余额度 */
 export function isUsageAvailable(info: UsageInfo | null | undefined): boolean {
   if (!info?.isVip) return false
@@ -60,6 +70,11 @@ export const useRealtimeStore = defineStore('realtime', () => {
 
   /** 最近一次导出进度（按 export_request_id 由 QuickClip 自行比对） */
   const exportSegmentsProgress = ref<ExportSegmentsProgressEvent | null>(null)
+
+  /** 工作空间 ingest 进度（选择/切换工作空间扫描时由后端 SSE 推送） */
+  const workspaceIngestProgress = ref<WorkspaceIngestProgressEvent | null>(null)
+  /** 为 true 时接受 workspace_ingest_progress（避免无关 ingest 污染 UI） */
+  const workspaceIngestSseEnabled = ref(false)
 
   /** 后端 HTTP 基地址，例如 http://127.0.0.1:12698 */
   const baseUrl = ref<string>(import.meta.env.VITE_API_URL || '')
@@ -285,6 +300,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
           export_request_id: data.export_request_id,
           percentage: data.percentage
         }
+      },
+      onWorkspaceIngestProgress: (data) => {
+        if (!workspaceIngestSseEnabled.value && !workspaceSelecting.value) return
+        workspaceIngestProgress.value = data
       }
     })
 
@@ -313,6 +332,8 @@ export const useRealtimeStore = defineStore('realtime', () => {
     }
     messageHandler = null
     connected.value = false
+    workspaceIngestSseEnabled.value = false
+    workspaceIngestProgress.value = null
     usageInfo.value = {
       usageSeconds: 0,
       dailyLimit: 0,
@@ -345,6 +366,23 @@ export const useRealtimeStore = defineStore('realtime', () => {
     exportSegmentsProgress.value = null
   }
 
+  /** 开始展示工作空间扫描进度（启用 SSE 更新 + 占位状态） */
+  const beginWorkspaceIngestProgress = (): void => {
+    workspaceIngestSseEnabled.value = true
+    workspaceIngestProgress.value = {
+      workspace_id: 0,
+      phase: 'starting',
+      current: 0,
+      total: 0,
+      percentage: 0
+    }
+  }
+
+  const clearWorkspaceIngestProgress = (): void => {
+    workspaceIngestSseEnabled.value = false
+    workspaceIngestProgress.value = null
+  }
+
   return {
     connected,
     smartCutUpdated,
@@ -353,6 +391,9 @@ export const useRealtimeStore = defineStore('realtime', () => {
     workspaceSelecting,
     exportSegmentsProgress,
     clearExportSegmentsProgress,
+    workspaceIngestProgress,
+    beginWorkspaceIngestProgress,
+    clearWorkspaceIngestProgress,
     baseUrl,
     videoParseProgress,
     setBaseUrl,
