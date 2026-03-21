@@ -38,7 +38,7 @@ export interface MessageHandlers {
     isVip: boolean
     /** 过期日期 */
     expiredAt?: string
-    /** 用户状态：1=启用，非1=封禁 */
+    /** 云端对当前 API Key：1=可用，非1=不可用 */
     status?: number
     /** 与本地 Go 约定：true 表示数据已由云端 SSE 同步到桌面端 */
     syncedFromCloud?: boolean
@@ -49,8 +49,6 @@ export interface MessageHandlers {
     force_update: boolean
     changelog: string
   }) => void
-  /** API Key 异常（如设备超限），后端通过 SSE 推送；弹窗不可关闭，需用户更换 API Key */
-  onApiKeyException?: (data: { code?: string; message?: string }) => void
   /** 工作空间入库完成（ingest 或 watcher 处理完成），前端刷新工作区/视频列表 */
   onWorkspaceUpdated?: (data: { workspace_id: number; added?: number; updated?: number; deleted?: number }) => void
   /** 字幕剪辑批量导出：FFmpeg -progress 解析后的百分比 */
@@ -64,6 +62,8 @@ export interface MessageHandlers {
     percentage: number
     file?: string
   }) => void
+  /** 本地 Go 已更新 API Key；activated 由 SSE 载荷携带，无需再 GET /user/api-key */
+  onApiKeySynced?: (detail: { activated: boolean }) => void
 }
 
 export class RealtimeMessageHandler {
@@ -102,9 +102,6 @@ export class RealtimeMessageHandler {
       case 'version_update':
         this.handleVersionUpdate(data)
         break
-      case 'api_key_exception':
-        this.handleApiKeyException(data)
-        break
       case 'workspace_ingest_done':
       case 'workspace_files_updated':
         this.handleWorkspaceUpdated(data)
@@ -114,6 +111,9 @@ export class RealtimeMessageHandler {
         break
       case 'workspace_ingest_progress':
         this.handleWorkspaceIngestProgress(data)
+        break
+      case 'api_key_synced':
+        this.handleApiKeySynced(data)
         break
       default:
         console.log('Unknown message type:', data.type, data)
@@ -188,13 +188,6 @@ export class RealtimeMessageHandler {
     })
   }
 
-  private handleApiKeyException(data: any): void {
-    this.handlers.onApiKeyException?.({
-      code: data.code != null && data.code !== '' ? String(data.code) : undefined,
-      message: data.message ?? 'API Key 异常，请更换 API Key 后重试'
-    })
-  }
-
   private handleWorkspaceUpdated(data: any): void {
     this.handlers.onWorkspaceUpdated?.({
       workspace_id: data.workspace_id ?? 0,
@@ -223,5 +216,12 @@ export class RealtimeMessageHandler {
       percentage: Math.min(100, Math.max(0, Number(data.percentage) || 0)),
       file: data.file != null && data.file !== '' ? String(data.file) : undefined
     })
+  }
+
+  private handleApiKeySynced(data: any): void {
+    const raw = data?.activated
+    const activated =
+      raw === true || (typeof raw === 'string' && raw.toLowerCase() === 'true')
+    this.handlers.onApiKeySynced?.({ activated })
   }
 }

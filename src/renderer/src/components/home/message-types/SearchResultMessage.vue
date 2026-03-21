@@ -48,22 +48,21 @@ const handleExportSegment = async (video: any, seg: SearchSegment, segIndex: num
   if (exportingKey.value) return
   exportingKey.value = key
   const loadingMsg = message.loading('正在导出片段...', { duration: 0 })
-  try {
-    const result = await exportSegmentApi(video.id, seg.start_s, seg.end_s)
-    const saveResult = await window.api.downloadVideo(result.path, result.suggested_name)
-    if (saveResult.success) {
-      message.success(`已保存至: ${saveResult.path}`)
-    } else if (saveResult.canceled) {
-      message.info('已取消保存')
-    } else {
-      message.error(saveResult.error || '导出失败')
-    }
-  } catch (e) {
-    message.error('导出片段失败，请稍后重试')
-  } finally {
-    loadingMsg.destroy()
-    exportingKey.value = null
-  }
+  await exportSegmentApi(video.id, seg.start_s, seg.end_s)
+    .then(async (result) => {
+      const saveResult = await window.api.downloadVideo(result.path, result.suggested_name)
+      if (saveResult.success) {
+        message.success(`已保存至: ${saveResult.path}`)
+      } else if (saveResult.canceled) {
+        message.info('已取消保存')
+      } else {
+        message.error(saveResult.error || '导出失败')
+      }
+    })
+    .finally(() => {
+      loadingMsg.destroy()
+      exportingKey.value = null
+    })
 }
 </script>
 

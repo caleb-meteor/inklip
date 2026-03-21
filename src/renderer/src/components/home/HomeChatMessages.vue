@@ -27,26 +27,20 @@ const emit = defineEmits<{
 const message = useMessage()
 
 const handleReportAIContent = async (msg: Message): Promise<void> => {
-  try {
-    let contentDetail = msg.content
-    if (!contentDetail && msg.payload) {
-      contentDetail = JSON.stringify(msg.payload)
-    }
-    // 防止内容过长，截取前 1000 个字符
-    if (contentDetail && contentDetail.length > 1000) {
-      contentDetail = contentDetail.substring(0, 1000) + '...'
-    }
-    
-    await submitFeedback({
-      type: 'ai_content',
-      reason: '用户在对话中快捷举报了该 AI 回复',
-      detail: `[消息 ID: ${msg.id}]\n内容：${contentDetail}`
-    })
-    message.success('举报已提交，感谢您的反馈')
-  } catch (err) {
-    message.error('举报提交失败，请稍后重试')
-    console.error('快捷举报失败:', err)
+  let contentDetail = msg.content
+  if (!contentDetail && msg.payload) {
+    contentDetail = JSON.stringify(msg.payload)
   }
+  if (contentDetail && contentDetail.length > 1000) {
+    contentDetail = contentDetail.substring(0, 1000) + '...'
+  }
+
+  await submitFeedback({
+    type: 'ai_content',
+    reason: '用户在对话中快捷举报了该 AI 回复',
+    detail: `[消息 ID: ${msg.id}]\n内容：${contentDetail}`
+  })
+  message.success('举报已提交，感谢您的反馈')
 }
 
 const scrollContainer = ref<HTMLElement | null>(null)

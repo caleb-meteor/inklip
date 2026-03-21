@@ -213,12 +213,10 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       exportHistoryList.value = []
       return
     }
-    try {
-      const res = await getExportHistoryApi({ workspace_id: selectedWorkspaceId.value })
-      exportHistoryList.value = res.list || []
-    } catch {
-      exportHistoryList.value = []
-    }
+    const res = await getExportHistoryApi({ workspace_id: selectedWorkspaceId.value }).catch(() => ({
+      list: [] as ExportHistoryItem[]
+    }))
+    exportHistoryList.value = res.list || []
   }
 
   async function loadExportHistory() {
@@ -227,64 +225,52 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       return
     }
     loadingExportHistory.value = true
-    try {
-      await fetchExportHistoryList()
-      showExportHistoryModal.value = true
-    } catch {
-      message.error('加载导出历史失败')
-    } finally {
+    await fetchExportHistoryList().finally(() => {
       loadingExportHistory.value = false
-    }
+    })
+    showExportHistoryModal.value = true
   }
 
   /** 删除一条导出历史记录并刷新列表 */
   async function deleteExportHistory(exportVideoId: number) {
-    try {
-      await deleteExportHistoryApi(exportVideoId)
-      await loadExportHistory()
-    } catch (err: any) {
-      message.error(err?.message || '删除失败')
-    }
+    await deleteExportHistoryApi(exportVideoId)
+    await loadExportHistory()
   }
 
   /** 加载某次导出视频的字幕片段并填入选择字幕区；视频路径与名称优先从当前 sourceVideos 解析 */
   async function loadExportHistorySubtitles(exportVideoId: number) {
-    try {
-      const res = await getExportHistorySubtitlesApi(exportVideoId)
-      const list = res.list || []
-      const videoById = new Map(sourceVideos.value.map(v => [v.id, v]))
-      const segments: SegmentWithVideo[] = list.map((item) => {
-        const srcVideo = videoById.get(item.video_id)
-        const videoPath = srcVideo?.path != null ? getMediaUrl(srcVideo.path) : getMediaUrl(item.path)
-        const videoName = srcVideo?.name ?? item.video_name
-        let segmentIndex = 0
-        if (srcVideo) {
-          const cachedSegs = getVideoSegments(srcVideo)
-          const found = cachedSegs.find(
-            s => s.videoId === item.video_id && Math.abs(s.fromS - item.start_s) < 0.01 && Math.abs(s.toS - item.end_s) < 0.01
-          )
-          if (found) segmentIndex = found.segmentIndex
-        }
-        return {
-          text: item.subtitle_text,
-          fromS: item.start_s,
-          toS: item.end_s,
-          fromMs: item.start_s * 1000,
-          toMs: item.end_s * 1000,
-          videoId: item.video_id,
-          videoName,
-          videoPath,
-          segmentIndex
-        }
-      })
-      selectedSegments.value = segments
-      selectedSegmentIndexes.value.clear()
-      lastSelectedSegmentIndex.value = null
-      selectedSourceKeys.value.clear()
-      lastSelectedSourceKey.value = null
-    } catch {
-      message.error('加载导出字幕失败')
-    }
+    const res = await getExportHistorySubtitlesApi(exportVideoId)
+    const list = res.list || []
+    const videoById = new Map(sourceVideos.value.map(v => [v.id, v]))
+    const segments: SegmentWithVideo[] = list.map((item) => {
+      const srcVideo = videoById.get(item.video_id)
+      const videoPath = srcVideo?.path != null ? getMediaUrl(srcVideo.path) : getMediaUrl(item.path)
+      const videoName = srcVideo?.name ?? item.video_name
+      let segmentIndex = 0
+      if (srcVideo) {
+        const cachedSegs = getVideoSegments(srcVideo)
+        const found = cachedSegs.find(
+          s => s.videoId === item.video_id && Math.abs(s.fromS - item.start_s) < 0.01 && Math.abs(s.toS - item.end_s) < 0.01
+        )
+        if (found) segmentIndex = found.segmentIndex
+      }
+      return {
+        text: item.subtitle_text,
+        fromS: item.start_s,
+        toS: item.end_s,
+        fromMs: item.start_s * 1000,
+        toMs: item.end_s * 1000,
+        videoId: item.video_id,
+        videoName,
+        videoPath,
+        segmentIndex
+      }
+    })
+    selectedSegments.value = segments
+    selectedSegmentIndexes.value.clear()
+    lastSelectedSegmentIndex.value = null
+    selectedSourceKeys.value.clear()
+    lastSelectedSourceKey.value = null
   }
 
   const currentStickyHeader = ref<{ videoId: number; videoName: string } | null>(null)
@@ -392,32 +378,34 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     }
     const offset = append ? searchResults.value.length : 0
     searchLoading.value = true
-    try {
-      const res = await searchSubtitlesApi(q, SEARCH_PAGE_SIZE, offset, workspaceId ?? null)
-      const raw = res.results || []
-      const nextHits =
-        append ? new Map(searchHitVideoById.value) : new Map<number, VideoItem>()
-      for (const row of raw) {
-        const v = row.video as VideoItem
-        if (v?.id) nextHits.set(v.id, v)
-      }
-      searchHitVideoById.value = nextHits
-      const list = raw.map(mapSubtitleItemToSegment)
-      if (append) {
-        searchResults.value = [...searchResults.value, ...list]
-      } else {
-        searchResults.value = list
-      }
-      searchTotal.value = res.total ?? 0
-    } catch {
+    const res = await searchSubtitlesApi(q, SEARCH_PAGE_SIZE, offset, workspaceId ?? null)
+      .catch(() => null)
+      .finally(() => {
+        searchLoading.value = false
+      })
+    if (!res) {
       if (!append) {
         searchResults.value = []
         searchTotal.value = 0
         searchHitVideoById.value = new Map()
       }
-    } finally {
-      searchLoading.value = false
+      return
     }
+    const raw = res.results || []
+    const nextHits =
+      append ? new Map(searchHitVideoById.value) : new Map<number, VideoItem>()
+    for (const row of raw) {
+      const v = row.video as VideoItem
+      if (v?.id) nextHits.set(v.id, v)
+    }
+    searchHitVideoById.value = nextHits
+    const list = raw.map(mapSubtitleItemToSegment)
+    if (append) {
+      searchResults.value = [...searchResults.value, ...list]
+    } else {
+      searchResults.value = list
+    }
+    searchTotal.value = res.total ?? 0
   }
 
   function loadMoreSearchResults() {
@@ -439,32 +427,31 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       ...similarSubtitlesBySegmentKey.value,
       [segmentKey]: { loading: true, results: [] }
     }
-    try {
-      const res = await searchSubtitlesApi(q, SIMILAR_SUBTITLE_LIMIT, 0, workspaceId)
-      const raw = res.results || []
-      const nextHits = new Map(searchHitVideoById.value)
-      for (const row of raw) {
-        const v = row.video as VideoItem
-        if (v?.id) nextHits.set(v.id, v)
-      }
-      searchHitVideoById.value = nextHits
-      const list = raw
-        .map(mapSubtitleItemToSegment)
-        .filter((s) => getSegmentKey(s) !== segmentKey)
-        .slice(0, SIMILAR_SUBTITLE_LIMIT)
-      similarSubtitlesBySegmentKey.value = {
-        ...similarSubtitlesBySegmentKey.value,
-        [segmentKey]: {
-          loading: false,
-          results: list
-        }
-      }
-    } catch {
+    const res = await searchSubtitlesApi(q, SIMILAR_SUBTITLE_LIMIT, 0, workspaceId).catch(() => null)
+    if (!res) {
       similarSubtitlesBySegmentKey.value = {
         ...similarSubtitlesBySegmentKey.value,
         [segmentKey]: { loading: false, results: [] }
       }
-      message.error('相似字幕搜索失败')
+      return
+    }
+    const raw = res.results || []
+    const nextHits = new Map(searchHitVideoById.value)
+    for (const row of raw) {
+      const v = row.video as VideoItem
+      if (v?.id) nextHits.set(v.id, v)
+    }
+    searchHitVideoById.value = nextHits
+    const list = raw
+      .map(mapSubtitleItemToSegment)
+      .filter((s) => getSegmentKey(s) !== segmentKey)
+      .slice(0, SIMILAR_SUBTITLE_LIMIT)
+    similarSubtitlesBySegmentKey.value = {
+      ...similarSubtitlesBySegmentKey.value,
+      [segmentKey]: {
+        loading: false,
+        results: list
+      }
     }
   }
 
@@ -1012,13 +999,9 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       patchSourceVideoSubtitleFromSearchHit(seg.videoId)
     }
     if (!videoHasRenderableSubtitles(seg.videoId)) {
-      try {
-        const list = await getVideosApi({ ids: [seg.videoId] })
-        const v = list[0]
-        if (v) mergeVideoIntoSourceVideos(v)
-      } catch {
-        message.error('加载视频字幕失败')
-      }
+      const list = await getVideosApi({ ids: [seg.videoId] }).catch(() => [] as VideoItem[])
+      const v = list[0]
+      if (v) mergeVideoIntoSourceVideos(v)
     }
     if (!videoHasRenderableSubtitles(seg.videoId)) {
       message.warning('该视频暂无可用字幕数据，无法展示上下文')
@@ -1089,33 +1072,31 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
         if (replicateFlowStep.value >= 1) replicateFlowStep.value = 2
       }, 1400)
     ]
-    try {
-      const res = await replicateHitApi(text, selectedWorkspaceId.value ?? null)
-      if (!res || typeof res !== 'object') {
-        message.error('复刻结果异常')
-        return
+    const res = await replicateHitApi(text, selectedWorkspaceId.value ?? null).catch((e) => {
+      if (isDevRenderer) {
+        console.error('[startReplicate]', e)
       }
+      return undefined
+    })
+    if (res && typeof res === 'object') {
       replicateResults.value = Array.isArray(res.results) ? res.results : []
       replicateDebugMeta.value = {
         debug_outline: res.debug_outline,
         debug_constants: res.debug_constants
       }
-    } catch (e) {
-      // 业务码非 0 / 网络错误已在 request 拦截器里 message.error，此处避免重复弹窗
-      if (isDevRenderer) {
-        console.error('[startReplicate]', e)
-      }
-    } finally {
-      const elapsed = Date.now() - flowStart
-      const remain = Math.max(0, REPLICATE_FLOW_MIN_MS - elapsed)
-      if (remain > 0) {
-        await new Promise((r) => setTimeout(r, remain))
-      }
-      replicateStepTimers.forEach((t) => clearTimeout(t))
-      replicateStepTimers = []
-      replicateFlowStep.value = -1
-      replicateLoading.value = false
+    } else if (res !== undefined) {
+      message.error('复刻结果异常')
     }
+
+    const elapsed = Date.now() - flowStart
+    const remain = Math.max(0, REPLICATE_FLOW_MIN_MS - elapsed)
+    if (remain > 0) {
+      await new Promise((r) => setTimeout(r, remain))
+    }
+    replicateStepTimers.forEach((t) => clearTimeout(t))
+    replicateStepTimers = []
+    replicateFlowStep.value = -1
+    replicateLoading.value = false
   }
 
   function applyReplicateResults() {
@@ -1185,7 +1166,7 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     activeExportRequestId.value = exportRequestId
     exportProgress.value = 2
     isExporting.value = true
-    try {
+    await (async () => {
       const requestSegments = selectedSegments.value.map(seg => ({
         video_id: seg.videoId,
         start_s: seg.fromS,
@@ -1201,21 +1182,15 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       )
       exportProgress.value = 100
       await new Promise((r) => setTimeout(r, 280))
-      if (res?.path && res?.suggested_name) {
-        message.success('导出成功，可在导出历史中打开所在文件夹')
-        if (showExportHistoryModal.value) {
-          loadExportHistory()
-        }
+      if (res?.path && res?.suggested_name && showExportHistoryModal.value) {
+        void loadExportHistory()
       }
-    } catch (error: any) {
-      exportProgress.value = 0
-      message.error(error?.message || '导出视频失败')
-    } finally {
+    })().finally(() => {
       activeExportRequestId.value = null
       rtStore.clearExportSegmentsProgress()
       isExporting.value = false
       exportProgress.value = 0
-    }
+    })
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {

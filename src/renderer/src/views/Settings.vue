@@ -23,7 +23,7 @@ import {
   KeyOutline,
   ChatbubblesOutline
 } from '@vicons/ionicons5'
-import { saveConfig, getConfig, setApiKey, getApiKey, validateApiKey } from '../api/config'
+import { saveConfig, getConfig, setApiKey, getApiKey } from '../api/config'
 import { submitFeedback, type SubmitFeedbackParams } from '../api/report'
 import { useRealtimeStore } from '../stores/realtime'
 
@@ -40,6 +40,9 @@ const loading = ref(false)
 const migrating = ref(false)
 const migrateProgress = ref('')
 const apiKeyRefresh = ref(0)
+
+const copiedJustNow = ref(false)
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
 
 // 计算掩盖后的 API Key 显示值
 const maskedApiKey = computed(() => {
@@ -58,15 +61,21 @@ const maskedApiKey = computed(() => {
   return first4 + '********' + last4
 })
 
+/** 与 ApiKeyChangeBlock（弹窗）一致：复制成功不弹 success，按钮短暂显示「已复制」 */
 const copyFullApiKey = async (): Promise<void> => {
   const savedApiKey = localStorage.getItem('apiKey')
   if (!savedApiKey) {
-    message.error('当前没有已保存的 API Key')
+    message.warning('当前没有已保存的 API Key')
     return
   }
   try {
     await navigator.clipboard.writeText(savedApiKey)
-    message.success('已复制完整 API Key')
+    copiedJustNow.value = true
+    if (copyResetTimer) clearTimeout(copyResetTimer)
+    copyResetTimer = setTimeout(() => {
+      copiedJustNow.value = false
+      copyResetTimer = null
+    }, 2000)
   } catch (err) {
     console.error('复制 API Key 失败:', err)
     message.error('复制失败，请稍后重试')
@@ -150,21 +159,16 @@ const handleSubmitFeedback = async (): Promise<void> => {
     return
   }
   feedbackSubmitting.value = true
-  try {
-    await submitFeedback({
-      type: feedbackForm.value.type as SubmitFeedbackParams['type'],
-      reason: feedbackForm.value.reason.trim(),
-      detail: feedbackForm.value.detail,
-      contact: feedbackForm.value.contact
-    })
-    message.success('反馈已提交，感谢您的支持！')
-    showFeedbackModal.value = false
-  } catch (err) {
-    message.error('反馈提交失败，请稍后重试')
-    console.error('反馈提交失败:', err)
-  } finally {
+  await submitFeedback({
+    type: feedbackForm.value.type as SubmitFeedbackParams['type'],
+    reason: feedbackForm.value.reason.trim(),
+    detail: feedbackForm.value.detail,
+    contact: feedbackForm.value.contact
+  }).finally(() => {
     feedbackSubmitting.value = false
-  }
+  })
+  message.success('反馈已提交，感谢您的支持！')
+  showFeedbackModal.value = false
 }
 
 const loadApiKey = async (): Promise<void> => {
@@ -188,42 +192,22 @@ const loadApiKey = async (): Promise<void> => {
   }
 }
 
-const saveApiKey = (): void => {
+const saveApiKey = async (): Promise<void> => {
   const apiKeyValue = apiKey.value.trim()
-  if (apiKeyValue) {
-    loading.value = true
-    // 先验证 API Key 是否有效
-    validateApiKey(apiKeyValue)
-      .then((response) => {
-        if (!response.status) {
-          message.error('API Key 验证失败，请检查密钥是否正确')
-          return
-        }
-        // 验证成功，保存 API Key
-        return setApiKey(apiKeyValue)
-      })
-      .then(() => {
-        // 保存到本地存储
-        localStorage.setItem('apiKey', apiKeyValue)
-        message.success('API Key 已验证并保存')
-        hasApiKey.value = true
-        isEditingApiKey.value = false
-        apiKey.value = ''
-        // 触发刷新以更新 maskedApiKey
-        apiKeyRefresh.value++
-        // 触发自定义事件，通知其他组件 apiKey 已更新
-        window.dispatchEvent(new CustomEvent('apiKeyChanged', { detail: { hasApiKey: true } }))
-        // 重连 SSE，从云端拉取当前 API Key 对应用户信息
-        rtStore.reauthenticate()
-      })
-      .catch((error) => {
-        console.error('验证或设置 API Key 失败:', error)
-        message.error(`操作失败: ${(error as Error).message}`)
-      })
-      .finally(() => {
-        loading.value = false
-      })
+  if (!apiKeyValue) {
+    return
   }
+  loading.value = true
+  await setApiKey(apiKeyValue).finally(() => {
+    loading.value = false
+  })
+  localStorage.setItem('apiKey', apiKeyValue)
+  hasApiKey.value = true
+  isEditingApiKey.value = false
+  apiKey.value = ''
+  apiKeyRefresh.value++
+  window.dispatchEvent(new CustomEvent('apiKeyChanged', { detail: { hasApiKey: true } }))
+  rtStore.reauthenticate()
 }
 
 onMounted(() => {
@@ -327,10 +311,13 @@ watch(
                         <n-button
                           text
                           type="primary"
+                          class="settings-api-key-copy"
+                          :class="{ 'settings-api-key-copy--copied': copiedJustNow }"
+                          :disabled="copiedJustNow"
                           title="复制完整 API Key"
                           @click="copyFullApiKey"
                         >
-                          复制
+                          {{ copiedJustNow ? '已复制' : '复制' }}
                         </n-button>
                       </template>
                     </n-input>
@@ -552,6 +539,12 @@ watch(
 .setting-control {
   flex: 1;
   max-width: 480px;
+}
+
+/* 与 ApiKeyChangeBlock 弹窗内「复制」一致 */
+.settings-api-key-copy--copied {
+  color: var(--n-success-color, #18a058) !important;
+  cursor: default;
 }
 
 /* Custom scrollbar */

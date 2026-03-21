@@ -74,26 +74,25 @@ const handleExportClip = async (item: SmartCutItem) => {
   }
 
   const loadingMsg = message.loading('正在准备导出...', { duration: 0 })
-  try {
-    const fileName = item.name
-      ? item.name.endsWith('.mp4')
-        ? item.name
-        : `${item.name}.mp4`
-      : 'smart-cut.mp4'
-    const result = await window.api.downloadVideo(filePath, fileName)
-    if (result.success) {
-      message.success(`已保存至: ${result.path}`)
-    } else if (result.canceled) {
-      message.info('已取消导出')
-    } else {
-      message.error(result.error || '导出失败')
-    }
-  } catch (error) {
-    console.error('导出失败:', error)
-    message.error('导出过程中发生错误')
-  } finally {
-    loadingMsg.destroy()
-  }
+  const fileName = item.name
+    ? item.name.endsWith('.mp4')
+      ? item.name
+      : `${item.name}.mp4`
+    : 'smart-cut.mp4'
+  await window.api
+    .downloadVideo(filePath, fileName)
+    .then((result) => {
+      if (result.success) {
+        message.success(`已保存至: ${result.path}`)
+      } else if (result.canceled) {
+        message.info('已取消导出')
+      } else {
+        message.error(result.error || '导出失败')
+      }
+    })
+    .finally(() => {
+      loadingMsg.destroy()
+    })
 }
 
 const fetchHistory = async () => {
@@ -136,31 +135,29 @@ watch(
 
     if (!aiGenVideoId) return
 
-    try {
-      const latest = await getSmartCutApi(aiGenVideoId)
-      const idx = clipHistory.value.findIndex((item) => item.id === latest.id)
-      if (idx >= 0) {
-        // 更新已有条目（状态/封面/时长等）
-        clipHistory.value[idx] = {
-          ...clipHistory.value[idx],
-          status: latest.status,
-          cover: latest.cover ?? clipHistory.value[idx].cover,
-          duration: latest.duration ?? clipHistory.value[idx].duration,
-          path: latest.path ?? clipHistory.value[idx].path,
-          name: latest.name ?? clipHistory.value[idx].name
+    void getSmartCutApi(aiGenVideoId)
+      .then((latest) => {
+        const idx = clipHistory.value.findIndex((item) => item.id === latest.id)
+        if (idx >= 0) {
+          clipHistory.value[idx] = {
+            ...clipHistory.value[idx],
+            status: latest.status,
+            cover: latest.cover ?? clipHistory.value[idx].cover,
+            duration: latest.duration ?? clipHistory.value[idx].duration,
+            path: latest.path ?? clipHistory.value[idx].path,
+            name: latest.name ?? clipHistory.value[idx].name
+          }
+        } else {
+          const wid = props.currentWorkspace?.id
+          const lw = (latest as SmartCutItem).workspace_id
+          if (!wid || lw === wid) {
+            clipHistory.value = [latest as SmartCutItem, ...clipHistory.value]
+          }
         }
-      } else {
-        // 若当前页中暂时还没有这条记录，但属于当前工作区，则插入到最前面
-        const wid = props.currentWorkspace?.id
-        const lw = (latest as SmartCutItem).workspace_id
-        if (!wid || lw === wid) {
-          clipHistory.value = [latest as SmartCutItem, ...clipHistory.value]
-        }
-      }
-    } catch (e) {
-      // 拉取单条剪辑状态失败时忽略，不影响其他逻辑
-      console.warn('[HomeRightSidebar] Failed to sync smart cut history item', e)
-    }
+      })
+      .catch((e) => {
+        console.warn('[HomeRightSidebar] Failed to sync smart cut history item', e)
+      })
   }
 )
 

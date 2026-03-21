@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
+import { applyCloudActivationToStorage, getCloudActivation } from '../api/config'
 import { SSEClient } from '../utils/sse-client'
 import { RealtimeMessageHandler } from '../utils/realtime-message-handler'
 import { aiChatStore } from '../services/aiChatStore'
@@ -19,7 +20,7 @@ export interface UsageInfo {
   isVip: boolean
   /** 过期日期（云端下发的过期时间） */
   expiredAt?: string
-  /** 用户状态：1=启用，非 1（如 0）= 封禁（仅在与云端同步后由后端下发） */
+  /** 云端对当前 API Key 的状态：1=可用，非 1=不可用（仅在与云端同步后由后端下发） */
   status?: number
   /** 与 inklip-base-go 对齐：true 表示用量来自「本地 Go ← 云端 SSE」 */
   syncedFromCloud?: boolean
@@ -95,11 +96,19 @@ export const useRealtimeStore = defineStore('realtime', () => {
   /** 新版本信息（后端 SSE 推送）；有值时显示更新弹窗，force_update 时不可关闭 */
   const versionUpdateInfo = ref<VersionUpdateInfo | null>(null)
 
-  /** API Key 异常（如设备超限）；有值时弹窗不可关闭，提示用户更换 API Key */
-  const apiKeyExceptionInfo = ref<{ code?: string; message: string } | null>(null)
+  /** 本地 Go 内存中是否已有 API Key（与用量是否已从 SSE 同步无关）；初值与 localStorage 对齐以减少首屏误显示「需激活」） */
+  const hasApiKey = ref(
+    typeof localStorage !== 'undefined' && localStorage.getItem('cloudActivated') === '1'
+  )
+
+  const refreshBackendActivation = async (): Promise<void> => {
+    const { activated } = await getCloudActivation().catch(() => ({ activated: false }))
+    hasApiKey.value = activated
+    applyCloudActivationToStorage(activated)
+  }
 
   /**
-   * 是否已从云端拿到当前 API Key 对应用户信息（完全由 usageInfo 推导，避免与 ref 双写不同步）。
+   * 是否已从云端拿到用量等信息（完全由 usageInfo 推导；依赖有效 API Key 与 SSE）。
    * - syncedFromCloud === true → 已同步
    * - syncedFromCloud === false → 本地占位，未同步
    * - syncedFromCloud 缺省（旧后端）→ 有 status 则视为已同步
@@ -114,12 +123,12 @@ export const useRealtimeStore = defineStore('realtime', () => {
   const isVipAvailable = computed(() => isUsageAvailable(usageInfo.value))
 
   /**
-   * 尚未收到云端 usage_info（启动后 SSE 首次同步前）。
-   * 与「封禁」区分：未拿到信息时展示「待激活」，不视为已封禁。
+   * 尚未收到云端 usage_info（启动后 SSE 首次同步前，常见于仍在获取 API Key 或网络异常）。
+   * 与「API Key 不可用」区分：未拿到用量时不视为后者。
    */
   const isAwaitingCloudActivation = computed(() => !userInfoReceivedFromCloud.value)
 
-  /** 用户是否被封禁：仅在与云端已同步且明确下发 status !== 1 时为 true */
+  /** 服务端判定当前 API Key 不可用（仅在与云端已同步且 status !== 1 时为 true） */
   const isUserBanned = computed(
     () =>
       userInfoReceivedFromCloud.value &&
@@ -187,6 +196,8 @@ export const useRealtimeStore = defineStore('realtime', () => {
     }
 
     disconnect()
+
+    void refreshBackendActivation()
 
     messageHandler = new RealtimeMessageHandler({
       onVideoProgress: (data) => {
@@ -278,16 +289,9 @@ export const useRealtimeStore = defineStore('realtime', () => {
           status: statusNum,
           syncedFromCloud
         }
-        // 不因 usage_info 清除 apiKeyException：云端用量与校验接口（如设备绑定上限）可能同时成立，清除会导致弹窗概率性不出现
       },
       onVersionUpdate: (data) => {
         versionUpdateInfo.value = data
-      },
-      onApiKeyException: (data) => {
-        apiKeyExceptionInfo.value = {
-          code: data.code,
-          message: data.message ?? 'API Key 异常，请更换 API Key 后重试'
-        }
       },
       onWorkspaceUpdated: () => {
         workspaceUpdated.value = Date.now()
@@ -301,6 +305,18 @@ export const useRealtimeStore = defineStore('realtime', () => {
       onWorkspaceIngestProgress: (data) => {
         if (!workspaceIngestSseEnabled.value && !workspaceSelecting.value) return
         workspaceIngestProgress.value = data
+      },
+      onApiKeySynced: ({ activated }) => {
+        try {
+          hasApiKey.value = activated
+          applyCloudActivationToStorage(activated)
+          window.dispatchEvent(
+            new CustomEvent('cloudActivationSynced', { detail: { activated } })
+          )
+        } catch (e) {
+          console.warn('[SSE] api_key_synced 更新本地激活状态失败', e)
+        }
+        reauthenticate()
       }
     })
 
@@ -308,6 +324,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     sseClient = new SSEClient(sseUrl, {
       onOpen: () => {
         connected.value = true
+        void refreshBackendActivation()
       },
       onClose: () => {
         connected.value = false
@@ -329,6 +346,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     }
     messageHandler = null
     connected.value = false
+    hasApiKey.value = false
     workspaceIngestSseEnabled.value = false
     workspaceIngestProgress.value = null
     usageInfo.value = {
@@ -349,10 +367,6 @@ export const useRealtimeStore = defineStore('realtime', () => {
 
   const clearVersionUpdate = (): void => {
     versionUpdateInfo.value = null
-  }
-
-  const clearApiKeyException = (): void => {
-    apiKeyExceptionInfo.value = null
   }
 
   const setWorkspaceSelecting = (v: boolean): void => {
@@ -404,10 +418,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
     isAwaitingCloudActivation,
     isUserBanned,
     isMembershipExpired,
+    hasApiKey,
+    refreshBackendActivation,
     versionUpdateInfo,
     clearVersionUpdate,
-    apiKeyExceptionInfo,
-    clearApiKeyException,
     clearVideoProgress,
     getVideoProgress,
     setWorkspaceSelecting

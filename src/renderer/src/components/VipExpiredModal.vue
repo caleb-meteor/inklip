@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { NModal, NButton } from 'naive-ui'
-import { computed, ref } from 'vue'
+import { NModal, NButton, NInput, NSpace, NText, useMessage } from 'naive-ui'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { getApiKey, setApiKey } from '../api/config'
 import { useRealtimeStore } from '../stores/realtime'
-import ApiKeyChangeBlock from './ApiKeyChangeBlock.vue'
 import ContactSupportBlock from './ContactSupportBlock.vue'
 
 /** 续费/会员页地址 */
@@ -11,36 +11,100 @@ const VIP_RENEW_URL = 'https://inklip.caleb.center'
 
 const route = useRoute()
 const rtStore = useRealtimeStore()
+const message = useMessage()
 
-/** 优先级 3：无封禁、无异常时才可能弹本窗；有封禁或异常时不弹。主界面 /home 与 /quick-clip 均显示 */
+const manualApiKey = ref('')
+const savingKey = ref(false)
+/** 弹窗打开时解析到的当前 Key，仅用于展示掩码与复制 */
+const currentApiKey = ref('')
+const loadingCurrentKey = ref(false)
+/** 与设置页 API 配置一致：复制成功不弹 success，按钮短暂显示「已复制」 */
+const copiedJustNow = ref(false)
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 与 Settings.vue maskedApiKey 规则一致：前 4 + ******** + 后 4 */
+const maskedCurrentApiKey = computed(() => {
+  const savedApiKey = currentApiKey.value.trim()
+  if (!savedApiKey) return ''
+  const first4 = savedApiKey.slice(0, 4)
+  const last4 = savedApiKey.slice(-4)
+  return first4 + '********' + last4
+})
+
+const hasCurrentApiKey = computed(() => !!currentApiKey.value.trim())
+
+const copyFullApiKey = async (): Promise<void> => {
+  const savedApiKey = currentApiKey.value.trim()
+  if (!savedApiKey) {
+    message.warning('当前没有已保存的 API Key')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(savedApiKey)
+    copiedJustNow.value = true
+    if (copyResetTimer) clearTimeout(copyResetTimer)
+    copyResetTimer = setTimeout(() => {
+      copiedJustNow.value = false
+      copyResetTimer = null
+    }, 2000)
+  } catch (err) {
+    console.error('复制 API Key 失败:', err)
+    message.error('复制失败，请稍后重试')
+  }
+}
+
 const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
 const show = computed(
   () =>
     isHomeRoute.value &&
     rtStore.userInfoReceivedFromCloud &&
     !rtStore.isUserBanned &&
-    !rtStore.apiKeyExceptionInfo &&
     rtStore.isMembershipExpired
 )
 
-const showApiKeyForm = ref(false)
-
-const onShowForm = (): void => {
-  showApiKeyForm.value = true
-}
-
-const onApiKeyCancel = (): void => {
-  showApiKeyForm.value = false
-}
-
-const onApiKeySuccess = (): void => {
-  window.dispatchEvent(new CustomEvent('apiKeyChanged', { detail: { hasApiKey: true } }))
-  rtStore.reauthenticate()
-  showApiKeyForm.value = false
-}
+watch(show, async (visible) => {
+  if (!visible) {
+    currentApiKey.value = ''
+    copiedJustNow.value = false
+    if (copyResetTimer) {
+      clearTimeout(copyResetTimer)
+      copyResetTimer = null
+    }
+    return
+  }
+  loadingCurrentKey.value = true
+  const fromLs = localStorage.getItem('apiKey')
+  if (fromLs) {
+    currentApiKey.value = fromLs
+    loadingCurrentKey.value = false
+  } else {
+    const res = await getApiKey()
+      .catch(() => ({ api_key: localStorage.getItem('apiKey') ?? undefined }))
+      .finally(() => {
+        loadingCurrentKey.value = false
+      })
+    currentApiKey.value = (res.api_key ?? '').trim()
+  }
+})
 
 const onRenew = (): void => {
   window.api.openExternal(VIP_RENEW_URL)
+}
+
+const onSaveManualKey = async (): Promise<void> => {
+  const v = manualApiKey.value.trim()
+  if (!v) {
+    message.warning('请输入 API Key')
+    return
+  }
+  savingKey.value = true
+  await setApiKey(v).finally(() => {
+    savingKey.value = false
+  })
+  manualApiKey.value = ''
+  currentApiKey.value = v
+  await rtStore.refreshBackendActivation()
+  rtStore.reauthenticate()
 }
 </script>
 
@@ -64,27 +128,55 @@ const onRenew = (): void => {
       </div>
 
       <p class="vip-expired-desc">
-        您的会员已到期，请续费或更换 API Key 后继续使用智能剪辑等会员功能。
+        您的会员已到期，请续费后继续使用智能剪辑等会员功能。
       </p>
 
-      <div class="vip-expired-body">
-        <ApiKeyChangeBlock
-          :show-form="showApiKeyForm"
-          @cancel="onApiKeyCancel"
-          @success="onApiKeySuccess"
-        />
-      </div>
-
-      <div v-if="!showApiKeyForm" class="vip-expired-actions">
-        <n-button secondary class="action-btn" @click="onShowForm">
-          更换 API Key
-        </n-button>
+      <div class="vip-expired-actions">
         <n-button type="primary" class="action-btn action-primary" @click="onRenew">
           联系客服续费
         </n-button>
       </div>
 
       <ContactSupportBlock />
+
+      <n-space vertical :size="10" class="vip-expired-key-block">
+        <n-text depth="3" style="font-size: 12px">
+          若已续费或需使用其他账号，可更换 API Key：
+        </n-text>
+        <div v-if="hasCurrentApiKey || loadingCurrentKey" class="api-key-display">
+          <n-input
+            :value="loadingCurrentKey ? '正在读取…' : maskedCurrentApiKey"
+            readonly
+            type="text"
+            :disabled="loadingCurrentKey"
+          >
+            <template #suffix>
+              <n-button
+                text
+                type="primary"
+                class="settings-api-key-copy"
+                :class="{ 'settings-api-key-copy--copied': copiedJustNow }"
+                :disabled="copiedJustNow || loadingCurrentKey || !hasCurrentApiKey"
+                title="复制完整 API Key"
+                @click="copyFullApiKey"
+              >
+                {{ copiedJustNow ? '已复制' : '复制' }}
+              </n-button>
+            </template>
+          </n-input>
+        </div>
+        <n-input
+          v-model:value="manualApiKey"
+          type="password"
+          show-password-on="click"
+          placeholder="粘贴或输入 API Key"
+          :disabled="savingKey"
+          @keyup.enter="onSaveManualKey"
+        />
+        <n-button block class="action-btn" :loading="savingKey" @click="onSaveManualKey">
+          确认更换
+        </n-button>
+      </n-space>
     </div>
   </n-modal>
 </template>
@@ -141,20 +233,27 @@ const onRenew = (): void => {
   color: var(--n-text-color-2);
 }
 
-.vip-expired-body {
-  padding: 0 20px;
-  margin-bottom: 12px;
+.vip-expired-key-block {
+  width: 100%;
+  padding: 12px 20px 20px;
+  box-sizing: border-box;
 }
 
-.vip-expired-body:has(.api-key-form) {
-  margin-bottom: 0;
-  padding-bottom: 20px;
+/* 与设置页「API 配置」只读 Key + 后缀复制一致 */
+.api-key-display {
+  width: 100%;
+}
+
+/* 与 Settings.vue / ApiKeyChangeBlock「复制」一致 */
+.settings-api-key-copy--copied {
+  color: var(--n-success-color, #18a058) !important;
+  cursor: default;
 }
 
 .vip-expired-actions {
   display: flex;
   gap: 12px;
-  padding: 0 20px 20px;
+  padding: 0 20px 12px;
 }
 
 .action-btn {
@@ -164,6 +263,6 @@ const onRenew = (): void => {
 }
 
 .action-primary {
-  flex: 1.2;
+  flex: 1;
 }
 </style>

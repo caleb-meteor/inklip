@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { NButton, NInput, NFormItem, useMessage } from 'naive-ui'
 import { computed, ref, nextTick, watch } from 'vue'
-import { validateApiKey, setApiKey } from '../api/config'
+import { setApiKey } from '../api/config'
 
 const props = defineProps<{
   /** 是否显示「新 API Key」表单及取消/验证按钮 */
@@ -69,22 +69,13 @@ const onValidate = async (): Promise<void> => {
     return
   }
   saving.value = true
-  try {
-    const res = await validateApiKey(key)
-    if (!res.status) {
-      message.error('API Key 验证失败，请检查密钥是否正确')
-      return
-    }
-    await setApiKey(key)
-    localStorage.setItem('apiKey', key)
-    message.success('API Key 已更换，正在重新连接…')
-    emit('success')
-    newApiKey.value = ''
-  } catch (err) {
-    message.error(`操作失败: ${(err as Error).message}`)
-  } finally {
+  await setApiKey(key).finally(() => {
     saving.value = false
-  }
+  })
+  localStorage.setItem('apiKey', key)
+  message.success('API Key 已更换，正在重新连接…')
+  emit('success')
+  newApiKey.value = ''
 }
 </script>
 

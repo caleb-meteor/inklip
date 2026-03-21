@@ -84,20 +84,22 @@ async function fetchRelated() {
   if (!props.video?.id) return
   loadingExports.value = true
   loadingSmartCuts.value = true
-  try {
-    const [exportRes, smartCutRes] = await Promise.all([
-      getVideoRelatedExportsApi(props.video.id),
-      getVideoRelatedSmartCutsApi(props.video.id)
-    ])
-    relatedExports.value = exportRes?.list ?? []
-    relatedSmartCuts.value = smartCutRes?.list ?? []
-  } catch {
-    relatedExports.value = []
-    relatedSmartCuts.value = []
-  } finally {
-    loadingExports.value = false
-    loadingSmartCuts.value = false
-  }
+  await Promise.all([
+    getVideoRelatedExportsApi(props.video.id),
+    getVideoRelatedSmartCutsApi(props.video.id)
+  ])
+    .then(([exportRes, smartCutRes]) => {
+      relatedExports.value = exportRes?.list ?? []
+      relatedSmartCuts.value = smartCutRes?.list ?? []
+    })
+    .catch(() => {
+      relatedExports.value = []
+      relatedSmartCuts.value = []
+    })
+    .finally(() => {
+      loadingExports.value = false
+      loadingSmartCuts.value = false
+    })
 }
 
 watch(

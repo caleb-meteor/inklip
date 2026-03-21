@@ -62,17 +62,13 @@ const selectedWorkspaceId = ref<number | null>(null)
 const workspaceVideos = ref<VideoItem[]>([])
 const workspaceVideosLoading = ref(false)
 async function loadWorkspaces() {
-  try {
-    const list = await getWorkspacesApi()
-    workspaces.value = list
-    if (list.length > 0 && !selectedWorkspaceId.value) {
-      selectedWorkspaceId.value = list[0].id
-    }
-    if (selectedWorkspaceId.value && !list.find((w) => w.id === selectedWorkspaceId.value)) {
-      selectedWorkspaceId.value = list[0]?.id ?? null
-    }
-  } catch {
-    workspaces.value = []
+  const list = await getWorkspacesApi().catch(() => [] as WorkspaceItem[])
+  workspaces.value = list
+  if (list.length > 0 && !selectedWorkspaceId.value) {
+    selectedWorkspaceId.value = list[0].id
+  }
+  if (selectedWorkspaceId.value && !list.find((w) => w.id === selectedWorkspaceId.value)) {
+    selectedWorkspaceId.value = list[0]?.id ?? null
   }
 }
 async function loadWorkspaceVideos() {
@@ -84,22 +80,24 @@ async function loadWorkspaceVideos() {
     return
   }
   workspaceVideosLoading.value = true
-  try {
-    const list = await getVideosApi({ workspace_id: wid })
-    if (selectedWorkspaceId.value !== wid) return
-    workspaceVideos.value = list ?? []
-    videos.value = workspaceVideos.value
-    emit('videos-updated', videos.value)
-  } catch {
-    if (selectedWorkspaceId.value !== wid) return
-    workspaceVideos.value = []
-    videos.value = []
-    emit('videos-updated', [])
-  } finally {
-    if (selectedWorkspaceId.value === wid) {
-      workspaceVideosLoading.value = false
-    }
-  }
+  await getVideosApi({ workspace_id: wid })
+    .then((list) => {
+      if (selectedWorkspaceId.value !== wid) return
+      workspaceVideos.value = list ?? []
+      videos.value = workspaceVideos.value
+      emit('videos-updated', videos.value)
+    })
+    .catch(() => {
+      if (selectedWorkspaceId.value !== wid) return
+      workspaceVideos.value = []
+      videos.value = []
+      emit('videos-updated', [])
+    })
+    .finally(() => {
+      if (selectedWorkspaceId.value === wid) {
+        workspaceVideosLoading.value = false
+      }
+    })
 }
 function selectWorkspace(id: number) {
   selectedWorkspaceId.value = id
@@ -245,16 +243,22 @@ watch(selectedWorkspaceId, async (id) => {
     workspaceVideosLoading.value = false
     return
   }
-  try {
-    await switchWorkspaceApi(id)
-  } catch {
-    if (selectedWorkspaceId.value !== id) return
+  let switchOk = false
+  await switchWorkspaceApi(id)
+    .then(() => {
+      switchOk = true
+    })
+    .catch(() => {
+      switchOk = false
+    })
+    .finally(() => {
+      wsStore.clearWorkspaceIngestProgress()
+    })
+  if (selectedWorkspaceId.value !== id) return
+  if (!switchOk) {
     workspaceVideosLoading.value = false
     return
-  } finally {
-    wsStore.clearWorkspaceIngestProgress()
   }
-  if (selectedWorkspaceId.value !== id) return
   loadWorkspaceVideos()
 }, { immediate: true })
 
@@ -301,7 +305,7 @@ const selectWorkspaceDir = async (): Promise<void> => {
   if (!window.api?.selectDirectory) return
   workspaceSelecting.value = true
   wsStore.setWorkspaceSelecting(true)
-  try {
+  const run = async (): Promise<void> => {
     const result = await window.api.selectDirectory({ title: '选择工作空间目录' })
     if (!result.success || !result.directory) return
     const dir = result.directory
@@ -319,13 +323,12 @@ const selectWorkspaceDir = async (): Promise<void> => {
       if (created?.id) selectedWorkspaceId.value = created.id
     }
     await loadAll()
-  } catch (e) {
-    message.error('选择或同步失败')
-  } finally {
+  }
+  await run().finally(() => {
     workspaceSelecting.value = false
     wsStore.setWorkspaceSelecting(false)
     wsStore.clearWorkspaceIngestProgress()
-  }
+  })
 }
 /** 工作空间切换 Popover 显隐 */
 const showWorkspacePopover = ref(false)
@@ -344,22 +347,18 @@ async function onSelectWorkspaceDir() {
 }
 
 async function onDeleteWorkspace(ws: WorkspaceItem) {
-  try {
-    await deleteWorkspaceApi(ws.id)
-    workspaces.value = workspaces.value.filter((w) => w.id !== ws.id)
-    if (selectedWorkspaceId.value === ws.id) {
-      selectedWorkspaceId.value = workspaces.value[0]?.id ?? null
-      if (!selectedWorkspaceId.value) {
-        workspaceVideos.value = []
-        videos.value = []
-        emit('videos-updated', [])
-      }
+  await deleteWorkspaceApi(ws.id)
+  workspaces.value = workspaces.value.filter((w) => w.id !== ws.id)
+  if (selectedWorkspaceId.value === ws.id) {
+    selectedWorkspaceId.value = workspaces.value[0]?.id ?? null
+    if (!selectedWorkspaceId.value) {
+      workspaceVideos.value = []
+      videos.value = []
+      emit('videos-updated', [])
     }
-    message.success('工作空间已删除')
-    await loadWorkspaces()
-  } catch (err) {
-    message.error('删除失败')
   }
+  message.success('工作空间已删除')
+  await loadWorkspaces()
 }
 
 /** 顶部当前工作空间显示名（用于触发条） */
