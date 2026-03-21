@@ -28,7 +28,6 @@ function getAppIcon(): Electron.NativeImage {
 }
 
 import { registerIpcHandlers } from './ipc/handlers'
-import { abortAllDownloads } from './utils/download'
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -245,7 +244,6 @@ app.on('before-quit', () => {
   isQuitting = true
   console.log('[Main] App is quitting. Cleanup...')
 
-  abortAllDownloads()
   BackendService.getInstance().kill()
 })
 
