@@ -80,6 +80,9 @@ const config: ForgeConfig = {
       : {}),
     ignore: [
       /^\/src/,
+      // 主进程/preload 由 electron-vite 打进 dist（build.externalizeDeps: false）；渲染进程在 dist/renderer。asar 内不再需要 node_modules。
+      // 若主进程/preload 改为 runtime require 某包，需恢复对应路径或对该依赖 externalize。
+      /^\/node_modules(\/|$)/,
       /^\/assets/,
       /^\/build/,
       /^\/website/,

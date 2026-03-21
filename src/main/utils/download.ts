@@ -464,11 +464,10 @@ function setupSimpleDownloadResponse(
 
 /**
  * Simple single-threaded download helper.
- * Suitable for mirror downloads (e.g., HF Mirror).
  * Supports SHA256 verification with caching.
  *
- * This is a simplified version that doesn't use multi-threading,
- * making it more suitable for mirror sites that may not support range requests well.
+ * Does not use multi-part or range requests; prefer this when the server
+ * does not support partial content (HTTP Range) reliably.
  */
 export async function downloadFileSimple(
   url: string,
@@ -628,8 +627,8 @@ export async function downloadFileSimple(
  * Uses persistent .part files to resume across app restarts.
  * Supports SHA256 verification with caching to avoid repeated calculations.
  *
- * This function uses multiple threads for faster downloads, suitable for
- * direct downloads from original sources. For mirror sites, consider using
+ * This function uses multiple threads for faster downloads when the server
+ * supports range requests. If partial downloads are unreliable, use
  * downloadFileSimple instead.
  */
 export async function downloadFile(

@@ -3,8 +3,17 @@ import { defineConfig } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
-  main: {},
-  preload: {},
+  main: {
+    build: {
+      // 默认会 externalize 全部 dependencies，asar 里被迫带整棵 node_modules；关闭后仅打进实际 import 的代码（含 @electron-toolkit/utils）
+      externalizeDeps: false
+    }
+  },
+  preload: {
+    build: {
+      externalizeDeps: false
+    }
+  },
   renderer: {
     resolve: {
       alias: {

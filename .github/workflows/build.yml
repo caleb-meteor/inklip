@@ -121,8 +121,27 @@ jobs:
           node-version: 25
           cache: 'pnpm'
 
+      # electron postinstall 下载二进制；504 多为瞬时网络故障，缓存 + 重试可稳 CI
+      - name: Cache Electron download
+        uses: actions/cache@v4
+        with:
+          path: .electron-cache
+          key: electron-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install dependencies
-        run: pnpm install
+        shell: bash
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            echo "pnpm install failed (attempt $attempt/3), retrying in 45s..."
+            sleep 45
+          done
+          exit 1
+        env:
+          ELECTRON_CACHE: ${{ github.workspace }}/.electron-cache
 
       - name: Create APPX signing certificate
         if: matrix.platform == 'win32'
