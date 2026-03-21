@@ -80,9 +80,6 @@ const config: ForgeConfig = {
       : {}),
     ignore: [
       /^\/src/,
-      // resources：仅允许图片类文件进入 asar；平台二进制、zip 等只走 extraResource，禁止打进 asar
-      /^\/resources$/,
-      /^\/resources\/(?!.+\.(png|jpe?g|gif|webp|bmp|avif|ico|icns|svg)$).+/i,
       /^\/assets/,
       /^\/build/,
       /^\/website/,
