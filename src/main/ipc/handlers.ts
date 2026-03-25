@@ -3,6 +3,17 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'node:url'
 import { BackendService } from '../services/backend'
+import { buildChromeLikeUserAgent } from '../utils/chromeUa'
+import {
+  releaseDouyinExclusivePipeline,
+  tryAcquireDouyinExclusivePipeline,
+  DOUYIN_DOWNLOAD_EXCLUSIVE_BUSY_ERROR
+} from '../douyinGuestDownload'
+import {
+  cancelDouyinOffscreenWorker,
+  runDouyinOffscreenDetailDownload
+} from '../douyinOffscreenDownload'
+import { registerDouyinNetworkMonitor } from '../douyinNetworkMonitor'
 
 export function registerIpcHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -57,6 +68,34 @@ export function registerIpcHandlers(
     } catch (e) {
       console.error('[IPC] openExternal failed:', e)
     }
+  })
+
+  /** 打开与桌面 Chrome UA 一致、无影氪 preload 的独立窗口（模拟浏览器弹窗 / 新窗口） */
+  function openBrowserLikeWindow(url: string): void {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) return
+    const win = new BrowserWindow({
+      width: 980,
+      height: 760,
+      show: true,
+      autoHideMenuBar: true,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+        webSecurity: true
+      }
+    })
+    win.webContents.setUserAgent(buildChromeLikeUserAgent())
+    win.webContents.setWindowOpenHandler((details) => {
+      openBrowserLikeWindow(details.url)
+      return { action: 'deny' }
+    })
+    void win.loadURL(url)
+  }
+
+  ipcMain.handle('open-browser-like-window', (_event, url: string) => {
+    if (!url || typeof url !== 'string') return
+    openBrowserLikeWindow(url)
   })
 
   ipcMain.handle('download-video', async (_event, sourcePath: string, fileName: string) => {
@@ -376,4 +415,45 @@ export function registerIpcHandlers(
     return { success: true }
   })
 
+  /** 取消当前抖音屏外下载（关闭 worker、取消进行中的 Chromium 下载） */
+  ipcMain.handle('douyin-cancel-download', () => {
+    cancelDouyinOffscreenWorker()
+    return { success: true as const }
+  })
+
+  /**
+   * 屏外窗口拉 aweme/detail 后下载；不跳转主界面抖音 webview。
+   * 参数：{ awemeId, suggestedName?, savePath? }
+   */
+  ipcMain.handle('douyin-offscreen-download', async (_event, raw: unknown) => {
+    if (!raw || typeof raw !== 'object') {
+      return { success: false as const, error: '参数无效' }
+    }
+    if (!tryAcquireDouyinExclusivePipeline()) {
+      return { success: false as const, error: DOUYIN_DOWNLOAD_EXCLUSIVE_BUSY_ERROR }
+    }
+    try {
+      const p = raw as Record<string, unknown>
+      const awemeId = typeof p.awemeId === 'string' ? p.awemeId.trim() : ''
+      const suggestedName =
+        typeof p.suggestedName === 'string' && p.suggestedName.trim()
+          ? p.suggestedName.trim()
+          : `douyin_${awemeId || 'video'}.mp4`
+      const savePath =
+        typeof p.savePath === 'string' && p.savePath.trim() ? p.savePath.trim() : undefined
+      if (!awemeId) {
+        return { success: false as const, error: '缺少 awemeId' }
+      }
+      return await runDouyinOffscreenDetailDownload({
+        getMainWindow,
+        awemeId,
+        suggestedName,
+        savePath
+      })
+    } finally {
+      releaseDouyinExclusivePipeline()
+    }
+  })
+
+  registerDouyinNetworkMonitor(getMainWindow)
 }

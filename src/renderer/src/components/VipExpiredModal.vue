@@ -53,7 +53,9 @@ const copyFullApiKey = async (): Promise<void> => {
   }
 }
 
-const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
+const isHomeRoute = computed(
+  () => route.path === '/home' || route.path === '/quick-clip' || route.path === '/douyin'
+)
 const show = computed(
   () =>
     isHomeRoute.value &&

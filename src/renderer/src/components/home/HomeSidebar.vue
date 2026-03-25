@@ -11,7 +11,8 @@ import {
   ChevronBackOutline,
   CutOutline,
   VideocamOutline,
-  SparklesOutline
+  SparklesOutline,
+  OpenOutline
 } from '@vicons/ionicons5'
 import { getVideosApi, type VideoItem, type HomePlayPayload } from '../../api/video'
 import {
@@ -534,11 +535,19 @@ const refreshVideosFromApi = async () => {
             </div>
             <div
               class="top-workspace-view-tab"
-              :class="{ active: route.path !== '/quick-clip' }"
+              :class="{ active: route.path === '/home' }"
               @click="emit('navigate', '/home')"
             >
               <n-icon size="14"><SparklesOutline /></n-icon>
               <span>AI</span>
+            </div>
+            <div
+              class="top-workspace-view-tab"
+              :class="{ active: route.path === '/douyin' }"
+              @click="emit('navigate', '/douyin')"
+            >
+              <n-icon size="14"><OpenOutline /></n-icon>
+              <span>抖音</span>
             </div>
           </div>
           <!-- 折叠状态下的侧边栏 Tab 切换 -->
@@ -553,11 +562,19 @@ const refreshVideosFromApi = async () => {
             </div>
             <div
               class="collapsed-icon-item"
-              :class="{ active: route.path !== '/quick-clip' }"
+              :class="{ active: route.path === '/home' }"
               @click="emit('navigate', '/home')"
               title="AI"
             >
               <n-icon size="20"><SparklesOutline /></n-icon>
+            </div>
+            <div
+              class="collapsed-icon-item"
+              :class="{ active: route.path === '/douyin' }"
+              @click="emit('navigate', '/douyin')"
+              title="抖音"
+            >
+              <n-icon size="20"><OpenOutline /></n-icon>
             </div>
           </div>
         </div>
@@ -895,6 +912,11 @@ const refreshVideosFromApi = async () => {
   /* AI颜色特色：使用“你好，创作者”渐变色相关的蓝色系 */
   background: rgba(79, 172, 254, 0.15);
   color: #4facfe;
+}
+
+.top-workspace-view-tab.active:nth-child(3) {
+  background: rgba(254, 44, 85, 0.12);
+  color: #fb7185;
 }
 
 /* 工作空间切换 Popover：紧凑高度，柔和配色 */

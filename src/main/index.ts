@@ -151,7 +151,8 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      backgroundThrottling: false // 切到别的 app 时保持页面存活，不节流
+      backgroundThrottling: false, // 切到别的 app 时保持页面存活，不节流
+      webviewTag: true // 抖音页等使用 <webview> 内嵌第三方站点
     }
   })
 

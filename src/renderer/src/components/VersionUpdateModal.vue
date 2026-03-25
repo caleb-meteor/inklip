@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NModal, NButton } from 'naive-ui'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRealtimeStore } from '../stores/realtime'
 
@@ -11,8 +11,11 @@ const route = useRoute()
 const rtStore = useRealtimeStore()
 
 /** 优先级 4：无 API Key 不可用、未到期时才可能弹本窗。主界面 /home 与 /quick-clip */
-const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
-const show = computed(
+const isHomeRoute = computed(
+  () => route.path === '/home' || route.path === '/quick-clip' || route.path === '/douyin'
+)
+
+const baseReady = computed(
   () =>
     rtStore.versionUpdateInfo != null &&
     isHomeRoute.value &&
@@ -21,24 +24,55 @@ const show = computed(
     (rtStore.userInfoReceivedFromCloud || rtStore.versionUpdateInfo.force_update)
 )
 
+const sessionPromptUsed = ref(false)
+const modalVisible = ref(false)
+
+watch(
+  baseReady,
+  (ready) => {
+    if (!ready) {
+      modalVisible.value = false
+      return
+    }
+    if (!sessionPromptUsed.value) {
+      sessionPromptUsed.value = true
+      modalVisible.value = true
+    }
+  },
+  { immediate: true }
+)
+
+function dismissVersionModal(): void {
+  modalVisible.value = false
+  rtStore.clearVersionUpdate()
+}
+
+const show = computed({
+  get: () => modalVisible.value && baseReady.value,
+  set: (v: boolean) => {
+    if (!v) dismissVersionModal()
+  }
+})
+
 const versionUpdateInfo = computed(() => rtStore.versionUpdateInfo)
 const isForceUpdate = computed(() => versionUpdateInfo.value?.force_update ?? false)
 
 const onLater = (): void => {
-  rtStore.clearVersionUpdate()
+  dismissVersionModal()
 }
 
 const onGo = (): void => {
   window.api.openExternal(VERSION_DOWNLOAD_URL)
+  dismissVersionModal()
 }
 </script>
 
 <template>
   <n-modal
-    :show="show"
-    :mask-closable="!isForceUpdate"
-    :close-on-esc="!isForceUpdate"
-    :closable="!isForceUpdate"
+    v-model:show="show"
+    :mask-closable="true"
+    :close-on-esc="true"
+    :closable="true"
     class="version-update-modal"
   >
     <div class="version-update-card">

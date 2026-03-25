@@ -1,5 +1,11 @@
+import process from 'node:process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { contextBridge, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { buildChromeLikeUserAgent } from '../shared/chromeUa'
+
+const __preloadDir = dirname(fileURLToPath(import.meta.url))
 
 // Custom APIs for renderer
 const api = {
@@ -32,7 +38,51 @@ const api = {
   showExportSaveDialog: (suggestedName: string) =>
     electronAPI.ipcRenderer.invoke('show-export-save-dialog', suggestedName),
   /** 在默认浏览器中打开链接（如更新下载页） */
-  openExternal: (url: string) => electronAPI.ipcRenderer.invoke('open-external', url)
+  openExternal: (url: string) => electronAPI.ipcRenderer.invoke('open-external', url),
+  /** 与当前 Electron Chromium 版本一致的 Chrome 桌面 UA（不含 Electron） */
+  getBrowserLikeUserAgent: (): string =>
+    buildChromeLikeUserAgent(process.versions.chrome ?? '132.0.0.0', process.platform),
+  /** 抖音内嵌 webview 的 preload 绝对路径（webpreferences 要求 absolute path） */
+  getDouyinWebviewPreloadPath: (): string =>
+    join(__preloadDir, 'douyin-webview.js'),
+  /** 主进程打开「类浏览器」独立窗口（无影氪 preload，UA 与 Chrome 对齐） */
+  openBrowserLikeWindow: (url: string) => electronAPI.ipcRenderer.invoke('open-browser-like-window', url),
+  /** 屏外窗口拉 detail 后下载（不跳转主 webview） */
+  downloadDouyinOffscreen: (opts: { awemeId: string; suggestedName: string; savePath?: string }) =>
+    electronAPI.ipcRenderer.invoke('douyin-offscreen-download', opts) as Promise<
+      | { success: true; path: string }
+      | { success: false; error?: string; canceled?: boolean }
+    >,
+  cancelDouyinDownload: () =>
+    electronAPI.ipcRenderer.invoke('douyin-cancel-download') as Promise<{ success: boolean }>,
+  onDouyinDownloadProgress: (
+    callback: (
+      payload:
+        | {
+            phase: 'update'
+            received: number
+            total: number
+            percent: number | null
+            fileLabel: string
+          }
+        | { phase: 'done' }
+    ) => void
+  ) => {
+    const fn = (
+      _event: Electron.IpcRendererEvent,
+      payload:
+        | {
+            phase: 'update'
+            received: number
+            total: number
+            percent: number | null
+            fileLabel: string
+          }
+        | { phase: 'done' }
+    ) => callback(payload)
+    electronAPI.ipcRenderer.on('douyin-download-progress', fn)
+    return () => electronAPI.ipcRenderer.removeListener('douyin-download-progress', fn)
+  }
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

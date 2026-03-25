@@ -20,6 +20,11 @@ const routes = [
     component: Home
   },
   {
+    path: '/douyin',
+    name: 'DouyinBrowse',
+    component: Home
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: Settings

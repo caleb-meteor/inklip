@@ -7,6 +7,7 @@ import HomeRightSidebar from '../components/home/HomeRightSidebar.vue'
 import HomeChatMessages from '../components/home/HomeChatMessages.vue'
 import HomeVideoPlayer from '../components/home/HomeVideoPlayer.vue'
 import QuickClip from './QuickClip.vue'
+import DouyinBrowse from './DouyinBrowse.vue'
 import ChatInput from '../components/ChatInput.vue'
 import AppStatusBar from '../components/AppStatusBar.vue'
 import { smartCutAiService, type AiChatTopic } from '../services/smartCutAiService'
@@ -186,6 +187,7 @@ const navigateTo = (path: string): void => {
       localStorage.setItem(LAST_VIEW_MODE_KEY, pathName === '/quick-clip' ? 'quick-clip' : 'home')
     } catch {}
   }
+  // /douyin 不写入 lastViewMode，避免下次启动误进抖音页
   router.push(path)
 }
 
@@ -372,7 +374,8 @@ const handleNewChat = (): void => {
               :current-workspace="currentSelectedWorkspace"
               @navigate="navigateTo"
             />
-            <div v-show="route.path !== '/quick-clip'" class="chat-layout">
+            <DouyinBrowse v-show="route.path === '/douyin'" />
+            <div v-show="route.path === '/home'" class="chat-layout">
               <div class="messages-container">
                 <HomeChatMessages :messages="messages" @play-video="handlePlayVideo" />
               </div>
@@ -388,7 +391,7 @@ const handleNewChat = (): void => {
         </n-layout-content>
 
         <n-layout-sider
-          v-if="route.path !== '/quick-clip'"
+          v-if="route.path === '/home'"
           width="280"
           collapse-mode="width"
           :collapsed-width="48"

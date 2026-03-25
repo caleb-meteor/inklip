@@ -15,7 +15,9 @@ const savingKey = ref(false)
 const registering = ref(false)
 
 /** 等待用量同步，或 API Key 不可用；主界面 /home 与 /quick-clip */
-const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
+const isHomeRoute = computed(
+  () => route.path === '/home' || route.path === '/quick-clip' || route.path === '/douyin'
+)
 const show = computed(
   () => isHomeRoute.value && (rtStore.isAwaitingCloudActivation || rtStore.isUserBanned)
 )
