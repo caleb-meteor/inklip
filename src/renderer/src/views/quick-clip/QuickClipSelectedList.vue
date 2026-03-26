@@ -3,6 +3,7 @@ import { NIcon, NScrollbar, NButton, NSpin, NEmpty, NTooltip } from 'naive-ui'
 import { ListOutline, RemoveOutline, TimeOutline, CloseOutline, PlayOutline, ArrowUpCircleOutline, FolderOpenOutline, TrashOutline, SearchOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
 import { inject } from 'vue'
 import type { SegmentWithVideo } from './types'
+import { labelForExportVideoType } from '../../api/video'
 
 const qc = inject('quickClip') as any
 
@@ -197,7 +198,9 @@ function openExportFolder(filePath: string) {
               >
                 <div class="export-history-item-content">
                   <span class="export-history-name" :title="item.suggested_name">{{ item.suggested_name }}</span>
-                  <span class="export-history-meta">{{ item.segment_count }} 段 · {{ formatDate(item.created_at) }}</span>
+                  <span class="export-history-meta"
+                    >{{ labelForExportVideoType(item.export_type) }} · {{ formatDate(item.created_at) }}</span
+                  >
                 </div>
                 <div class="export-history-actions">
                   <n-tooltip v-if="item.output_path" placement="top" trigger="hover">

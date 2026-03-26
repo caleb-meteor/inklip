@@ -4,6 +4,8 @@ import { useQuickClip } from '../composables/useQuickClip'
 import QuickClipSubtitleList from './quick-clip/QuickClipSubtitleList.vue'
 import QuickClipSelectedList from './quick-clip/QuickClipSelectedList.vue'
 import QuickClipPreview from './quick-clip/QuickClipPreview.vue'
+import type { SegmentWithVideo } from './quick-clip/types'
+import type { ExportVideoType } from '../api/video'
 
 export interface CurrentWorkspace {
   id: number
@@ -25,7 +27,14 @@ provide('quickClip', reactive(quickClip))
 defineExpose({
   scrollToVideoSubtitles: quickClip.scrollToVideoSubtitles,
   loadVideos: quickClip.loadVideos,
-  setVideosFromParent: (list: import('../api/video').VideoItem[]) => quickClip.loadVideos(list)
+  setVideosFromParent: (list: import('../api/video').VideoItem[]) => quickClip.loadVideos(list),
+  appendSegmentsToSelected: (segments: SegmentWithVideo[]) => quickClip.appendSegmentsToSelected(segments),
+  exportSegmentsDirect: (
+    segments: SegmentWithVideo[],
+    workspaceId?: number | null,
+    suggestedName?: string,
+    exportType?: ExportVideoType
+  ) => quickClip.exportSegmentsDirect(segments, { workspaceId, suggestedName, exportType })
 })
 
 function onApplyExport(exportVideoId: number) {

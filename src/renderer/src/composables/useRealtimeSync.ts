@@ -80,8 +80,14 @@ export function useRealtimeSync() {
             smartCutTask: {
               ...msg.payload.smartCutTask,
               status: latestData.status,
-              fileUrl: latestData.file_url,
-              duration: latestData.duration
+              fileUrl: latestData.path ?? latestData.file_url,
+              duration: latestData.duration,
+              cover: latestData.cover,
+              name: latestData.name,
+              payload: latestData.payload,
+              subtitle: latestData.subtitle,
+              subtitle_ids: latestData.subtitle_ids,
+              workspace_id: latestData.workspace_id
             }
           }
           aiChatStore.updateMessage(msg.id, { payload: updatedPayload })

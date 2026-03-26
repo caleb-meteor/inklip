@@ -629,6 +629,16 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     selectedSegments.value.push(seg)
   }
 
+  /** 将外部片段（如智能剪辑方案）按顺序追加到已选字幕，跳过与已选重复的键 */
+  function appendSegmentsToSelected(segments: SegmentWithVideo[]) {
+    for (const seg of segments) {
+      const key = getSegmentKey(seg)
+      if (!selectedSegments.value.some(s => getSegmentKey(s) === key)) {
+        selectedSegments.value.push(seg)
+      }
+    }
+  }
+
   function removeSelectedSegments() {
     if (selectedSegmentIndexes.value.size > 0 && !isPreviewPlaying.value) {
       const indexesToDelete = Array.from(selectedSegmentIndexes.value).sort((a, b) => b - a)
@@ -1150,24 +1160,40 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     return result
   }
 
-  async function handleExportSegments(suggestedName?: string) {
-    if (selectedSegments.value.length === 0) {
-      message.warning('请先选择要导出的字幕片段')
+  /**
+   * 导出指定片段列表（与「已选字幕」导出同一套 API / 另存为 / SSE 进度）
+   * @param workspaceIdOverride 智能剪辑等场景传入任务所属工作区，避免与当前侧栏工作区不一致
+   */
+  async function exportSegmentsDirect(
+    segments: SegmentWithVideo[],
+    options?: { workspaceId?: number | null; suggestedName?: string; exportType?: 'subtitle_clip' | 'ai' }
+  ) {
+    if (segments.length === 0) {
+      message.warning('没有可导出的字幕片段')
       return
     }
-    const name = suggestedName?.trim() || `inklip_merged_${Date.now()}.mp4`
-    const dialogResult = await window.api?.showExportSaveDialog(name)
+    const ws = options?.workspaceId ?? selectedWorkspaceId.value
+    if (ws == null || ws <= 0) {
+      message.warning('请先选择工作区')
+      return
+    }
+    const defaultSaveName = options?.suggestedName?.trim() || `inklip_merged_${Date.now()}.mp4`
+    const dialogResult = await window.api?.showExportSaveDialog(defaultSaveName)
     if (dialogResult?.canceled || !dialogResult?.filePath) {
       return
     }
     const userChosenPath = dialogResult.filePath
+    const normalized = userChosenPath.trim().replace(/\\/g, '/')
+    const slash = normalized.lastIndexOf('/')
+    const pickedBase = slash >= 0 ? normalized.slice(slash + 1) : normalized
+    const suggestedNameForDb = pickedBase || defaultSaveName
     rtStore.clearExportSegmentsProgress()
     const exportRequestId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
     activeExportRequestId.value = exportRequestId
     exportProgress.value = 2
     isExporting.value = true
     await (async () => {
-      const requestSegments = selectedSegments.value.map(seg => ({
+      const requestSegments = segments.map((seg) => ({
         video_id: seg.videoId,
         start_s: seg.fromS,
         end_s: seg.toS,
@@ -1175,8 +1201,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       }))
       const res = await exportSegmentsApi(
         requestSegments,
-        { workspaceId: selectedWorkspaceId.value },
-        name,
+        { workspaceId: ws, exportType: options?.exportType ?? undefined },
+        suggestedNameForDb,
         userChosenPath,
         exportRequestId
       )
@@ -1191,6 +1217,14 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
       isExporting.value = false
       exportProgress.value = 0
     })
+  }
+
+  async function handleExportSegments(suggestedName?: string) {
+    if (selectedSegments.value.length === 0) {
+      message.warning('请先选择要导出的字幕片段')
+      return
+    }
+    await exportSegmentsDirect(selectedSegments.value, { suggestedName })
   }
 
   function handleGlobalKeydown(e: KeyboardEvent) {
@@ -1269,6 +1303,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     addSelectedSegments,
     clearSourceSelection,
     addSegment,
+    appendSegmentsToSelected,
+    exportSegmentsDirect,
     removeSelectedSegments,
     removeSegment,
     toggleSegmentSelection,

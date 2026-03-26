@@ -1,26 +1,14 @@
 <script setup lang="ts">
-import { ref, inject } from 'vue'
-import { NIcon, NButton, NModal, NInput, NProgress } from 'naive-ui'
+import { inject } from 'vue'
+import { NIcon, NButton, NModal, NProgress } from 'naive-ui'
 import { PlayOutline, DownloadOutline } from '@vicons/ionicons5'
 
 const qc = inject('quickClip') as any
 
-const showExportNameModal = ref(false)
-/** 仅文件名（不含 .mp4），导出时自动追加 .mp4 */
-const exportFileName = ref('')
-
-function openExportModal() {
+function startExport() {
   if (qc.selectedSegments.length === 0) return
-  exportFileName.value = `inklip_merged_${Date.now()}`
-  showExportNameModal.value = true
+  void qc.handleExportSegments()
 }
-
-function confirmExport() {
-  const name = exportFileName.value.trim()
-  showExportNameModal.value = false
-  if (name) qc.handleExportSegments(name + '.mp4')
-}
-
 </script>
 
 <template>
@@ -63,7 +51,7 @@ function confirmExport() {
         block
         :disabled="qc.selectedSegments.length === 0"
         :loading="qc.isExporting"
-        @click="openExportModal"
+        @click="startExport"
       >
         <template #icon>
           <n-icon><DownloadOutline /></n-icon>
@@ -83,9 +71,7 @@ function confirmExport() {
       style="width: 420px; border-radius: 12px;"
     >
       <div class="export-progress-body">
-        <p class="export-progress-desc">
-          正在拼接 {{ qc.selectedSegments.length }} 个片段，请稍候…
-        </p>
+        <p class="export-progress-desc">正在导出，请稍候…</p>
         <n-progress
           type="line"
           :percentage="Math.round(qc.exportProgress)"
@@ -95,41 +81,6 @@ function confirmExport() {
           processing
         />
       </div>
-    </n-modal>
-
-    <n-modal
-      :show="showExportNameModal"
-      preset="card"
-      title="导出视频"
-      size="small"
-      style="width: 400px; border-radius: 12px;"
-      @update:show="(v: boolean) => { showExportNameModal = v }"
-    >
-      <div class="export-name-form">
-        <div class="export-name-input-wrap">
-          <n-input
-            v-model:value="exportFileName"
-            placeholder="输入导出文件名（无需加 .mp4）"
-            maxlength="100"
-            clearable
-            @keydown.enter.prevent="confirmExport"
-          />
-          <span class="export-name-suffix">.mp4</span>
-        </div>
-      </div>
-      <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
-          <n-button @click="showExportNameModal = false">取消</n-button>
-          <n-button
-            type="primary"
-            :loading="qc.isExporting"
-            :disabled="!exportFileName.trim()"
-            @click="confirmExport"
-          >
-            导出
-          </n-button>
-        </div>
-      </template>
     </n-modal>
   </div>
 </template>
@@ -198,39 +149,6 @@ function confirmExport() {
   z-index: 10;
   background: transparent;
   display: block;
-}
-.export-name-form {
-  padding: 4px 0;
-}
-.export-name-desc {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
-  margin: 0 0 12px 0;
-}
-.export-name-input-wrap {
-  display: flex;
-  align-items: stretch;
-  border: 1px solid var(--n-border);
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--n-color);
-}
-.export-name-input-wrap .n-input {
-  flex: 1;
-  --n-border-radius: 0;
-}
-.export-name-input-wrap .n-input :deep(.n-input__border),
-.export-name-input-wrap .n-input :deep(.n-input__state-border) {
-  border: none;
-}
-.export-name-suffix {
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.04);
-  user-select: none;
 }
 .export-progress-body {
   padding: 8px 0 4px;

@@ -7,7 +7,7 @@ import {
   type GlobalThemeOverrides
 } from 'naive-ui'
 import { RouterView, useRouter } from 'vue-router'
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useRealtimeStore } from './stores/realtime'
 import { setBaseUrl } from './utils/request'
 import BannedUserModal from './components/BannedUserModal.vue'
@@ -46,8 +46,11 @@ const initConnection = (port: number): void => {
   rtStore.connect()
 }
 
+let removeNavigateListener: (() => void) | undefined
+let removeBackendPortListener: (() => void) | undefined
+
 onMounted(async () => {
-  window.api.onNavigate((route) => {
+  removeNavigateListener = window.api.onNavigate((route) => {
     router.push(route)
   })
 
@@ -58,10 +61,15 @@ onMounted(async () => {
   }
 
   // Listen for port updates (in case backend restarts or starts late)
-  window.api.onBackendPort((port) => {
+  removeBackendPortListener = window.api.onBackendPort((port) => {
     console.log('[Renderer] Backend port received:', port)
     initConnection(port)
   })
+})
+
+onUnmounted(() => {
+  removeNavigateListener?.()
+  removeBackendPortListener?.()
 })
 </script>
 

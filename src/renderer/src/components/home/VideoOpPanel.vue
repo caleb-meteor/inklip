@@ -6,6 +6,7 @@ import type { VideoItem } from '../../api/video'
 import {
   getVideoRelatedExportsApi,
   getVideoRelatedSmartCutsApi,
+  labelForExportVideoType,
   type ExportHistoryItem,
   type VideoRelatedSmartCutItem
 } from '../../api/video'
@@ -211,7 +212,8 @@ function openInFolder() {
                       class="related-item"
                       :title="ev.output_path"
                     >
-                      {{ ev.suggested_name }}
+                      <span class="related-item-name">{{ ev.suggested_name }}</span>
+                      <span class="related-item-kind">{{ labelForExportVideoType(ev.export_type) }}</span>
                     </div>
                   </template>
                   <span v-else class="related-empty">暂无</span>
@@ -390,15 +392,31 @@ function openInFolder() {
 }
 
 .related-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   color: var(--ev-c-text-2, rgba(235, 235, 245, 0.6));
   padding: 5px 8px;
   background: rgba(255, 255, 255, 0.04);
   border-radius: 4px;
+  min-width: 0;
+  transition: background 0.15s;
+}
+
+.related-item-name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background 0.15s;
+}
+
+.related-item-kind {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--ev-c-text-3, rgba(235, 235, 245, 0.45));
+  opacity: 0.9;
 }
 
 .related-item:hover {

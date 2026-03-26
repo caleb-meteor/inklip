@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import appIcon from '../../../../resources/icon.png'
 
@@ -8,6 +8,9 @@ const status = ref('正在启动服务...')
 const percentage = ref(0)
 const error = ref('')
 
+let removeBackendStartFailed: (() => void) | undefined
+let removeBackendPortWait: (() => void) | undefined
+
 onMounted(async () => {
   let initInterval: ReturnType<typeof setInterval> | undefined
 
@@ -15,7 +18,7 @@ onMounted(async () => {
     if (percentage.value < 80) percentage.value += 5
   }, 100)
 
-  window.api.onBackendStartFailed((err) => {
+  removeBackendStartFailed = window.api.onBackendStartFailed((err) => {
     error.value = `核心服务启动异常 (${err.code})`
     status.value = '启动失败'
     percentage.value = 100
@@ -36,7 +39,11 @@ onMounted(async () => {
   const p = await window.api.getBackendPort()
   if (!p) {
     await new Promise<number>((resolve) => {
-      window.api.onBackendPort((port) => resolve(port))
+      removeBackendPortWait = window.api.onBackendPort((port) => {
+        removeBackendPortWait?.()
+        removeBackendPortWait = undefined
+        resolve(port)
+      })
     })
   }
 
@@ -47,6 +54,11 @@ onMounted(async () => {
   setTimeout(() => {
     router.push('/home')
   }, 280)
+})
+
+onUnmounted(() => {
+  removeBackendStartFailed?.()
+  removeBackendPortWait?.()
 })
 </script>
 

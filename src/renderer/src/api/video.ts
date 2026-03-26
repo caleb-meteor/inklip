@@ -306,6 +306,13 @@ export function deleteVideoApi(id: number): Promise<void> {
   })
 }
 
+/** 导出记录来源：字幕剪辑（默认）| 智能剪辑/AI */
+export type ExportVideoType = 'subtitle_clip' | 'ai'
+
+export function labelForExportVideoType(t?: string | null): string {
+  return t === 'ai' ? 'AI 导出' : '字幕剪辑'
+}
+
 export interface ExportSegmentsRequestItem {
   video_id: number
   start_s: number
@@ -319,10 +326,11 @@ export interface ExportSegmentsRequestItem {
  * @param suggestedName 可选，自定义导出文件名（如 "我的剪辑.mp4"）
  * @param outputPath 可选，用户通过另存为选择的完整保存路径；若提供则后端直接写入该路径，你可通过 path.dirname(outputPath) 得到目录
  * @param exportRequestId 可选；若传则后端用 FFmpeg -progress 并通过 SSE 推送 export_segments_progress
+ * @param exportType 可选；subtitle_clip 字幕剪辑（默认）、ai 智能剪辑导出
  */
 export function exportSegmentsApi(
   segments: ExportSegmentsRequestItem[],
-  options?: { workspaceId?: number | null },
+  options?: { workspaceId?: number | null; exportType?: ExportVideoType | null },
   suggestedName?: string | null,
   outputPath?: string | null,
   exportRequestId?: string | null
@@ -330,6 +338,9 @@ export function exportSegmentsApi(
   const data: Record<string, unknown> = { segments }
   if (options?.workspaceId != null && options.workspaceId > 0) {
     data.workspace_id = options.workspaceId
+  }
+  if (options?.exportType === 'ai') {
+    data.export_type = 'ai'
   }
   if (suggestedName != null && suggestedName.trim() !== '') {
     data.suggested_name = suggestedName.trim()
@@ -355,6 +366,8 @@ export interface ExportHistoryItem {
   suggested_name: string
   output_path: string
   segment_count: number
+  /** subtitle_clip 字幕剪辑（默认）| ai 智能剪辑导出 */
+  export_type?: ExportVideoType | string
   created_at: string
 }
 
