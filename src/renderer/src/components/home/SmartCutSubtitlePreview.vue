@@ -1,0 +1,484 @@
+<script setup lang="ts">
+import { ref, computed, watch, onBeforeUnmount, inject } from 'vue'
+import { useRouter } from 'vue-router'
+import { NButton, NIcon, useMessage } from 'naive-ui'
+import { PlayOutline, PauseOutline, DownloadOutline, CreateOutline } from '@vicons/ionicons5'
+import { getVideosApi, type VideoItem } from '../../api/video'
+import { getMediaUrl } from '../../utils/media'
+import { quickClipBridgeKey } from '../../utils/quickClipBridge'
+import type { SegmentWithVideo } from '../../views/quick-clip/types'
+
+export type SmartCutSubtitleEntry = {
+  video_id?: number
+  text?: string
+  offsets?: { from?: number; to?: number }
+}
+
+const props = defineProps<{
+  subtitle: SmartCutSubtitleEntry[] | null | undefined
+  /** 智能剪辑任务所属工作区，导出时传给后端（与字幕剪辑导出一致） */
+  workspaceId?: number | null
+}>()
+
+const bridge = inject(quickClipBridgeKey, null)
+const router = useRouter()
+const message = useMessage()
+const exporting = ref(false)
+
+const bridgeReady = computed(() => bridge != null && bridge.value != null)
+
+type Segment = {
+  videoId: number
+  videoPath: string
+  text: string
+  fromS: number
+  toS: number
+}
+
+const videoRef = ref<HTMLVideoElement | null>(null)
+const videosById = ref<Map<number, VideoItem>>(new Map())
+const lastLoadedMaterialPath = ref('')
+const activeIndex = ref(-1)
+const isChainPlaying = ref(false)
+let chainIndex = -1
+let timeUpdateCleanup: (() => void) | null = null
+
+function clearTimeListener() {
+  if (timeUpdateCleanup) {
+    timeUpdateCleanup()
+    timeUpdateCleanup = null
+  }
+}
+
+const segments = computed((): Segment[] => {
+  const sub = props.subtitle
+  if (!Array.isArray(sub) || sub.length === 0) return []
+  const out: Segment[] = []
+  for (const row of sub) {
+    const vid = row.video_id
+    if (vid == null || vid <= 0) continue
+    const v = videosById.value.get(vid)
+    if (!v?.path) continue
+    const from = row.offsets?.from ?? 0
+    const to = row.offsets?.to ?? 0
+    out.push({
+      videoId: vid,
+      videoPath: v.path,
+      text: String(row.text ?? ''),
+      fromS: from / 1000,
+      toS: to / 1000
+    })
+  }
+  return out
+})
+
+async function loadVideos(): Promise<void> {
+  const sub = props.subtitle
+  if (!Array.isArray(sub) || sub.length === 0) {
+    videosById.value = new Map()
+    return
+  }
+  const ids = [...new Set(sub.map((s) => s.video_id).filter((x): x is number => x != null && x > 0))]
+  if (ids.length === 0) {
+    videosById.value = new Map()
+    return
+  }
+  try {
+    const list = await getVideosApi({ ids })
+    const m = new Map<number, VideoItem>()
+    for (const v of list) m.set(v.id, v)
+    videosById.value = m
+  } catch {
+    videosById.value = new Map()
+  }
+}
+
+watch(
+  () => props.subtitle,
+  () => {
+    void loadVideos()
+  },
+  { immediate: true, deep: true }
+)
+
+function formatSegTime(fromS: number, toS: number): string {
+  const fmt = (t: number) => {
+    const m = Math.floor(t / 60)
+    const s = Math.floor(t % 60)
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+  return `${fmt(fromS)} – ${fmt(toS)}`
+}
+
+function playNextInChain(): void {
+  chainIndex++
+  if (chainIndex >= segments.value.length) {
+    isChainPlaying.value = false
+    chainIndex = -1
+    activeIndex.value = -1
+    clearTimeListener()
+    return
+  }
+  playSegmentAt(chainIndex, true)
+}
+
+function playSegmentAt(index: number, fromChain: boolean): void {
+  clearTimeListener()
+  const seg = segments.value[index]
+  const video = videoRef.value
+  if (!seg || !video) return
+
+  if (!fromChain) {
+    isChainPlaying.value = false
+    chainIndex = -1
+  }
+
+  activeIndex.value = index
+  const url = getMediaUrl(seg.videoPath)
+
+  const doPlay = (): void => {
+    video.currentTime = seg.fromS
+    video.muted = false
+    void video.play().catch(() => {
+      if (fromChain) {
+        isChainPlaying.value = false
+        chainIndex = -1
+      }
+    })
+  }
+
+  const onTimeUpdate = (): void => {
+    if (video.currentTime >= seg.toS) {
+      video.pause()
+      clearTimeListener()
+      if (fromChain && isChainPlaying.value) {
+        playNextInChain()
+      }
+    }
+  }
+
+  video.addEventListener('timeupdate', onTimeUpdate)
+  timeUpdateCleanup = () => {
+    video.removeEventListener('timeupdate', onTimeUpdate)
+  }
+
+  if (lastLoadedMaterialPath.value !== seg.videoPath) {
+    lastLoadedMaterialPath.value = seg.videoPath
+    video.src = url
+    video.load()
+    const onCanPlay = (): void => {
+      video.removeEventListener('canplay', onCanPlay)
+      doPlay()
+    }
+    video.addEventListener('canplay', onCanPlay)
+  } else {
+    doPlay()
+  }
+}
+
+function onRowClick(index: number): void {
+  if (isChainPlaying.value) {
+    isChainPlaying.value = false
+    chainIndex = -1
+    videoRef.value?.pause()
+    clearTimeListener()
+  }
+  playSegmentAt(index, false)
+}
+
+function toggleChainPreview(): void {
+  if (segments.value.length === 0) return
+  if (isChainPlaying.value) {
+    isChainPlaying.value = false
+    chainIndex = -1
+    videoRef.value?.pause()
+    clearTimeListener()
+    activeIndex.value = -1
+    return
+  }
+  isChainPlaying.value = true
+  chainIndex = -1
+  playNextInChain()
+}
+
+function buildSegmentsForQuickClip(): SegmentWithVideo[] {
+  return segments.value.map((seg, i) => {
+    const v = videosById.value.get(seg.videoId)!
+    // 与 useQuickClip.getVideoSegments 一致：播放器 src 需经 getMediaUrl（Electron media:// 等）
+    const videoPath = v.path ? getMediaUrl(v.path) : ''
+    return {
+      text: seg.text,
+      fromMs: Math.round(seg.fromS * 1000),
+      toMs: Math.round(seg.toS * 1000),
+      fromS: seg.fromS,
+      toS: seg.toS,
+      videoId: seg.videoId,
+      videoName: v.name,
+      videoPath,
+      segmentIndex: i
+    }
+  })
+}
+
+async function onExport(): Promise<void> {
+  const api = bridge?.value
+  if (!api) {
+    message.warning('字幕剪辑未就绪，请稍后再试')
+    return
+  }
+  if (segments.value.length === 0) return
+  const list = buildSegmentsForQuickClip()
+  exporting.value = true
+  try {
+    await api.exportSegmentsDirect(
+      list,
+      props.workspaceId ?? null,
+      `智能剪辑导出_${Date.now()}.mp4`,
+      'ai'
+    )
+  } finally {
+    exporting.value = false
+  }
+}
+
+function onSendToQuickClip(): void {
+  const api = bridge?.value
+  if (!api) {
+    message.warning('字幕剪辑未就绪，请稍后再试')
+    return
+  }
+  if (segments.value.length === 0) return
+  api.appendSegmentsToSelected(buildSegmentsForQuickClip())
+  message.success('已添加到「已选字幕」，正在打开字幕剪辑')
+  void router.push('/quick-clip')
+}
+
+onBeforeUnmount(() => {
+  isChainPlaying.value = false
+  chainIndex = -1
+  clearTimeListener()
+  videoRef.value?.pause()
+})
+</script>
+
+<template>
+  <div class="smartcut-preview">
+    <div class="preview-media">
+      <div class="preview-video-wrap">
+        <video
+          ref="videoRef"
+          class="preview-video"
+          controls
+          playsinline
+          preload="metadata"
+        />
+      </div>
+      <div class="preview-toolbar">
+        <n-button size="small" secondary type="primary" :disabled="segments.length === 0" @click="toggleChainPreview">
+          <template #icon>
+            <n-icon>
+              <PauseOutline v-if="isChainPlaying" />
+              <PlayOutline v-else />
+            </n-icon>
+          </template>
+          {{ isChainPlaying ? '停止连续播放' : '连续播放方案' }}
+        </n-button>
+      </div>
+    </div>
+    <div class="preview-subtitles">
+      <div class="subtitle-header">
+        <div class="subtitle-header-title">
+          <span>推荐片段字幕</span>
+          <span v-if="segments.length" class="count">{{ segments.length }} 条</span>
+        </div>
+        <div v-if="segments.length" class="subtitle-header-actions">
+          <n-button
+            size="tiny"
+            quaternary
+            :disabled="!bridgeReady"
+            :loading="exporting"
+            @click="onExport"
+          >
+            <template #icon>
+              <n-icon><DownloadOutline /></n-icon>
+            </template>
+            导出
+          </n-button>
+          <n-button size="tiny" quaternary type="info" :disabled="!bridgeReady" @click="onSendToQuickClip">
+            <template #icon>
+              <n-icon><CreateOutline /></n-icon>
+            </template>
+            手动编辑
+          </n-button>
+        </div>
+      </div>
+      <div v-if="segments.length" class="subtitle-list">
+        <div
+          v-for="(seg, idx) in segments"
+          :key="`${seg.videoId}-${idx}-${seg.fromS}`"
+          class="subtitle-row"
+          :class="{ active: idx === activeIndex }"
+          :title="`播放 ${formatSegTime(seg.fromS, seg.toS)}`"
+          @click="onRowClick(idx)"
+        >
+          <span class="time">{{ formatSegTime(seg.fromS, seg.toS) }}</span>
+          <span class="text">{{ seg.text }}</span>
+        </div>
+      </div>
+      <div v-else class="empty">暂无可用预览（素材可能已删除或字幕格式异常）</div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* 与 260px 宽 9:16 竖屏视频同高 */
+.smartcut-preview {
+  --sc-preview-h: calc(260px * 16 / 9);
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+  min-height: 200px;
+}
+
+.preview-media {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* 竖屏 9:16 区域：固定宽高，与右侧字幕列等高 */
+.preview-video-wrap {
+  width: 260px;
+  max-width: 100%;
+  height: var(--sc-preview-h);
+  flex-shrink: 0;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.preview-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  width: 260px;
+  max-width: 100%;
+}
+
+.preview-subtitles {
+  width: 280px;
+  height: var(--sc-preview-h);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.subtitle-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.subtitle-header-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.subtitle-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.count {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.subtitle-list {
+  flex: 1;
+  overflow: auto;
+  padding: 6px;
+}
+
+.subtitle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.subtitle-row:hover {
+  background: rgba(79, 172, 254, 0.08);
+}
+
+.subtitle-row.active {
+  background: rgba(79, 172, 254, 0.15);
+  border: 1px solid rgba(79, 172, 254, 0.25);
+}
+
+.time {
+  font-size: 11px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.text {
+  font-size: 13px;
+  color: #e2e8f0;
+  line-height: 1.45;
+}
+
+.empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .smartcut-preview {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .preview-subtitles {
+    width: 100%;
+    max-width: 100%;
+    height: var(--sc-preview-h);
+  }
+}
+</style>

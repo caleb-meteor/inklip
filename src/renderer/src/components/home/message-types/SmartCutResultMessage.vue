@@ -9,11 +9,13 @@ import { getSmartCutApi } from '../../../api/video'
 import { updateAiChatMessageApi } from '../../../api/aiChat'
 import UnifiedVideoCard from '../../UnifiedVideoCard.vue'
 import TaskCardMessage from './TaskCardMessage.vue'
+import SmartCutSubtitlePreview from '../SmartCutSubtitlePreview.vue'
 import { useRealtimeStore } from '../../../stores/realtime'
 
 interface SmartCutTask {
   taskId?: string
   aiGenVideoId?: number
+  workspace_id?: number
   videoCount?: number
   durationMin?: number
   durationMax?: number
@@ -23,6 +25,9 @@ interface SmartCutTask {
   duration?: number
   cover?: string
   name?: string
+  /** 智能剪辑预览：带 video_id 的字幕条目（与接口 smart-cut 一致） */
+  subtitle?: unknown
+  subtitle_ids?: unknown
   payload?: any
   taskCard?: {
     steps: Array<{
@@ -95,7 +100,7 @@ const clearIntervals = () => {
   }
 }
 
-// 处理导出/下载 - 复用剪辑历史的导出功能
+// 处理导出/下载（本地合并成片）
 const handleExport = async () => {
   if (!completedVideoItem.value?.path) {
     message.error('视频文件不存在，无法导出')
@@ -168,6 +173,31 @@ const completedVideoItem = computed(() => {
   }
 })
 
+/** 仅预览成片：无合并文件，用素材时间轴字幕播放 */
+const previewSubtitleList = computed(() => {
+  const raw = props.task.subtitle
+  if (raw == null) return []
+  if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw) as unknown
+      return Array.isArray(p) ? p : []
+    } catch {
+      return []
+    }
+  }
+  return Array.isArray(raw) ? raw : []
+})
+
+const showSourcePreview = computed(() => {
+  return (
+    taskStatus.value === 1 &&
+    !props.task.fileUrl &&
+    previewSubtitleList.value.length > 0
+  )
+})
+
+const taskWorkspaceId = computed(() => props.task.workspace_id ?? null)
+
 // 解析 payload，支持字符串形式的 JSON
 const parsedPayload = computed(() => {
   const p = props.task.payload
@@ -205,7 +235,7 @@ const updateMessageStatus = async (latestData: any) => {
     const targetPayload = isNested ? currentMsg.payload.smartCutTask : currentMsg.payload
 
     const updatedPayload: any = { ...currentMsg.payload }
-    if (isNested) {
+      if (isNested) {
       updatedPayload.smartCutTask = {
         ...targetPayload,
         status: latestData.status,
@@ -213,7 +243,10 @@ const updateMessageStatus = async (latestData: any) => {
         duration: latestData.duration,
         cover: latestData.cover,
         name: latestData.name,
-        payload: latestData.payload
+        payload: latestData.payload,
+        subtitle: latestData.subtitle,
+        subtitle_ids: latestData.subtitle_ids,
+        workspace_id: latestData.workspace_id
       }
     } else {
       updatedPayload.status = latestData.status
@@ -222,6 +255,9 @@ const updateMessageStatus = async (latestData: any) => {
       updatedPayload.cover = latestData.cover
       updatedPayload.name = latestData.name
       updatedPayload.payload = latestData.payload
+      updatedPayload.subtitle = latestData.subtitle
+      updatedPayload.subtitle_ids = latestData.subtitle_ids
+      updatedPayload.workspace_id = latestData.workspace_id
     }
 
     // 确保 aiGenVideoId 总是存在
@@ -244,11 +280,15 @@ const updateMessageStatus = async (latestData: any) => {
       const isWaitingAi = latestData.status === 5
 
       if (isCompleted) {
-        // 已完成
+        // 已完成（可能仅有素材预览，无本地合并成片）
+        const doneDetail =
+          latestData.path && String(latestData.path).trim()
+            ? '智能剪辑已完成'
+            : '方案已生成，可预览素材片段'
         updatedPayload.taskCard.steps = [
           { label: '正在请求视频解析', status: 'completed' as const, detail: '请求已接收' },
           { label: '正在解析视频', status: 'completed' as const, detail: '解析完成' },
-          { label: '正在智能剪辑', status: 'completed' as const, detail: '智能剪辑已完成' }
+          { label: '正在智能剪辑', status: 'completed' as const, detail: doneDetail }
         ]
       } else if (isFailed) {
         // 失败
@@ -461,6 +501,37 @@ onBeforeUnmount(() => {
           </div>
           
           <!-- 剪辑思路展示 -->
+          <div v-if="parsedPayload?.title || parsedPayload?.main_content" class="payload-info-card">
+            <div v-if="parsedPayload.title" class="payload-title">
+              <span class="title-icon">📝</span>
+              <span class="title-text">{{ parsedPayload.title }}</span>
+            </div>
+            <div v-if="parsedPayload.main_content" class="payload-content">
+              <div class="content-label">剪辑思路：</div>
+              <div class="content-text">{{ parsedPayload.main_content }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 仅有云端方案、无本地合并成片：素材 + 字幕预览 -->
+      <div v-else-if="showSourcePreview" class="result-content">
+        <div v-if="task.taskCard" class="integrated-task-card" style="margin-bottom: 12px">
+          <TaskCardMessage :steps="task.taskCard.steps" />
+        </div>
+        <div class="top-action-bar">
+          <div class="result-status">
+            <span class="status-dot"></span>
+            <span class="status-text">剪辑方案已就绪</span>
+          </div>
+        </div>
+        <div class="main-display-area main-display-preview">
+          <div class="preview-wrap">
+            <SmartCutSubtitlePreview
+              :subtitle="previewSubtitleList"
+              :workspace-id="taskWorkspaceId"
+            />
+          </div>
           <div v-if="parsedPayload?.title || parsedPayload?.main_content" class="payload-info-card">
             <div v-if="parsedPayload.title" class="payload-title">
               <span class="title-icon">📝</span>
@@ -899,6 +970,19 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.7);
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.main-display-preview {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.preview-wrap {
+  width: 100%;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .video-preview-container {

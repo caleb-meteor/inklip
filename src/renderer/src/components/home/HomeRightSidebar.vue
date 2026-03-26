@@ -1,24 +1,15 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { NIcon, NTooltip, NEllipsis, NProgress, useMessage } from 'naive-ui'
+import { NIcon, NTooltip, NProgress } from 'naive-ui'
 import {
   ChatbubbleOutline,
   AddOutline,
   ListOutline,
   ChevronForward,
-  TrashOutline,
-  DownloadOutline
+  TrashOutline
 } from '@vicons/ionicons5'
 import type { AiChatTopic } from '../../api/aiChat'
-import {
-  getSmartCutsApi,
-  deleteSmartCutApi,
-  getSmartCutApi,
-  type SmartCutItem,
-  type HomePlayPayload
-} from '../../api/video'
-import UnifiedVideoPreview from '../UnifiedVideoPreview.vue'
 import { useRealtimeStore } from '../../stores/realtime'
 import { aiChatStore } from '../../services/aiChatStore'
 
@@ -33,15 +24,9 @@ const emit = defineEmits<{
   (e: 'select-chat', chat: AiChatTopic): void
   (e: 'new-chat'): void
   (e: 'toggle'): void
-  (e: 'play-video', payload: HomePlayPayload): void
 }>()
 
-const activeTab = ref<'recent' | 'history'>('recent')
-const clipHistory = ref<SmartCutItem[]>([])
-const loadingHistory = ref(false)
-const historyPage = ref(1)
-const historyHasMore = ref(true)
-const message = useMessage()
+const rtStore = useRealtimeStore()
 
 const handleSelectChat = (chat: AiChatTopic): void => {
   emit('select-chat', chat)
@@ -54,163 +39,6 @@ const handleNewChat = (): void => {
 const handleDeleteChat = async (e: Event, chat: AiChatTopic) => {
   e.stopPropagation()
   await aiChatStore.deleteAiChat(chat.id)
-}
-
-const handleDeleteClip = async (item: SmartCutItem) => {
-  await deleteSmartCutApi(item.id)
-  clipHistory.value = clipHistory.value.filter((i) => i.id !== item.id)
-  message.success('已删除剪辑历史')
-}
-
-const handleExportClip = async (item: SmartCutItem) => {
-  if (item.status !== 1) {
-    message.warning('视频尚未处理完成，无法导出')
-    return
-  }
-  const filePath = item.path || item.fileUrl
-  if (!filePath) {
-    message.error('未找到视频文件路径')
-    return
-  }
-
-  const loadingMsg = message.loading('正在准备导出...', { duration: 0 })
-  const fileName = item.name
-    ? item.name.endsWith('.mp4')
-      ? item.name
-      : `${item.name}.mp4`
-    : 'smart-cut.mp4'
-  await window.api
-    .downloadVideo(filePath, fileName)
-    .then((result) => {
-      if (result.success) {
-        message.success(`已保存至: ${result.path}`)
-      } else if (result.canceled) {
-        message.info('已取消导出')
-      } else {
-        message.error(result.error || '导出失败')
-      }
-    })
-    .finally(() => {
-      loadingMsg.destroy()
-    })
-}
-
-const fetchHistory = async () => {
-  if (loadingHistory.value || !historyHasMore.value) return
-  loadingHistory.value = true
-  const doFetch = async () => {
-    const wid = props.currentWorkspace?.id
-    const res = await getSmartCutsApi(historyPage.value, 20, wid)
-    if (historyPage.value === 1) clipHistory.value = res.list
-    else clipHistory.value.push(...res.list)
-    historyHasMore.value = clipHistory.value.length < res.total
-    if (historyHasMore.value) historyPage.value++
-  }
-  await doFetch().finally(() => {
-    loadingHistory.value = false
-  })
-}
-
-/** 重新拉取剪辑历史（进入 AI 页、休眠恢复等；不限于当前是否在「剪辑历史」标签） */
-const refreshClipHistory = (): void => {
-  historyPage.value = 1
-  historyHasMore.value = true
-  void fetchHistory()
-}
-
-defineExpose({ refreshClipHistory })
-
-// 当有智能剪辑状态更新（SSE smart_cut）时，若当前在「剪辑历史」页签，尝试增量刷新对应条目
-const rtStore = useRealtimeStore()
-watch(
-  () => rtStore.smartCutUpdated,
-  async () => {
-    if (activeTab.value !== 'history' || clipHistory.value.length === 0) return
-
-    // 从 realtime store 或 aiChatStore 中获取最近的 smartCutTask，提取 aiGenVideoId
-    const currentMessages = aiChatStore.getMessages().value
-    const lastMsg = currentMessages[currentMessages.length - 1]
-    const payload: any = lastMsg?.payload
-    const aiGenVideoId = payload?.smartCutTask?.aiGenVideoId || payload?.aiGenVideoId || payload?.id
-
-    if (!aiGenVideoId) return
-
-    void getSmartCutApi(aiGenVideoId)
-      .then((latest) => {
-        const idx = clipHistory.value.findIndex((item) => item.id === latest.id)
-        if (idx >= 0) {
-          clipHistory.value[idx] = {
-            ...clipHistory.value[idx],
-            status: latest.status,
-            cover: latest.cover ?? clipHistory.value[idx].cover,
-            duration: latest.duration ?? clipHistory.value[idx].duration,
-            path: latest.path ?? clipHistory.value[idx].path,
-            name: latest.name ?? clipHistory.value[idx].name
-          }
-        } else {
-          const wid = props.currentWorkspace?.id
-          const lw = (latest as SmartCutItem).workspace_id
-          if (!wid || lw === wid) {
-            clipHistory.value = [latest as SmartCutItem, ...clipHistory.value]
-          }
-        }
-      })
-      .catch((e) => {
-        console.warn('[HomeRightSidebar] Failed to sync smart cut history item', e)
-      })
-  }
-)
-
-watch(activeTab, (val) => {
-  if (val === 'history') {
-    historyPage.value = 1
-    historyHasMore.value = true
-    fetchHistory()
-  }
-})
-
-watch(
-  () => props.currentWorkspace,
-  () => {
-    if (activeTab.value === 'history') {
-      historyPage.value = 1
-      historyHasMore.value = true
-      fetchHistory()
-    }
-  }
-)
-
-const formatTime = (timeStr: string) => {
-  if (!timeStr) return ''
-  const date = new Date(timeStr)
-  return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`
-}
-
-const getStatusText = (status: number) => {
-  // Backend Constants:
-  // 0: Pending, 1: Completed, 2: Processing, 3: AIError, 4: VideoError, 5: AICutting
-  switch (status) {
-    case 0:
-      return '等待中'
-    case 1:
-      return '已完成'
-    case 2:
-      return '处理中'
-    case 3:
-      return 'AI失败'
-    case 4:
-      return '生成失败'
-    case 5:
-      return '剪辑中'
-    default:
-      return '未知'
-  }
-}
-
-const handleClipClick = (item: SmartCutItem) => {
-  if (item.status === 1 && item.path) {
-    emit('play-video', { video: item, videoType: 'edited' })
-  }
 }
 
 const { usageInfo, isVipAvailable } = storeToRefs(rtStore)
@@ -270,16 +98,6 @@ const formatChatTime = (dateStr?: string, groupLabel?: string) => {
   return `${month}-${day}`
 }
 
-const onHistoryScroll = (ev: Event) => {
-  const el = ev.target as HTMLElement
-  if (!el || activeTab.value !== 'history' || !historyHasMore.value || loadingHistory.value) return
-  const { scrollTop, scrollHeight, clientHeight } = el
-  const threshold = 20 // 减小阈值，确保在接近底部时触发
-  if (scrollHeight - scrollTop - clientHeight <= threshold) {
-    fetchHistory()
-  }
-}
-
 const groupedAiChats = computed(() => {
   const groups = [
     { label: '今天', chats: [] as AiChatTopic[] },
@@ -314,7 +132,7 @@ const groupedAiChats = computed(() => {
 
 const onRecentScroll = (ev: Event) => {
   const el = ev.target as HTMLElement
-  if (!el || activeTab.value !== 'recent') return
+  if (!el) return
   if (!hasMoreAiChats.value || props.isLoadingAiChats) return
 
   const { scrollTop, scrollHeight, clientHeight } = el
@@ -350,24 +168,8 @@ const onRecentScroll = (ev: Event) => {
     </div>
 
     <div v-if="!collapsed" class="sidebar-content">
-      <div class="custom-tabs">
-        <div
-          class="tab-item"
-          :class="{ active: activeTab === 'recent' }"
-          @click="activeTab = 'recent'"
-        >
-          最近记录
-        </div>
-        <div
-          class="tab-item"
-          :class="{ active: activeTab === 'history' }"
-          @click="activeTab = 'history'"
-        >
-          剪辑历史
-        </div>
-      </div>
-
-      <div v-if="activeTab === 'recent'" class="tab-content" @scroll="onRecentScroll">
+      <div class="recent-section-label">最近记录</div>
+      <div class="tab-content" @scroll="onRecentScroll">
         <div v-if="!aiChats || !aiChats.length" class="history-empty">暂无记录</div>
         <div v-else class="history-list">
           <template v-for="group in groupedAiChats" :key="group.label">
@@ -398,61 +200,6 @@ const onRecentScroll = (ev: Event) => {
               </div>
             </div>
           </template>
-        </div>
-      </div>
-
-      <div v-else class="tab-content" @scroll="onHistoryScroll">
-        <div v-if="clipHistory.length === 0" class="history-empty">
-          <div class="empty-text">当前工作区下暂无剪辑历史</div>
-          <div v-if="currentWorkspace" class="empty-subtext">({{ currentWorkspace.name }})</div>
-        </div>
-        <div v-else class="history-list">
-          <div
-            v-for="item in clipHistory"
-            :key="item.id"
-            class="clip-item"
-            :class="{ clickable: item.status === 1 && (item.path || item.fileUrl) }"
-            @dblclick="handleClipClick(item)"
-          >
-            <div class="clip-thumb">
-              <UnifiedVideoPreview
-                :video="item"
-                video-type="edited"
-                aspect-ratio="9/16"
-                :disabled="item.status !== 1"
-                @dblclick="handleClipClick(item)"
-              />
-            </div>
-            <div class="clip-info">
-              <div class="clip-name" :title="item.name">
-                <n-ellipsis :line-clamp="3">{{ item.name }}</n-ellipsis>
-              </div>
-              <div class="clip-meta">
-                <span>{{ formatTime(item.created_at) }}</span>
-                <span :class="['status-tag', 'status-' + item.status]">{{
-                  getStatusText(item.status)
-                }}</span>
-              </div>
-            </div>
-            <div class="clip-actions">
-              <n-tooltip v-if="item.status === 1" trigger="hover" placement="left">
-                <template #trigger>
-                  <div class="action-btn export-btn" @click.stop="handleExportClip(item)">
-                    <n-icon size="14"><DownloadOutline /></n-icon>
-                  </div>
-                </template>
-                导出视频
-              </n-tooltip>
-              <n-tooltip trigger="hover" placement="left">
-                <template #trigger>
-                  <div class="action-btn delete-btn" @click.stop="handleDeleteClip(item)">
-                    <n-icon size="14"><TrashOutline /></n-icon>
-                  </div>
-                </template>
-                删除剪辑
-              </n-tooltip>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -566,44 +313,15 @@ const onRecentScroll = (ev: Event) => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  gap: 12px;
+  gap: 10px;
 }
 
-.custom-tabs {
-  display: flex;
-  padding: 3px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 6px;
-  gap: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.tab-item {
-  flex: 1;
-  text-align: center;
+.recent-section-label {
   font-size: 12px;
-  color: #71717a;
-  padding: 4px 0;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  user-select: none;
-}
-
-.tab-item:hover {
+  font-weight: 600;
   color: #a1a1aa;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.tab-item.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #e4e4e7;
-  font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.tab-item.active::after {
-  display: none;
+  padding: 0 4px;
+  flex-shrink: 0;
 }
 
 .tab-content {
@@ -627,11 +345,6 @@ const onRecentScroll = (ev: Event) => {
   flex-direction: column;
   gap: 8px;
   align-items: center;
-}
-
-.empty-subtext {
-  font-size: 12px;
-  opacity: 0.5;
 }
 
 .history-list {
@@ -736,132 +449,11 @@ const onRecentScroll = (ev: Event) => {
   color: #fff;
 }
 
-.export-btn:hover {
-  background: rgba(79, 172, 254, 0.2);
-  color: #4facfe;
-}
-
 .delete-btn:hover {
   background: rgba(239, 68, 68, 0.2);
   color: #f87171;
 }
 
-/* Clip Item Styles */
-.clip-item {
-  display: flex; /* Flex row layout */
-  position: relative;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.02);
-  margin-bottom: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  overflow: hidden;
-}
-
-.clip-actions {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: linear-gradient(
-    270deg,
-    rgba(0, 0, 0, 0.95) 40%,
-    rgba(0, 0, 0, 0.7) 80%,
-    transparent 100%
-  );
-  transform: translateX(100%);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 5;
-}
-
-.clip-item:hover .clip-actions {
-  transform: translateX(0);
-}
-
-.clip-thumb {
-  width: 54px;
-  height: 96px; /* 9:16 approx */
-  flex-shrink: 0;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #000;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.clip-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 1px 0;
-  min-width: 0;
-}
-
-.clip-name {
-  font-size: 12px;
-  color: #e4e4e7;
-  margin-bottom: 2px;
-  line-height: 1.4;
-  font-weight: 500;
-}
-
-.clip-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 10px;
-  color: #71717a;
-  margin-top: auto;
-}
-
-.status-tag {
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-.status-1 {
-  color: #34d399;
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.1);
-}
-.status-5,
-.status-2 {
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.1);
-}
-.status-3,
-.status-4 {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.1);
-}
-.status-0 {
-  color: #facc15;
-  background: rgba(234, 179, 8, 0.15);
-  border: 1px solid rgba(234, 179, 8, 0.1);
-}
-
-.clip-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.08);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-/* ... */
 .new-chat-btn {
   display: flex;
   align-items: center;

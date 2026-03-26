@@ -12,9 +12,10 @@ declare global {
       getBackendPort: () => Promise<number | null>
       getBackendStartupError: () => Promise<{ code: string; message: string } | null>
       showNotification: (title: string, body: string, route: string) => void
-      onNavigate: (callback: (route: string) => void) => void
-      onBackendPort: (callback: (port: number) => void) => void
-      onBackendStartFailed: (callback: (error: { code: string; message: string }) => void) => void
+      /** 返回取消监听函数，组件卸载时应调用以避免监听器泄漏 */
+      onNavigate: (callback: (route: string) => void) => () => void
+      onBackendPort: (callback: (port: number) => void) => () => void
+      onBackendStartFailed: (callback: (error: { code: string; message: string }) => void) => () => void
       getVideoDataDirectory: () => Promise<string>
       setVideoDataDirectory: (directory: string) => Promise<{ success: boolean; error?: string }>
       /** 统一选择目录，options: title / defaultPath / buttonLabel */

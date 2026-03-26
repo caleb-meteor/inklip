@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick, shallowRef, provide } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutContent } from 'naive-ui'
 import HomeSidebar from '../components/home/HomeSidebar.vue'
@@ -29,6 +29,7 @@ import { useRealtimeStore } from '../stores/realtime'
 import type { HomePlayPayload } from '../api/video'
 import { searchVideosApi } from '../api/video'
 import { videoForMessagePayload } from '../utils/videoPayload'
+import { quickClipBridgeKey, type QuickClipBridge } from '../utils/quickClipBridge'
 
 const router = useRouter()
 const route = useRoute()
@@ -54,9 +55,28 @@ const currentPlayingVideo = ref<HomePlayPayload | null>(null)
 const currentSelectedWorkspace = ref<{ id: number; name: string } | null>(null)
 
 const homeSidebarRef = ref<InstanceType<typeof HomeSidebar> | null>(null)
-const homeRightSidebarRef = ref<InstanceType<typeof HomeRightSidebar> | null>(null)
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 const quickClipRef = ref<InstanceType<typeof QuickClip> | null>(null)
+const quickClipBridge = shallowRef<QuickClipBridge | null>(null)
+
+watch(
+  quickClipRef,
+  (inst) => {
+    if (!inst) {
+      quickClipBridge.value = null
+      return
+    }
+    quickClipBridge.value = {
+      appendSegmentsToSelected: (segs) => inst.appendSegmentsToSelected(segs),
+      exportSegmentsDirect: (segs, wid, name, exportType) =>
+        inst.exportSegmentsDirect(segs, wid, name, exportType)
+    }
+  },
+  { immediate: true }
+)
+
+provide(quickClipBridgeKey, quickClipBridge)
+
 let stopReconnectWatch: (() => void) | undefined
 
 const handlePlayVideo = (payload: HomePlayPayload) => {
@@ -72,12 +92,11 @@ const onVideosUpdated = (list: import('../api/video').VideoItem[]): void => {
   quickClipRef.value?.setVideosFromParent?.(list)
 }
 
-/** 长时间未操作/休眠恢复后：重新拉取工作区/视频、当前对话消息、剪辑历史（不再默认拉取 topic 列表） */
+/** 长时间未操作/休眠恢复后：重新拉取工作区/视频、当前对话消息（不再默认拉取 topic 列表） */
 const refreshPageData = (): void => {
   homeSidebarRef.value?.loadAll?.()
   const chatId = aiChatStore.getCurrentAiChatId().value
   if (chatId != null) aiChatStore.loadAiChatMessages(chatId)
-  homeRightSidebarRef.value?.refreshClipHistory?.()
 }
 
 const onVisibilityChange = (): void => {
@@ -140,23 +159,19 @@ onMounted(async () => {
     })
   }
 
-  // 当前在 AI 页时加载右侧「最近记录」与预拉剪辑历史（侧栏 v-if 在 /quick-clip 下不挂载，切换 tab 后需主动拉取）
+  // 当前在 AI 页时加载右侧「最近记录」（侧栏 v-if 在 /quick-clip 下不挂载，切换 tab 后需主动拉取）
   await nextTick()
   if (route.path === '/home') {
     await aiChatStore.loadAiChats()
-    await nextTick()
-    homeRightSidebarRef.value?.refreshClipHistory?.()
   }
 })
 
-/** 从字幕剪辑切回 AI 时右侧栏重新挂载，需拉取 topic 列表与剪辑历史 */
+/** 从字幕剪辑切回 AI 时右侧栏重新挂载，需拉取 topic 列表 */
 watch(
   () => route.path,
   async (path) => {
     if (path !== '/home') return
     await aiChatStore.loadAiChats()
-    await nextTick()
-    homeRightSidebarRef.value?.refreshClipHistory?.()
   }
 )
 
@@ -400,7 +415,6 @@ const handleNewChat = (): void => {
           bordered
         >
           <HomeRightSidebar
-            ref="homeRightSidebarRef"
             :ai-chats="aiChats"
             :is-loading-ai-chats="isLoadingAiChats"
             :collapsed="rightSidebarCollapsed"
@@ -408,7 +422,6 @@ const handleNewChat = (): void => {
             @select-chat="handleSelectChat"
             @new-chat="handleNewChat"
             @toggle="rightSidebarCollapsed = !rightSidebarCollapsed"
-            @play-video="handlePlayVideo"
           />
         </n-layout-sider>
       </n-layout>

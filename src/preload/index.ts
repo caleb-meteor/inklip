@@ -33,7 +33,8 @@ const api = {
   selectVideoFolder: () => electronAPI.ipcRenderer.invoke('select-video-folder'),
   getAppVersion: () => electronAPI.ipcRenderer.invoke('get-app-version'),
   /** 在资源管理器中打开文件所在文件夹并选中该文件 */
-  showItemInFolder: (filePath: string) => electronAPI.ipcRenderer.invoke('show-item-in-folder', filePath),
+  showItemInFolder: (filePath: string) =>
+    electronAPI.ipcRenderer.invoke('show-item-in-folder', filePath),
   /** 导出时选择保存位置，返回用户选择的完整路径 */
   showExportSaveDialog: (suggestedName: string) =>
     electronAPI.ipcRenderer.invoke('show-export-save-dialog', suggestedName),

@@ -332,6 +332,7 @@ export class SmartCutAiService {
         ]
       },
       aiGenVideoId, // 保存 aiGenVideoId 供实时推送使用
+      workspace_id: workspaceIdForCut,
       videoCount: targetVideoIds.length,
       durationMin: minDuration,
       durationMax: maxDuration

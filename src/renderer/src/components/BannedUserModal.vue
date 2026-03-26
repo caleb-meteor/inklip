@@ -147,7 +147,7 @@ const onRegisterThisDevice = async (): Promise<void> => {
         modalKind === 'banned'
           ? '当前 API Key 无法继续使用，如有疑问请联系客服。'
           : modalKind === 'activation'
-            ? '请输入已有 API Key，或使用本机注册新API Key'
+            ? '请输入已有 API Key，或使用本机注册获取免费试用'
             : '正在从云端同步用量与会员状态。若长时间停留在此，可重试连接。'
       }}
     </p>

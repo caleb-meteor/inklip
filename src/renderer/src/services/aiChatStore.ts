@@ -337,7 +337,10 @@ export class AiChatStore {
           duration: latestData.duration,
           cover: latestData.cover,
           name: latestData.name,
-          payload: latestData.payload
+          payload: latestData.payload,
+          subtitle: latestData.subtitle,
+          subtitle_ids: latestData.subtitle_ids,
+          workspace_id: latestData.workspace_id
         }
       } else {
         updatedPayload.status = latestData.status
@@ -346,6 +349,9 @@ export class AiChatStore {
         updatedPayload.cover = latestData.cover
         updatedPayload.name = latestData.name
         updatedPayload.payload = latestData.payload
+        updatedPayload.subtitle = latestData.subtitle
+        updatedPayload.subtitle_ids = latestData.subtitle_ids
+        updatedPayload.workspace_id = latestData.workspace_id
       }
       if (updatedPayload.taskCard?.steps) {
         const steps = updatedPayload.taskCard.steps
