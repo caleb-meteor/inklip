@@ -1,4 +1,11 @@
-import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
+import axios, { type AxiosInstance, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
+
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    /** 为 true 时不自动弹出 message（如设备 ID 探测） */
+    silent?: boolean
+  }
+}
 import { createDiscreteApi, darkTheme } from 'naive-ui'
 import { isDevRenderer } from './isDevRenderer'
 
@@ -52,10 +59,13 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response: AxiosResponse<ApiResponse>) => {
     const res = response.data
+    const cfg = response.config as InternalAxiosRequestConfig & { silent?: boolean }
     // 兼容 JSON 里 code 被序列化为字符串等情况
     const ok = Number(res.code) === 0
     if (!ok) {
-      message.error(res.message || '请求失败')
+      if (!cfg.silent) {
+        message.error(res.message || '请求失败')
+      }
       return Promise.reject(new Error(res.message || '请求失败'))
     }
     return res.data

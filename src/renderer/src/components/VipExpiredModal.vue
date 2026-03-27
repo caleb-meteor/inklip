@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getApiKey, setApiKey } from '../api/config'
 import { useRealtimeStore } from '../stores/realtime'
+import { deviceUnavailable } from '../composables/useDeviceGate'
 import ContactSupportBlock from './ContactSupportBlock.vue'
 
 /** 续费/会员页地址 */
@@ -57,6 +58,7 @@ const isHomeRoute = computed(() => route.path === '/home' || route.path === '/qu
 const show = computed(
   () =>
     isHomeRoute.value &&
+    !deviceUnavailable.value &&
     rtStore.userInfoReceivedFromCloud &&
     !rtStore.isUserBanned &&
     rtStore.isMembershipExpired

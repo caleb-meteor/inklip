@@ -40,7 +40,8 @@ export function getApiKey(): Promise<CloudActivation> {
 export function getDeviceId(): Promise<{ device_id: string }> {
   return request({
     url: '/user/device-id',
-    method: 'get'
+    method: 'get',
+    silent: true
   })
 }
 
