@@ -10,7 +10,7 @@ const VERSION_DOWNLOAD_URL = 'https://inklip.caleb.center'
 const route = useRoute()
 const rtStore = useRealtimeStore()
 
-/** 优先级 4：无 API Key 不可用、未到期时才可能弹本窗。主界面 /home 与 /quick-clip */
+/** 优先级 4：无授权码不可用、未到期时才可能弹本窗。主界面 /home 与 /quick-clip */
 const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
 const show = computed(
   () =>

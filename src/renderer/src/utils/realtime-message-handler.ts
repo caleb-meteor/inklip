@@ -38,7 +38,7 @@ export interface MessageHandlers {
     isVip: boolean
     /** 过期日期 */
     expiredAt?: string
-    /** 云端对当前 API Key：1=可用，非1=不可用 */
+    /** 云端对当前授权码：1=可用，非1=不可用 */
     status?: number
     /** 与本地 Go 约定：true 表示数据已由云端 SSE 同步到桌面端 */
     syncedFromCloud?: boolean
@@ -62,7 +62,7 @@ export interface MessageHandlers {
     percentage: number
     file?: string
   }) => void
-  /** 本地 Go 已更新 API Key；activated 由 SSE 载荷携带，无需再 GET /user/api-key */
+  /** 本地 Go 已更新授权码；activated 由 SSE 载荷携带，无需再 GET /user/api-key */
   onApiKeySynced?: (detail: { activated: boolean }) => void
 }
 

@@ -16,7 +16,7 @@ const savingKey = ref(false)
 const registering = ref(false)
 const deviceRetrying = ref(false)
 
-/** 等待用量同步，或 API Key 不可用；主界面 /home 与 /quick-clip */
+/** 等待用量同步，或授权码不可用；主界面 /home 与 /quick-clip */
 const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
 const show = computed(
   () =>
@@ -44,7 +44,7 @@ const onRetrySync = (): void => {
 const onSaveManualKey = async (): Promise<void> => {
   const v = manualApiKey.value.trim()
   if (!v) {
-    message.warning('请输入 API Key')
+    message.warning('请输入授权码')
     return
   }
   savingKey.value = true
@@ -52,7 +52,7 @@ const onSaveManualKey = async (): Promise<void> => {
     savingKey.value = false
   })
   manualApiKey.value = ''
-  message.success('API Key 已保存')
+  message.success('授权码已保存')
   await rtStore.refreshBackendActivation()
   rtStore.reauthenticate()
 }
@@ -177,7 +177,7 @@ const onRetryDeviceCheck = async (): Promise<void> => {
             modalKind === 'device_unavailable'
               ? '无法获取设备信息'
               : modalKind === 'banned'
-                ? 'API Key 不可用'
+                ? '授权码不可用'
                 : modalKind === 'activation'
                   ? '需要激活'
                   : '正在同步会员信息'
@@ -191,9 +191,9 @@ const onRetryDeviceCheck = async (): Promise<void> => {
         modalKind === 'device_unavailable'
           ? '本软件需要获取设备信息以完成激活与云端服务。当前无法获取该信息。请检查系统权限与环境后重试，或联系客服处理。'
           : modalKind === 'banned'
-            ? '当前 API Key 无法继续使用，如有疑问请联系客服。'
+            ? '当前授权码无法继续使用，如有疑问请联系客服。'
             : modalKind === 'activation'
-              ? '请输入已有 API Key，或使用本机注册获取免费试用'
+              ? '请输入已有授权码，或使用本机注册获取免费试用'
               : '正在同步用户信息。若长时间停留在此，可重试连接。'
       }}
     </p>
@@ -220,7 +220,7 @@ const onRetryDeviceCheck = async (): Promise<void> => {
           v-model:value="manualApiKey"
           type="password"
           show-password-on="click"
-          placeholder="粘贴或输入 API Key"
+          placeholder="粘贴或输入授权码"
           :disabled="savingKey || registering"
           @keyup.enter="onSaveManualKey"
         />

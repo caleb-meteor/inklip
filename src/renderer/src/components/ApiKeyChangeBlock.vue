@@ -4,7 +4,7 @@ import { computed, ref, nextTick, watch } from 'vue'
 import { setApiKey } from '../api/config'
 
 const props = defineProps<{
-  /** 是否显示「新 API Key」表单及取消/验证按钮 */
+  /** 是否显示「新授权码」表单及取消/验证按钮 */
   showForm: boolean
 }>()
 
@@ -42,7 +42,7 @@ let copyResetTimer: ReturnType<typeof setTimeout> | null = null
 const copyCurrentApiKey = async (): Promise<void> => {
   const saved = localStorage.getItem('apiKey')
   if (!saved) {
-    message.warning('当前没有已保存的 API Key')
+    message.warning('当前没有已保存的授权码')
     return
   }
   try {
@@ -65,7 +65,7 @@ const onCancel = (): void => {
 const onValidate = async (): Promise<void> => {
   const key = newApiKey.value.trim()
   if (!key) {
-    message.warning('请输入新的 API Key')
+    message.warning('请输入新的授权码')
     return
   }
   saving.value = true
@@ -73,7 +73,7 @@ const onValidate = async (): Promise<void> => {
     saving.value = false
   })
   localStorage.setItem('apiKey', key)
-  message.success('API Key 已更换，正在重新连接…')
+  message.success('授权码已更换，正在重新连接…')
   emit('success')
   newApiKey.value = ''
 }
@@ -97,12 +97,12 @@ const onValidate = async (): Promise<void> => {
     </div>
 
     <div v-if="showForm" class="api-key-form">
-      <n-form-item label="新 API Key" :show-label="true">
+      <n-form-item label="新授权码" :show-label="true">
         <n-input
           ref="apiKeyInputRef"
           v-model:value="newApiKey"
           type="password"
-          placeholder="请输入新的 API Key"
+          placeholder="请输入新的授权码"
           show-password-on="click"
           clearable
           :disabled="saving"
