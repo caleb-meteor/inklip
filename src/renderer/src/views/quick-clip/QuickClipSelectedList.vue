@@ -3,7 +3,7 @@ import { NIcon, NScrollbar, NButton, NSpin, NEmpty, NTooltip } from 'naive-ui'
 import { ListOutline, RemoveOutline, TimeOutline, CloseOutline, PlayOutline, ArrowUpCircleOutline, FolderOpenOutline, TrashOutline, SearchOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
 import { inject } from 'vue'
 import type { SegmentWithVideo } from './types'
-import { labelForExportVideoType } from '../../api/video'
+import { labelForExportVideoType, type ExportHistoryItem } from '../../api/video'
 
 const qc = inject('quickClip') as any
 
@@ -24,8 +24,9 @@ function formatDate(s: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function openExportFolder(filePath: string) {
-  window.api?.showItemInFolder(filePath)
+function openExportFolder(item: ExportHistoryItem) {
+  if (item.output_missing || !item.output_path?.trim()) return
+  void window.api?.showItemInFolder(item.output_path)
 }
 </script>
 
@@ -199,22 +200,28 @@ function openExportFolder(filePath: string) {
                 <div class="export-history-item-content">
                   <span class="export-history-name" :title="item.suggested_name">{{ item.suggested_name }}</span>
                   <span class="export-history-meta"
-                    >{{ labelForExportVideoType(item.export_type) }} · {{ formatDate(item.created_at) }}</span
+                    >{{ labelForExportVideoType(item.export_type) }} · {{ formatDate(item.created_at)
+                    }}<template v-if="item.output_path && item.output_missing">
+                      · <span class="export-history-deleted">已删除</span>
+                    </template></span
                   >
                 </div>
                 <div class="export-history-actions">
                   <n-tooltip v-if="item.output_path" placement="top" trigger="hover">
                     <template #trigger>
-                      <n-button
-                        class="export-history-btn"
-                        quaternary
-                        size="tiny"
-                        @click.stop="openExportFolder(item.output_path)"
-                      >
-                        <n-icon size="14"><FolderOpenOutline /></n-icon>
-                      </n-button>
+                      <span class="export-history-folder-trigger">
+                        <n-button
+                          class="export-history-btn"
+                          quaternary
+                          size="tiny"
+                          :disabled="!!item.output_missing"
+                          @click.stop="openExportFolder(item)"
+                        >
+                          <n-icon size="14"><FolderOpenOutline /></n-icon>
+                        </n-button>
+                      </span>
                     </template>
-                    打开所在文件夹
+                    {{ item.output_missing ? '文件已删除' : '打开所在文件夹' }}
                   </n-tooltip>
                   <n-tooltip placement="top" trigger="hover">
                     <template #trigger>
@@ -362,6 +369,14 @@ function openExportFolder(filePath: string) {
 }
 .export-history-item:hover .export-history-actions .export-history-btn {
   opacity: 1;
+}
+.export-history-deleted {
+  color: #f87171;
+  font-weight: 500;
+}
+.export-history-folder-trigger {
+  display: inline-flex;
+  vertical-align: middle;
 }
 .export-history-name {
   display: block;

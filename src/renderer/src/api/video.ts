@@ -359,7 +359,7 @@ export function exportSegmentsApi(
   })
 }
 
-/** 导出视频历史项（与 export_videos 表对应） */
+/** 导出视频历史项（与 export_videos 表对应；output_missing 由 Go 在列表接口中本机 stat） */
 export interface ExportHistoryItem {
   id: number
   workspace_id?: number
@@ -369,6 +369,8 @@ export interface ExportHistoryItem {
   /** subtitle_clip 字幕剪辑（默认）| ai 智能剪辑导出 */
   export_type?: ExportVideoType | string
   created_at: string
+  /** 有 output_path 但本机文件不存在或路径为空时为 true */
+  output_missing?: boolean
 }
 
 /**
