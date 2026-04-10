@@ -276,6 +276,8 @@ function openInFolder() {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  padding-left: 18px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .info-section {
