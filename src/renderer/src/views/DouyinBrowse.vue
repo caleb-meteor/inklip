@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { NInput, NButton, NText, NSpin } from 'naive-ui'
+import { NButton, NText, NSpin } from 'naive-ui'
 import { useMessage } from 'naive-ui'
+import { isDevRenderer } from '../utils/isDevRenderer'
 import {
   DOUYIN_FEED_DOM_BRIDGE_SCRIPT,
   DOUYIN_FEED_DOM_BRIDGE_UNINSTALL_SCRIPT,
@@ -16,12 +17,6 @@ const message = useMessage()
 /** 与 DOM 监听条件一致，默认进推荐流 */
 const DOUYIN_HOME = 'https://www.douyin.com/?recommend=1'
 
-function douyinSearchUrl(keyword: string): string {
-  const q = keyword.trim()
-  if (!q) return DOUYIN_HOME
-  return `https://www.douyin.com/search/${encodeURIComponent(q)}`
-}
-
 const embeddedUserAgent = window.api.getBrowserLikeUserAgent()
 
 const BROWSER_SPOOF_SCRIPT = `(function(){
@@ -33,7 +28,6 @@ const BROWSER_SPOOF_SCRIPT = `(function(){
   }
 })();`
 
-const searchText = ref('')
 const webviewRef = ref<Electron.WebviewTag | null>(null)
 /** 当前视频的 aweme_id（来自 URL 或 DOM），用于下载浮层与屏外拉流 */
 const parsedVideo = ref<DouyinVideoInfo | null>(null)
@@ -75,7 +69,7 @@ function setDouyinFlowProgressLine(text: string): void {
 }
 
 const webviewInlineStyle = computed(() => ({
-  top: '52px',
+  top: '0',
   bottom: '0'
 }))
 
@@ -98,7 +92,17 @@ const isFloatDownloading = computed(
     downloadingAwemeId.value === parsedVideo.value.videoId
 )
 
-/** 浮窗相对默认位置的偏移（px） */
+const showDouyinDebugPanel = isDevRenderer
+
+const douyinProgressCircleStyle = computed(() => {
+  const percent = douyinDownloadProgressUi.value?.percent
+  const normalized = percent == null ? 12 : Math.max(0, Math.min(100, percent))
+  return {
+    '--douyin-progress': `${normalized}%`
+  }
+})
+
+/** debug 面板允许拖动，生产模式固定为单圆形入口 */
 const floatDrag = ref({ x: 0, y: 0 })
 let floatDragPointer: { clientX: number; clientY: number; x: number; y: number } | null = null
 
@@ -430,12 +434,6 @@ function onNewWindow(e: Electron.Event & { url?: string }): void {
   }
 }
 
-function runDouyinSearch(): void {
-  const w = webviewRef.value
-  if (!w) return
-  void w.loadURL(douyinSearchUrl(searchText.value))
-}
-
 onMounted(() => {
   removeDouyinDownloadProgressListener = window.api.onDouyinDownloadProgress((payload) => {
     applyDouyinDownloadProgressPayload(payload)
@@ -472,67 +470,106 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="douyin-page">
-    <div class="douyin-search-bar">
-      <n-input
-        v-model:value="searchText"
-        class="douyin-search-input"
-        type="text"
-        clearable
-        placeholder="输入关键词，搜索抖音视频"
-        @keydown.enter.prevent="runDouyinSearch"
-      />
-      <n-button type="primary" class="douyin-search-btn" @click="runDouyinSearch">搜索</n-button>
-    </div>
-
     <div v-if="parsedVideo" class="douyin-detail-float">
       <div
         class="douyin-detail-float-inner"
-        :style="{ transform: `translate(${floatDrag.x}px, ${floatDrag.y}px)` }"
+        :class="{ 'douyin-detail-float-inner-prod': !showDouyinDebugPanel }"
+        :style="showDouyinDebugPanel ? { transform: `translate(${floatDrag.x}px, ${floatDrag.y}px)` } : undefined"
       >
-        <div
-          class="douyin-float-handle"
-          title="拖动"
-          @mousedown.prevent="onDouyinFloatDragStart"
-        />
-        <n-text depth="2" class="douyin-float-title">视频下载</n-text>
-        <n-text v-if="parsedVideo" depth="3" class="douyin-float-id-line">
-          视频 ID：{{ parsedVideo.videoId }}
-        </n-text>
-        <div class="douyin-float-download-actions">
-          <n-button
-            size="small"
-            type="primary"
-            class="douyin-float-download-btn"
-            :disabled="isDouyinDownloadBusy"
-            @click="downloadCurrentVideo"
-          >
-            下载
-          </n-button>
-          <n-button
-            v-if="showDouyinCancelDownload"
-            size="small"
-            quaternary
-            class="douyin-float-cancel-btn"
-            @click="cancelCurrentDouyinDownload"
-          >
-            取消下载
-          </n-button>
-        </div>
-        <template v-if="isFloatDownloading && douyinDownloadProgressUi">
-          <n-spin size="medium" class="douyin-float-spin" />
-        </template>
-        <div v-if="douyinDownloadFlowLog.length > 0" class="douyin-float-flow-shell">
-          <n-text depth="3" class="douyin-float-flow-label">流程记录</n-text>
-          <div class="douyin-float-flow-log">
-            <div
-              v-for="(ln, li) in douyinDownloadFlowLog"
-              :key="li"
-              class="douyin-float-flow-line"
+        <template v-if="showDouyinDebugPanel">
+          <div
+            class="douyin-float-handle"
+            title="拖动"
+            @mousedown.prevent="onDouyinFloatDragStart"
+          />
+          <n-text depth="2" class="douyin-float-title">视频下载</n-text>
+          <n-text v-if="parsedVideo" depth="3" class="douyin-float-id-line">
+            视频 ID：{{ parsedVideo.videoId }}
+          </n-text>
+          <div class="douyin-float-download-actions">
+            <n-button
+              size="small"
+              type="primary"
+              class="douyin-float-download-btn"
+              :disabled="isDouyinDownloadBusy"
+              @click="downloadCurrentVideo"
             >
-              {{ ln }}
+              下载
+            </n-button>
+            <n-button
+              v-if="showDouyinCancelDownload"
+              size="small"
+              quaternary
+              class="douyin-float-cancel-btn"
+              @click="cancelCurrentDouyinDownload"
+            >
+              取消下载
+            </n-button>
+          </div>
+          <template v-if="isFloatDownloading && douyinDownloadProgressUi">
+            <n-spin size="medium" class="douyin-float-spin" />
+          </template>
+          <div v-if="douyinDownloadFlowLog.length > 0" class="douyin-float-flow-shell">
+            <n-text depth="3" class="douyin-float-flow-label">流程记录</n-text>
+            <div class="douyin-float-flow-log">
+              <div
+                v-for="(ln, li) in douyinDownloadFlowLog"
+                :key="li"
+                class="douyin-float-flow-line"
+              >
+                {{ ln }}
+              </div>
             </div>
           </div>
-        </div>
+        </template>
+
+        <template v-else>
+          <div v-if="!isFloatDownloading" class="douyin-float-prod-actions">
+            <n-button
+              circle
+              type="primary"
+              class="douyin-float-prod-btn"
+              :disabled="isDouyinDownloadBusy"
+              title="下载视频"
+              @click="downloadCurrentVideo"
+            >
+              <svg viewBox="0 0 24 24" class="douyin-float-prod-icon" aria-hidden="true">
+                <path
+                  d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </n-button>
+          </div>
+
+          <div
+            v-else-if="isFloatDownloading && douyinDownloadProgressUi"
+            class="douyin-float-prod-progress-ring"
+            :class="{ 'douyin-float-prod-progress-ring-indeterminate': douyinDownloadProgressUi.indeterminate }"
+            :style="douyinProgressCircleStyle"
+            :title="douyinDownloadProgressUi.hint"
+          >
+            <n-button
+              v-if="showDouyinCancelDownload"
+              circle
+              quaternary
+              class="douyin-float-prod-progress-cancel"
+              title="取消下载"
+              @click="cancelCurrentDouyinDownload"
+            >
+              <svg viewBox="0 0 24 24" class="douyin-float-prod-icon" aria-hidden="true">
+                <path
+                  d="M9 9h6v6H9z"
+                  fill="currentColor"
+                />
+              </svg>
+            </n-button>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -557,34 +594,9 @@ onBeforeUnmount(() => {
   background: #0f0f0f;
 }
 
-.douyin-search-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 52px;
-  padding: 0 12px;
-  box-sizing: border-box;
-  background: #09090b;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.douyin-search-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.douyin-search-btn {
-  flex-shrink: 0;
-}
-
 .douyin-detail-float {
   position: absolute;
-  top: 52px;
+  top: 0;
   left: 0;
   right: 0;
   bottom: 0;
@@ -611,6 +623,15 @@ onBeforeUnmount(() => {
   align-items: stretch;
   gap: 8px;
   touch-action: none;
+}
+
+.douyin-detail-float-inner-prod {
+  min-width: auto;
+  max-width: 72px;
+  width: auto;
+  padding: 8px;
+  border-radius: 999px;
+  gap: 0;
 }
 
 .douyin-float-handle {
@@ -666,6 +687,67 @@ onBeforeUnmount(() => {
 
 .douyin-float-cancel-btn {
   align-self: center;
+}
+
+.douyin-float-prod-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.douyin-float-prod-btn {
+  width: 52px;
+  height: 52px;
+}
+
+.douyin-float-prod-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.douyin-float-prod-progress-ring {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background:
+    conic-gradient(#18a058 var(--douyin-progress), rgba(255, 255, 255, 0.14) 0),
+    rgba(255, 255, 255, 0.06);
+}
+
+.douyin-float-prod-progress-ring::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: rgba(24, 24, 27, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.douyin-float-prod-progress-ring-indeterminate {
+  animation: douyin-progress-rotate 1s linear infinite;
+}
+
+.douyin-float-prod-progress-cancel {
+  position: relative;
+  z-index: 1;
+  width: 38px;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes douyin-progress-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .douyin-float-flow-shell {
