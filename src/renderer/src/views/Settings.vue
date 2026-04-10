@@ -44,7 +44,7 @@ const apiKeyRefresh = ref(0)
 const copiedJustNow = ref(false)
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null
 
-// 计算掩盖后的 API Key 显示值
+// 计算掩盖后的授权码显示值
 const maskedApiKey = computed(() => {
   // 添加刷新依赖，确保localStorage变化时能重新计算
   void apiKeyRefresh.value
@@ -61,11 +61,11 @@ const maskedApiKey = computed(() => {
   return first4 + '********' + last4
 })
 
-/** 与 ApiKeyChangeBlock（弹窗）一致：复制成功不弹 success，按钮短暂显示「已复制」 */
+/** 与 ApiKeyChangeBlock（弹窗）一致：复制授权码成功不弹 success，按钮短暂显示「已复制」 */
 const copyFullApiKey = async (): Promise<void> => {
   const savedApiKey = localStorage.getItem('apiKey')
   if (!savedApiKey) {
-    message.warning('当前没有已保存的 API Key')
+    message.warning('当前没有已保存的授权码')
     return
   }
   try {
@@ -77,7 +77,7 @@ const copyFullApiKey = async (): Promise<void> => {
       copyResetTimer = null
     }, 2000)
   } catch (err) {
-    console.error('复制 API Key 失败:', err)
+    console.error('复制授权码失败:', err)
     message.error('复制失败，请稍后重试')
   }
 }
@@ -184,7 +184,7 @@ const loadApiKey = async (): Promise<void> => {
       localStorage.setItem('apiKey', response.api_key)
       hasApiKey.value = true
       apiKey.value = ''
-      console.log('[Settings] 从后端获取 API Key 成功')
+      console.log('[Settings] 从后端获取授权码成功')
     } else {
       hasApiKey.value = false
       apiKey.value = ''
@@ -290,7 +290,7 @@ watch(
 
             <div class="setting-row">
               <div class="setting-info">
-                <div class="setting-title">API Key</div>
+                <div class="setting-title">授权码</div>
                 <div class="setting-desc">用于访问云端服务的认证密钥</div>
               </div>
 
@@ -302,7 +302,7 @@ watch(
                         <n-button
                           text
                           type="primary"
-                          title="修改 API Key"
+                          title="修改授权码"
                           @click="isEditingApiKey = true"
                         >
                           修改
@@ -314,7 +314,7 @@ watch(
                           class="settings-api-key-copy"
                           :class="{ 'settings-api-key-copy--copied': copiedJustNow }"
                           :disabled="copiedJustNow"
-                          title="复制完整 API Key"
+                          title="复制完整授权码"
                           @click="copyFullApiKey"
                         >
                           {{ copiedJustNow ? '已复制' : '复制' }}
@@ -327,7 +327,7 @@ watch(
                     <n-input
                       v-model:value="apiKey"
                       type="password"
-                      placeholder="请输入 API Key"
+                      placeholder="请输入授权码"
                       show-password-on="click"
                       @keyup.enter="saveApiKey"
                     />
@@ -355,8 +355,8 @@ watch(
                   <n-text depth="3" style="font-size: 12px">
                     {{
                       hasApiKey && !isEditingApiKey
-                        ? '您的 API Key 已安全保存'
-                        : '请输入有效的 API Key 以启用云端功能'
+                        ? '您的授权码已安全保存'
+                        : '请输入有效的授权码以启用云端功能'
                     }}
                   </n-text>
                 </n-space>

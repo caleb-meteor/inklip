@@ -19,7 +19,7 @@ export function saveConfig(config: ConfigData): Promise<void> {
   })
 }
 
-/** 本地 Go 中的 API Key 状态；api_key 仅本机环回接口返回，用于设置页展示 */
+/** 本地 Go 中的授权码状态；api_key 仅本机环回接口返回，用于设置页展示 */
 export interface CloudActivation {
   activated: boolean
   api_key?: string
@@ -40,11 +40,12 @@ export function getApiKey(): Promise<CloudActivation> {
 export function getDeviceId(): Promise<{ device_id: string }> {
   return request({
     url: '/user/device-id',
-    method: 'get'
+    method: 'get',
+    silent: true
   })
 }
 
-/** 更换 API Key（写入 base-go 并重连云端 SSE） */
+/** 更换授权码（写入 base-go 并重连云端 SSE） */
 export function setApiKey(apiKey: string): Promise<{ success: boolean }> {
   return request({
     url: '/user/api-key',
@@ -67,7 +68,7 @@ export function applyCloudActivationToStorage(activated: boolean): void {
   localStorage.setItem('cloudActivated', activated ? '1' : '0')
 }
 
-/** 与 base-go 同步「是否已有 API Key」，并清理遗留的 localStorage apiKey */
+/** 与 base-go 同步「是否已有授权码」，并清理遗留的 localStorage apiKey */
 export async function syncCloudActivationFromBackend(): Promise<boolean> {
   const { activated } = await getCloudActivation().catch(() => ({ activated: false }))
   applyCloudActivationToStorage(activated)

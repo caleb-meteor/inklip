@@ -48,7 +48,7 @@ declare global {
       }>
       getAppVersion: () => Promise<string>
       /** 在资源管理器中打开文件所在文件夹并选中该文件 */
-      showItemInFolder: (filePath: string) => void
+      showItemInFolder: (filePath: string) => Promise<void>
       /** 导出时选择保存位置，返回 { canceled, filePath } */
       showExportSaveDialog: (suggestedName: string) => Promise<{ canceled: boolean; filePath?: string }>
       /** 在默认浏览器中打开链接（如更新下载页） */

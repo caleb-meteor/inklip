@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getApiKey, setApiKey } from '../api/config'
 import { useRealtimeStore } from '../stores/realtime'
+import { deviceUnavailable } from '../composables/useDeviceGate'
 import ContactSupportBlock from './ContactSupportBlock.vue'
 
 /** 续费/会员页地址 */
@@ -36,7 +37,7 @@ const hasCurrentApiKey = computed(() => !!currentApiKey.value.trim())
 const copyFullApiKey = async (): Promise<void> => {
   const savedApiKey = currentApiKey.value.trim()
   if (!savedApiKey) {
-    message.warning('当前没有已保存的 API Key')
+    message.warning('当前没有已保存的授权码')
     return
   }
   try {
@@ -48,7 +49,7 @@ const copyFullApiKey = async (): Promise<void> => {
       copyResetTimer = null
     }, 2000)
   } catch (err) {
-    console.error('复制 API Key 失败:', err)
+    console.error('复制授权码失败:', err)
     message.error('复制失败，请稍后重试')
   }
 }
@@ -59,6 +60,7 @@ const isHomeRoute = computed(
 const show = computed(
   () =>
     isHomeRoute.value &&
+    !deviceUnavailable.value &&
     rtStore.userInfoReceivedFromCloud &&
     !rtStore.isUserBanned &&
     rtStore.isMembershipExpired
@@ -96,7 +98,7 @@ const onRenew = (): void => {
 const onSaveManualKey = async (): Promise<void> => {
   const v = manualApiKey.value.trim()
   if (!v) {
-    message.warning('请输入 API Key')
+    message.warning('请输入授权码')
     return
   }
   savingKey.value = true
@@ -130,7 +132,7 @@ const onSaveManualKey = async (): Promise<void> => {
       </div>
 
       <p class="vip-expired-desc">
-        您的会员已到期，请续费后继续使用智能剪辑等会员功能。
+        您的会员已到期，请续费后继续使用。
       </p>
 
       <div class="vip-expired-actions">
@@ -143,7 +145,7 @@ const onSaveManualKey = async (): Promise<void> => {
 
       <n-space vertical :size="10" class="vip-expired-key-block">
         <n-text depth="3" style="font-size: 12px">
-          若已续费或需使用其他账号，可更换 API Key：
+          若已续费或需使用其他账号，可更换授权码：
         </n-text>
         <div v-if="hasCurrentApiKey || loadingCurrentKey" class="api-key-display">
           <n-input
@@ -159,7 +161,7 @@ const onSaveManualKey = async (): Promise<void> => {
                 class="settings-api-key-copy"
                 :class="{ 'settings-api-key-copy--copied': copiedJustNow }"
                 :disabled="copiedJustNow || loadingCurrentKey || !hasCurrentApiKey"
-                title="复制完整 API Key"
+                title="复制完整授权码"
                 @click="copyFullApiKey"
               >
                 {{ copiedJustNow ? '已复制' : '复制' }}
@@ -171,7 +173,7 @@ const onSaveManualKey = async (): Promise<void> => {
           v-model:value="manualApiKey"
           type="password"
           show-password-on="click"
-          placeholder="粘贴或输入 API Key"
+          placeholder="粘贴或输入授权码"
           :disabled="savingKey"
           @keyup.enter="onSaveManualKey"
         />

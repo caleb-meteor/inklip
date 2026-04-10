@@ -13,6 +13,7 @@ import { setBaseUrl } from './utils/request'
 import BannedUserModal from './components/BannedUserModal.vue'
 import VersionUpdateModal from './components/VersionUpdateModal.vue'
 import VipExpiredModal from './components/VipExpiredModal.vue'
+import { deviceUnavailable, runDeviceCheck } from './composables/useDeviceGate'
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
@@ -35,14 +36,18 @@ const themeOverrides: GlobalThemeOverrides = {
 const rtStore = useRealtimeStore()
 const router = useRouter()
 
-const initConnection = (port: number): void => {
+const initConnection = async (port: number): Promise<void> => {
   console.log('[Renderer] Initializing connection with port:', port)
   const baseUrl = `http://127.0.0.1:${port}`
   setBaseUrl(baseUrl)
   rtStore.setBaseUrl(baseUrl)
 
-  // 连接 SSE
   rtStore.disconnect()
+
+  const deviceOk = await runDeviceCheck()
+  if (!deviceOk && deviceUnavailable.value) {
+    return
+  }
   rtStore.connect()
 }
 
@@ -57,13 +62,13 @@ onMounted(async () => {
   // Try to get existing port first
   const existingPort = await window.api.getBackendPort()
   if (existingPort) {
-    initConnection(existingPort)
+    void initConnection(existingPort)
   }
 
   // Listen for port updates (in case backend restarts or starts late)
   removeBackendPortListener = window.api.onBackendPort((port) => {
     console.log('[Renderer] Backend port received:', port)
-    initConnection(port)
+    void initConnection(port)
   })
 })
 

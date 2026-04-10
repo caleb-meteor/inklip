@@ -4,6 +4,7 @@ import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRealtimeStore } from '../stores/realtime'
 import { registerDeviceOnCloud, setApiKey } from '../api/config'
+import { deviceUnavailable, runDeviceCheck } from '../composables/useDeviceGate'
 import ContactSupportBlock from './ContactSupportBlock.vue'
 
 const route = useRoute()
@@ -13,16 +14,24 @@ const message = useMessage()
 const manualApiKey = ref('')
 const savingKey = ref(false)
 const registering = ref(false)
+const deviceRetrying = ref(false)
 
 /** 等待用量同步，或 API Key 不可用；主界面 /home 与 /quick-clip */
 const isHomeRoute = computed(
   () => route.path === '/home' || route.path === '/quick-clip' || route.path === '/douyin'
 )
 const show = computed(
-  () => isHomeRoute.value && (rtStore.isAwaitingCloudActivation || rtStore.isUserBanned)
+  () =>
+    isHomeRoute.value &&
+    (deviceUnavailable.value ||
+      rtStore.isAwaitingCloudActivation ||
+      rtStore.isUserBanned)
 )
 
-const modalKind = computed<'banned' | 'activation' | 'pending'>(() => {
+const modalKind = computed<
+  'device_unavailable' | 'banned' | 'activation' | 'pending'
+>(() => {
+  if (deviceUnavailable.value) return 'device_unavailable'
   if (rtStore.isUserBanned) return 'banned'
   if (!rtStore.hasApiKey) return 'activation'
   return 'pending'
@@ -37,7 +46,7 @@ const onRetrySync = (): void => {
 const onSaveManualKey = async (): Promise<void> => {
   const v = manualApiKey.value.trim()
   if (!v) {
-    message.warning('请输入 API Key')
+    message.warning('请输入授权码')
     return
   }
   savingKey.value = true
@@ -45,7 +54,7 @@ const onSaveManualKey = async (): Promise<void> => {
     savingKey.value = false
   })
   manualApiKey.value = ''
-  message.success('API Key 已保存')
+  message.success('授权码已保存')
   await rtStore.refreshBackendActivation()
   rtStore.reauthenticate()
 }
@@ -59,6 +68,20 @@ const onRegisterThisDevice = async (): Promise<void> => {
   await rtStore.refreshBackendActivation()
   rtStore.reauthenticate()
 }
+
+const onRetryDeviceCheck = async (): Promise<void> => {
+  deviceRetrying.value = true
+  const ok = await runDeviceCheck().finally(() => {
+    deviceRetrying.value = false
+  })
+  if (ok) {
+    message.success('已识别本机设备，正在连接服务')
+    rtStore.disconnect()
+    rtStore.connect()
+  } else if (deviceUnavailable.value) {
+    message.warning('仍无法获取设备信息，请检查系统环境或联系客服')
+  }
+}
 </script>
 
 <template>
@@ -70,14 +93,20 @@ const onRegisterThisDevice = async (): Promise<void> => {
     :closable="false"
     :bordered="false"
     :style="{
-      width: modalKind === 'pending' ? '360px' : '400px',
+      width:
+        modalKind === 'pending'
+          ? '360px'
+          : modalKind === 'device_unavailable'
+            ? '420px'
+            : '400px',
       borderRadius: '12px'
     }"
     class="banned-user-modal"
     :class="{
       'banned-user-modal--pending': modalKind === 'pending',
       'banned-user-modal--activation': modalKind === 'activation',
-      'banned-user-modal--banned': modalKind === 'banned'
+      'banned-user-modal--banned': modalKind === 'banned',
+      'banned-user-modal--device': modalKind === 'device_unavailable'
     }"
   >
     <template #header>
@@ -86,11 +115,26 @@ const onRegisterThisDevice = async (): Promise<void> => {
           class="header-icon"
           :class="{
             'header-icon--pending': modalKind === 'pending',
-            'header-icon--activation': modalKind === 'activation'
+            'header-icon--activation': modalKind === 'activation',
+            'header-icon--device': modalKind === 'device_unavailable'
           }"
         >
           <svg
-            v-if="modalKind === 'pending'"
+            v-if="modalKind === 'device_unavailable'"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="header-icon-svg"
+          >
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            <line x1="12" y1="15" x2="12" y2="15.01" />
+          </svg>
+          <svg
+            v-else-if="modalKind === 'pending'"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -132,11 +176,13 @@ const onRegisterThisDevice = async (): Promise<void> => {
         </div>
         <h2 class="header-title">
           {{
-            modalKind === 'banned'
-              ? 'API Key 不可用'
-              : modalKind === 'activation'
-                ? '需要激活'
-                : '正在同步会员信息'
+            modalKind === 'device_unavailable'
+              ? '无法获取设备信息'
+              : modalKind === 'banned'
+                ? '授权码不可用'
+                : modalKind === 'activation'
+                  ? '需要激活'
+                  : '正在同步会员信息'
           }}
         </h2>
       </div>
@@ -144,23 +190,39 @@ const onRegisterThisDevice = async (): Promise<void> => {
 
     <p class="banned-desc">
       {{
-        modalKind === 'banned'
-          ? '当前 API Key 无法继续使用，如有疑问请联系客服。'
-          : modalKind === 'activation'
-            ? '请输入已有 API Key，或使用本机注册获取免费试用'
-            : '正在从云端同步用量与会员状态。若长时间停留在此，可重试连接。'
+        modalKind === 'device_unavailable'
+          ? '本软件需要获取设备信息以完成激活与云端服务。当前无法获取该信息。请检查系统权限与环境后重试，或联系客服处理。'
+          : modalKind === 'banned'
+            ? '当前授权码无法继续使用，如有疑问请联系客服。'
+            : modalKind === 'activation'
+              ? '请输入已有授权码，或使用本机注册获取免费试用'
+              : '正在同步用户信息。若长时间停留在此，可重试连接。'
       }}
     </p>
 
     <ContactSupportBlock />
 
-    <template v-if="modalKind === 'activation' || modalKind === 'banned'" #footer>
+    <template v-if="modalKind === 'device_unavailable'" #footer>
+      <n-space vertical :size="12" style="width: 100%">
+        <n-button
+          type="primary"
+          block
+          class="action-btn"
+          :loading="deviceRetrying"
+          @click="onRetryDeviceCheck"
+        >
+          重新检测
+        </n-button>
+      </n-space>
+    </template>
+
+    <template v-else-if="modalKind === 'activation' || modalKind === 'banned'" #footer>
       <n-space vertical :size="12" style="width: 100%">
         <n-input
           v-model:value="manualApiKey"
           type="password"
           show-password-on="click"
-          placeholder="粘贴或输入 API Key"
+          placeholder="粘贴或输入授权码"
           :disabled="savingKey || registering"
           @keyup.enter="onSaveManualKey"
         />
@@ -223,6 +285,14 @@ const onRegisterThisDevice = async (): Promise<void> => {
 
 .header-icon--activation {
   color: #a78bfa;
+}
+
+.header-icon--device {
+  color: #f87171;
+}
+
+.banned-user-modal--device :deep(.n-card-header) {
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.1) 0%, transparent 100%);
 }
 
 .header-title {

@@ -20,7 +20,7 @@ export interface UsageInfo {
   isVip: boolean
   /** 过期日期（云端下发的过期时间） */
   expiredAt?: string
-  /** 云端对当前 API Key 的状态：1=可用，非 1=不可用（仅在与云端同步后由后端下发） */
+  /** 云端对当前授权码的状态：1=可用，非 1=不可用（仅在与云端同步后由后端下发） */
   status?: number
   /** 与 inklip-base-go 对齐：true 表示用量来自「本地 Go ← 云端 SSE」 */
   syncedFromCloud?: boolean
@@ -96,7 +96,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
   /** 新版本信息（后端 SSE 推送）；有值时显示更新弹窗，force_update 时不可关闭 */
   const versionUpdateInfo = ref<VersionUpdateInfo | null>(null)
 
-  /** 本地 Go 内存中是否已有 API Key（与用量是否已从 SSE 同步无关）；初值与 localStorage 对齐以减少首屏误显示「需激活」） */
+  /** 本地 Go 内存中是否已有授权码（与用量是否已从 SSE 同步无关）；初值与 localStorage 对齐以减少首屏误显示「需激活」） */
   const hasApiKey = ref(
     typeof localStorage !== 'undefined' && localStorage.getItem('cloudActivated') === '1'
   )
@@ -108,7 +108,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
   }
 
   /**
-   * 是否已从云端拿到用量等信息（完全由 usageInfo 推导；依赖有效 API Key 与 SSE）。
+   * 是否已从云端拿到用量等信息（完全由 usageInfo 推导；依赖有效授权码与 SSE）。
    * - syncedFromCloud === true → 已同步
    * - syncedFromCloud === false → 本地占位，未同步
    * - syncedFromCloud 缺省（旧后端）→ 有 status 则视为已同步
@@ -123,12 +123,12 @@ export const useRealtimeStore = defineStore('realtime', () => {
   const isVipAvailable = computed(() => isUsageAvailable(usageInfo.value))
 
   /**
-   * 尚未收到云端 usage_info（启动后 SSE 首次同步前，常见于仍在获取 API Key 或网络异常）。
-   * 与「API Key 不可用」区分：未拿到用量时不视为后者。
+   * 尚未收到云端 usage_info（启动后 SSE 首次同步前，常见于仍在获取授权码或网络异常）。
+   * 与「授权码不可用」区分：未拿到用量时不视为后者。
    */
   const isAwaitingCloudActivation = computed(() => !userInfoReceivedFromCloud.value)
 
-  /** 服务端判定当前 API Key 不可用（仅在与云端已同步且 status !== 1 时为 true） */
+  /** 服务端判定当前授权码不可用（仅在与云端已同步且 status !== 1 时为 true） */
   const isUserBanned = computed(
     () =>
       userInfoReceivedFromCloud.value &&
