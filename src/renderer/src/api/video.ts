@@ -306,11 +306,13 @@ export function deleteVideoApi(id: number): Promise<void> {
   })
 }
 
-/** 导出记录来源：字幕剪辑（默认）| 智能剪辑/AI */
-export type ExportVideoType = 'subtitle_clip' | 'ai'
+/** 导出记录来源：字幕剪辑（默认）| 智能剪辑/AI | 抖音素材 */
+export type ExportVideoType = 'subtitle_clip' | 'ai' | 'douyin'
 
 export function labelForExportVideoType(t?: string | null): string {
-  return t === 'ai' ? 'AI 导出' : '字幕剪辑'
+  if (t === 'ai') return 'AI 导出'
+  if (t === 'douyin') return '抖音素材'
+  return '字幕剪辑'
 }
 
 export interface ExportSegmentsRequestItem {

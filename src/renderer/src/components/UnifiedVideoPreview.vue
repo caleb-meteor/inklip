@@ -36,6 +36,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'dblclick'): void
+  (e: 'thumbnail-placeholder', value: boolean): void
 }>()
 
 const rtStore = useRealtimeStore()
@@ -88,6 +89,7 @@ defineExpose({
       :subtitle-data="normalized.subtitle"
       :show-deleted-overlay="showPathMissing"
       @dblclick="emit('dblclick')"
+      @thumbnail-placeholder="emit('thumbnail-placeholder', $event)"
     />
     <VideoStatusOverlay
       v-if="showOverlay"

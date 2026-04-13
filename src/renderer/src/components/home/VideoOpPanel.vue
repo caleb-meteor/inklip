@@ -129,7 +129,7 @@ function openInFolder() {
 </script>
 
 <template>
-  <div class="video-op-panel" :class="{ 'has-subtitle': subtitleSegments.length }">
+  <div class="video-op-panel">
     <div class="video-op-layout">
       <!-- 左侧：视频 + 字幕 -->
       <div class="video-op-media">
@@ -249,18 +249,19 @@ function openInFolder() {
 
 <style scoped>
 .video-op-panel {
-  min-width: 460px;
-  padding: 16px;
-}
-
-.video-op-panel.has-subtitle {
-  min-width: 700px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 10px;
 }
 
 .video-op-layout {
   display: flex;
-  gap: 28px;
+  gap: 16px;
   align-items: flex-start;
+  min-width: 0;
+  width: 100%;
 }
 
 .video-op-media {
@@ -272,11 +273,12 @@ function openInFolder() {
 
 .video-op-info {
   flex-shrink: 0;
+  min-width: 0;
   width: 260px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding-left: 18px;
+  padding-left: 12px;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 

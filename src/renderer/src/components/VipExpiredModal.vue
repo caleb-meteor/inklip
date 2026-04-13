@@ -14,6 +14,13 @@ const route = useRoute()
 const rtStore = useRealtimeStore()
 const message = useMessage()
 
+const isMainWorkspaceRoute = (path: string): boolean =>
+  path === '/home' ||
+  path === '/quick-clip' ||
+  path === '/material-center' ||
+  path === '/cloud-media' ||
+  path === '/douyin'
+
 const manualApiKey = ref('')
 const savingKey = ref(false)
 /** 弹窗打开时解析到的当前 Key，仅用于展示掩码与复制 */
@@ -55,7 +62,7 @@ const copyFullApiKey = async (): Promise<void> => {
 }
 
 const isHomeRoute = computed(
-  () => route.path === '/home' || route.path === '/quick-clip' || route.path === '/douyin'
+  () => isMainWorkspaceRoute(route.path)
 )
 const show = computed(
   () =>

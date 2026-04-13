@@ -11,6 +11,18 @@ import {
   parseDouyinVideoFromUrl,
   type DouyinVideoInfo
 } from '../utils/douyinUrl'
+import {
+  finishDouyinOffscreenDownloadApi,
+  prepareDouyinOffscreenDownloadApi
+} from '../api/douyin'
+
+const props = withDefaults(
+  defineProps<{
+    /** 当前工作区；有值时成功下载会写入导出历史（export_videos，无字幕行） */
+    workspaceId?: number | null
+  }>(),
+  { workspaceId: null }
+)
 
 const message = useMessage()
 
@@ -197,6 +209,23 @@ async function downloadCurrentVideo(): Promise<void> {
     const savePath = pick.filePath
     pushDouyinFlowLog(`已选择保存路径：${savePath}`)
 
+    pushDouyinFlowLog('向后端申请任务 task_id（云端计费/任务追踪）…')
+    let taskId: string | null = null
+    try {
+      const prep = await prepareDouyinOffscreenDownloadApi(id)
+      taskId = prep.task_id
+      if (taskId) {
+        pushDouyinFlowLog(`已获得 task_id：${taskId}`)
+      }
+    } catch {
+      return
+    }
+    if (!taskId) {
+      pushDouyinFlowLog('未返回 task_id，已中止')
+      message.error('无法创建下载任务')
+      return
+    }
+
     downloadingAwemeId.value = id
     pushDouyinFlowLog('使用屏外窗口模式：创建独立窗口加载详情页并请求 aweme/detail（内嵌浏览页保持不动）')
     pushDouyinFlowLog('已调用主进程：解析播放地址并由该窗口发起下载（若文件较大请耐心等待）')
@@ -215,20 +244,44 @@ async function downloadCurrentVideo(): Promise<void> {
       douyinDownloadProgressUi.value = null
       if (r && 'canceled' in r && r.canceled) {
         pushDouyinFlowLog('下载已取消')
+        void finishDouyinOffscreenDownloadApi({
+          task_id: taskId,
+          success: false,
+          error: '用户取消'
+        }).catch(() => {})
         return
       }
       if (r.success) {
         pushDouyinFlowLog('下载成功，文件已写入所选路径')
         message.success('已保存到所选位置')
+        const outPath = 'path' in r && typeof r.path === 'string' ? r.path : ''
+        void finishDouyinOffscreenDownloadApi({
+          task_id: taskId,
+          success: true,
+          workspace_id:
+            props.workspaceId != null && props.workspaceId > 0 ? props.workspaceId : undefined,
+          suggested_name: name,
+          output_path: outPath || undefined
+        }).catch(() => {})
         return
       }
       pushDouyinFlowLog(`失败：${r.error ?? '未知错误'}`)
       message.error(r.error != null ? `无法下载：${r.error}` : '无法下载')
+      void finishDouyinOffscreenDownloadApi({
+        task_id: taskId,
+        success: false,
+        error: r.error ?? '下载失败'
+      }).catch(() => {})
     } catch (e) {
       douyinDownloadProgressUi.value = null
       const msg = e instanceof Error ? e.message : '下载失败'
       pushDouyinFlowLog(`异常：${msg}`)
       message.error(msg)
+      void finishDouyinOffscreenDownloadApi({
+        task_id: taskId,
+        success: false,
+        error: msg
+      }).catch(() => {})
     } finally {
       downloadingAwemeId.value = null
     }

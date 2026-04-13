@@ -3,16 +3,11 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { NIcon, NPopover, NProgress, useMessage } from 'naive-ui'
 import {
-  FolderOpenOutline,
   ChevronForwardOutline,
   ChevronDownOutline,
-  TrashOutline,
-  MenuOutline,
-  ChevronBackOutline,
   CutOutline,
   VideocamOutline,
-  SparklesOutline,
-  OpenOutline
+  SparklesOutline
 } from '@vicons/ionicons5'
 import { getVideosApi, type VideoItem, type HomePlayPayload } from '../../api/video'
 import {
@@ -433,7 +428,16 @@ onMounted(() => {
   loadAll()
 })
 
-defineExpose({ loadAll })
+defineExpose({
+  loadAll,
+  workspaces,
+  selectedWorkspaceId,
+  workspaceSelecting,
+  currentWorkspaceLabel,
+  onSelectWorkspace,
+  onSelectWorkspaceDir,
+  onDeleteWorkspace
+})
 
 /** 根据实时推送刷新首页左侧视频列表（只刷新当前工作空间视频） */
 const refreshVideosFromApi = async () => {
@@ -451,79 +455,7 @@ const refreshVideosFromApi = async () => {
 <template>
   <div class="chat-sidebar" :class="{ 'sidebar-collapsed': collapsed }">
     <div class="sidebar-content">
-      <!-- 折叠时：展开按钮置顶 -->
-      <div v-if="collapsed" class="sidebar-toggle-btn-top-wrapper">
-        <div
-          class="sidebar-toggle-btn-top"
-          title="展开侧边栏"
-          @click="emit('toggle-left-collapse')"
-        >
-          <n-icon size="18"><MenuOutline /></n-icon>
-        </div>
-      </div>
-
-      <!-- 展开时：工作空间 + 折叠按钮 同一行 -->
-      <div v-show="!collapsed" class="top-bar-row">
-        <div class="top-bar-row-workspace">
-          <n-popover
-            trigger="click"
-            placement="bottom-start"
-            :show="showWorkspacePopover"
-            :width="360"
-            :show-arrow="false"
-            content-class="workspace-popover-box"
-            :content-style="{ padding: 0 }"
-            @update:show="showWorkspacePopover = $event"
-          >
-            <template #trigger>
-              <div
-                class="workspace-bar clickable"
-                :class="{ selecting: workspaceSelecting }"
-              >
-                <n-icon size="14" class="workspace-icon"><FolderOpenOutline /></n-icon>
-                <span class="workspace-label">工作空间</span>
-                <span class="workspace-name" :title="currentWorkspaceLabel">
-                  {{ currentWorkspaceLabel }}
-                </span>
-                <n-icon size="12" class="workspace-chevron"><ChevronDownOutline /></n-icon>
-              </div>
-            </template>
-            <div class="workspace-switcher-popover">
-              <div
-                v-for="ws in workspaces"
-                :key="ws.id"
-                class="workspace-switcher-item"
-                :class="{ 'is-active': selectedWorkspaceId === ws.id }"
-                @click="onSelectWorkspace(ws)"
-              >
-                <div class="workspace-switcher-item__main">
-                  <div class="workspace-switcher-item__name">{{ ws.name }}</div>
-                  <div v-if="ws.path" class="workspace-switcher-item__path" :title="ws.path">{{ ws.path }}</div>
-                </div>
-                <div
-                  class="workspace-switcher-item__delete"
-                  title="删除工作空间"
-                  @click.stop="onDeleteWorkspace(ws)"
-                >
-                  <n-icon :size="14"><TrashOutline /></n-icon>
-                </div>
-              </div>
-              <div class="workspace-switcher-item workspace-switcher-item--action" @click="onSelectWorkspaceDir">
-                选择目录…
-              </div>
-            </div>
-          </n-popover>
-        </div>
-        <div
-          class="sidebar-toggle-btn-inline"
-          title="折叠侧边栏"
-          @click="emit('toggle-left-collapse')"
-        >
-          <n-icon size="16"><ChevronBackOutline /></n-icon>
-        </div>
-      </div>
         <div class="sidebar-group">
-          <!-- 顶上工作空间：字幕剪辑 / AI 切换（一体 tab 条） -->
           <div v-show="!collapsed" class="top-workspace-view-tabs">
             <div
               class="top-workspace-view-tab"
@@ -541,16 +473,8 @@ const refreshVideosFromApi = async () => {
               <n-icon size="14"><SparklesOutline /></n-icon>
               <span>AI</span>
             </div>
-            <div
-              class="top-workspace-view-tab"
-              :class="{ active: route.path === '/douyin' }"
-              @click="emit('navigate', '/douyin')"
-            >
-              <n-icon size="14"><OpenOutline /></n-icon>
-              <span>抖音</span>
-            </div>
           </div>
-          <!-- 折叠状态下的侧边栏 Tab 切换 -->
+
           <div v-show="collapsed" class="collapsed-icons-list">
             <div
               class="collapsed-icon-item"
@@ -567,14 +491,6 @@ const refreshVideosFromApi = async () => {
               title="AI"
             >
               <n-icon size="20"><SparklesOutline /></n-icon>
-            </div>
-            <div
-              class="collapsed-icon-item"
-              :class="{ active: route.path === '/douyin' }"
-              @click="emit('navigate', '/douyin')"
-              title="抖音"
-            >
-              <n-icon size="20"><OpenOutline /></n-icon>
             </div>
           </div>
         </div>
@@ -624,7 +540,7 @@ const refreshVideosFromApi = async () => {
                     v-if="item.node.video"
                     trigger="click"
                     placement="right-start"
-                    :width="videoHasSubtitle(item.node.video) ? 700 : 480"
+                    :width="videoHasSubtitle(item.node.video) ? 720 : 492"
                     :show-arrow="true"
                     class="video-op-popover"
                     content-class="video-op-popover-content"
@@ -744,123 +660,6 @@ const refreshVideosFromApi = async () => {
   flex-shrink: 0;
 }
 
-.top-bar-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.top-bar-row-workspace {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  overflow: hidden;
-}
-/* NPopover 根节点 */
-.top-bar-row-workspace > * {
-  flex: 1;
-  min-width: 0;
-  display: block;
-}
-.top-bar-row-workspace .workspace-bar {
-  margin-bottom: 0;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.sidebar-toggle-btn-inline {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #71717a;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.sidebar-toggle-btn-inline:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e4e4e7;
-}
-
-.sidebar-toggle-btn-top-wrapper {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 12px;
-  width: 100%;
-}
-.sidebar-toggle-btn-top {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #d4d4d8;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.sidebar-toggle-btn-top:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #fff;
-}
-
-.workspace-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  border: 1px solid transparent;
-  transition: all 0.2s ease;
-}
-
-.workspace-bar.clickable:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.workspace-bar.selecting {
-  opacity: 0.8;
-  pointer-events: none;
-}
-
-.workspace-bar .workspace-icon {
-  color: #a1a1aa;
-  flex-shrink: 0;
-}
-
-.workspace-bar .workspace-chevron {
-  color: #71717a;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.workspace-label {
-  font-size: 11px;
-  color: #71717a;
-  flex-shrink: 0;
-  display: none; /* Hide label to save space and make it cleaner */
-}
-
-.workspace-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: #e4e4e7;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
 /* 顶上工作空间：字幕剪辑 / AI 切换（一体 segmented 风格） */
 .top-workspace-view-tabs {
   display: flex;
@@ -914,85 +713,6 @@ const refreshVideosFromApi = async () => {
   color: #4facfe;
 }
 
-.top-workspace-view-tab.active:nth-child(3) {
-  background: rgba(254, 44, 85, 0.12);
-  color: #fb7185;
-}
-
-/* 工作空间切换 Popover：紧凑高度，柔和配色 */
-.workspace-switcher-popover {
-  padding: 6px;
-  max-height: 260px;
-  overflow-y: auto;
-  background: #1c1c1e;
-  border-radius: 8px;
-}
-.workspace-switcher-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.15s;
-  margin-bottom: 2px;
-}
-.workspace-switcher-item__main {
-  flex: 1;
-  min-width: 0;
-}
-.workspace-switcher-item:last-child {
-  margin-bottom: 0;
-}
-.workspace-switcher-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-.workspace-switcher-item.is-active {
-  background: rgba(99, 102, 241, 0.12);
-}
-.workspace-switcher-item__name {
-  font-size: 13px;
-  font-weight: 500;
-  color: #e4e4e7;
-  margin-bottom: 4px;
-  line-height: 1.2;
-}
-.workspace-switcher-item__path {
-  font-size: 11px;
-  color: #a1a1aa;
-  line-height: 1.35;
-  word-break: break-all;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.workspace-switcher-item__delete {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  color: #a1a1aa;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-.workspace-switcher-item__delete:hover {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.1);
-}
-.workspace-switcher-item--action {
-  color: #818cf8;
-  font-size: 12px;
-}
-.workspace-switcher-item--action .workspace-switcher-item__main,
-.workspace-switcher-item--action .workspace-switcher-item__delete {
-  display: none;
-}
 
 
 .workspace-section {
@@ -1280,31 +1000,16 @@ const refreshVideosFromApi = async () => {
 }
 </style>
 
-<!-- 工作空间 Popover 外框（内容 teleport 到 body，用 :has() 选中外框并覆盖主题） -->
+<!-- Popover 外框样式（teleport 到 body，用 :has() 选中） -->
 <style>
-/* 当 popover 内包含我们的内容时，覆盖整个外框 */
-.n-popover:has(.workspace-popover-box) {
-  background: #1c1c1e !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
-  padding: 0 !important;
-  overflow: hidden;
-}
-.n-popover:has(.workspace-popover-box) .n-popover__content,
-.workspace-popover-box {
-  padding: 0 !important;
-  background: transparent !important;
-  border: none !important;
-}
-
 /* 视频操作面板 Popover - 与内容融为一体 */
 .n-popover:has(.video-op-popover-content) {
   background: var(--ev-c-black-soft, #222) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 12px !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
-  overflow: hidden;
+  /* 避免裁切略大于宽度的内容；圆角仍由子级与自身 border-radius 呈现 */
+  overflow: visible;
 }
 .n-popover:has(.video-op-popover-content) .n-popover__content,
 .video-op-popover-content {

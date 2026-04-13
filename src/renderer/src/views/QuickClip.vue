@@ -34,19 +34,17 @@ defineExpose({
     workspaceId?: number | null,
     suggestedName?: string,
     exportType?: ExportVideoType
-  ) => quickClip.exportSegmentsDirect(segments, { workspaceId, suggestedName, exportType })
+  ) => quickClip.exportSegmentsDirect(segments, { workspaceId, suggestedName, exportType }),
+  loadExportHistorySubtitles: quickClip.loadExportHistorySubtitles
 })
 
-function onApplyExport(exportVideoId: number) {
-  quickClip.loadExportHistorySubtitles(exportVideoId)
-}
 </script>
 
 <template>
   <div class="quick-clip-content">
     <div class="quick-clip-grid">
       <QuickClipSubtitleList />
-      <QuickClipSelectedList @apply-export="onApplyExport" />
+      <QuickClipSelectedList />
       <QuickClipPreview />
     </div>
   </div>

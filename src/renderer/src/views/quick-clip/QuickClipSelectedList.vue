@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { NIcon, NScrollbar, NButton, NSpin, NEmpty, NTooltip } from 'naive-ui'
-import { ListOutline, RemoveOutline, TimeOutline, CloseOutline, PlayOutline, ArrowUpCircleOutline, FolderOpenOutline, TrashOutline, SearchOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
+import { NIcon, NScrollbar, NButton, NTooltip } from 'naive-ui'
+import { ListOutline, RemoveOutline, PlayOutline, SearchOutline, SwapHorizontalOutline } from '@vicons/ionicons5'
 import { inject } from 'vue'
 import type { SegmentWithVideo } from './types'
-import { labelForExportVideoType, type ExportHistoryItem } from '../../api/video'
 
 const qc = inject('quickClip') as any
 
@@ -12,21 +11,6 @@ function similarBlockForSeg(seg: { videoId: number; fromS: number; toS: number }
   return qc.similarSubtitlesBySegmentKey[key] as
     | { loading: boolean; results: SegmentWithVideo[] }
     | undefined
-}
-
-const emit = defineEmits<{
-  (e: 'apply-export', exportVideoId: number): void
-}>()
-
-function formatDate(s: string) {
-  if (!s) return ''
-  const d = new Date(s)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function openExportFolder(item: ExportHistoryItem) {
-  if (item.output_missing || !item.output_path?.trim()) return
-  void window.api?.showItemInFolder(item.output_path)
 }
 </script>
 
@@ -47,22 +31,9 @@ function openExportFolder(item: ExportHistoryItem) {
         >
           删除 ({{ qc.selectedSegmentIndexes.size }})
         </n-button>
-        <n-button
-          size="tiny"
-          type="default"
-          :disabled="!qc.selectedWorkspaceId"
-          :loading="qc.loadingExportHistory"
-          @click="qc.loadExportHistory"
-        >
-          <template #icon>
-            <n-icon size="14"><TimeOutline /></n-icon>
-          </template>
-        </n-button>
       </div>
     </div>
-    <div class="panel-body-split">
-      <!-- 上：已选字幕列表 -->
-      <div class="panel-section panel-section-top">
+    <div class="panel-body">
         <n-scrollbar>
           <div
             v-if="qc.selectedSegments.length === 0"
@@ -176,81 +147,6 @@ function openExportFolder(item: ExportHistoryItem) {
             </template>
           </div>
         </n-scrollbar>
-      </div>
-      <!-- 下：导出历史（点击「查看导出历史」后显示） -->
-      <div v-show="qc.showExportHistoryModal" class="panel-section panel-section-bottom">
-        <div class="export-history-header">
-          <span class="export-history-title">导出历史</span>
-          <n-button quaternary size="tiny" @click="qc.showExportHistoryModal = false">
-            <n-icon size="14"><CloseOutline /></n-icon>
-            关闭
-          </n-button>
-        </div>
-        <n-scrollbar class="export-history-scroll">
-          <n-spin :show="qc.loadingExportHistory">
-            <div v-if="qc.exportHistoryList.length === 0 && !qc.loadingExportHistory" class="export-history-empty">
-              <n-empty description="暂无导出记录" size="small" />
-            </div>
-            <div v-else class="export-history-list">
-              <div
-                v-for="item in qc.exportHistoryList"
-                :key="item.id"
-                class="export-history-item"
-              >
-                <div class="export-history-item-content">
-                  <span class="export-history-name" :title="item.suggested_name">{{ item.suggested_name }}</span>
-                  <span class="export-history-meta"
-                    >{{ labelForExportVideoType(item.export_type) }} · {{ formatDate(item.created_at)
-                    }}<template v-if="item.output_path && item.output_missing">
-                      · <span class="export-history-deleted">已删除</span>
-                    </template></span
-                  >
-                </div>
-                <div class="export-history-actions">
-                  <n-tooltip v-if="item.output_path" placement="top" trigger="hover">
-                    <template #trigger>
-                      <span class="export-history-folder-trigger">
-                        <n-button
-                          class="export-history-btn"
-                          quaternary
-                          size="tiny"
-                          :disabled="!!item.output_missing"
-                          @click.stop="openExportFolder(item)"
-                        >
-                          <n-icon size="14"><FolderOpenOutline /></n-icon>
-                        </n-button>
-                      </span>
-                    </template>
-                    {{ item.output_missing ? '文件已删除' : '打开所在文件夹' }}
-                  </n-tooltip>
-                  <n-tooltip placement="top" trigger="hover">
-                    <template #trigger>
-                      <n-button class="export-history-btn" quaternary size="tiny" type="primary" @click.stop="emit('apply-export', item.id)">
-                        <n-icon size="14"><ArrowUpCircleOutline /></n-icon>
-                      </n-button>
-                    </template>
-                    引用此记录中的字幕
-                  </n-tooltip>
-                <n-tooltip placement="top" trigger="hover">
-                  <template #trigger>
-                    <n-button
-                      class="export-history-btn"
-                      quaternary
-                      size="tiny"
-                      type="error"
-                      @click.stop="qc.deleteExportHistory(item.id)"
-                    >
-                      <n-icon size="14"><TrashOutline /></n-icon>
-                    </n-button>
-                  </template>
-                  删除该导出记录
-                </n-tooltip>
-                </div>
-              </div>
-            </div>
-          </n-spin>
-        </n-scrollbar>
-      </div>
     </div>
   </div>
 </template>
@@ -281,116 +177,10 @@ function openExportFolder(item: ExportHistoryItem) {
   font-weight: 400;
   color: rgba(255, 255, 255, 0.5);
 }
-.panel-body-split {
+.panel-body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.panel-section {
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.panel-section-top {
-  flex: 1;
-}
-.panel-section-bottom {
-  flex-shrink: 0;
-  max-height: 45%;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  flex-direction: column;
-}
-.export-history-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(0, 0, 0, 0.15);
-}
-.export-history-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.export-history-scroll {
-  flex: 1;
-  min-height: 0;
-}
-.export-history-empty {
-  padding: 16px;
-  text-align: center;
-}
-.export-history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px;
-}
-.export-history-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: background 0.2s;
-}
-.export-history-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-.export-history-item-content {
-  flex: 1;
-  min-width: 0;
-}
-.export-history-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-.export-history-actions .export-history-btn {
-  min-width: 0;
-  padding: 2px 4px;
-  height: 24px;
-  opacity: 0.7;
-  transition: opacity 0.2s ease;
-}
-.export-history-actions .export-history-btn .n-icon {
-  font-size: 14px;
-}
-.export-history-item:hover .export-history-actions .export-history-btn {
-  opacity: 1;
-}
-.export-history-deleted {
-  color: #f87171;
-  font-weight: 500;
-}
-.export-history-folder-trigger {
-  display: inline-flex;
-  vertical-align: middle;
-}
-.export-history-name {
-  display: block;
-  font-size: 12px;
-  color: #f5f5f7;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.export-history-meta {
-  display: block;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 2px;
 }
 .panel-empty {
   padding: 24px;

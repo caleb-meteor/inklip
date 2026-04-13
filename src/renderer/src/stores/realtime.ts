@@ -17,7 +17,8 @@ export interface UsageInfo {
   dailyLimit: number
   totalSeconds: number
   remainingSeconds: number
-  isVip: boolean
+  /** 会员类型：common / vip / svip（由云端数据库 type 字段下发） */
+  userType: string
   /** 过期日期（云端下发的过期时间） */
   expiredAt?: string
   /** 云端对当前授权码的状态：1=可用，非 1=不可用（仅在与云端同步后由后端下发） */
@@ -49,9 +50,9 @@ export interface WorkspaceIngestProgressEvent {
   file?: string
 }
 
-/** 判断余量是否可用：是 VIP、未过期、且有剩余额度 */
+/** 判断余量是否可用：会员（vip/svip）、未过期、且有剩余额度 */
 export function isUsageAvailable(info: UsageInfo | null | undefined): boolean {
-  if (!info?.isVip) return false
+  if (!info || info.userType === 'common' || !info.userType) return false
   if (info.expiredAt && new Date(info.expiredAt) <= new Date()) return false
   // dailyLimit > 0 时需检查剩余额度；dailyLimit === 0 表示无限制
   if (info.dailyLimit > 0 && (info.remainingSeconds ?? 0) <= 0) return false
@@ -87,7 +88,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
     dailyLimit: 0,
     totalSeconds: 0,
     remainingSeconds: 0,
-    isVip: false,
+    userType: 'common',
     expiredAt: undefined,
     status: undefined,
     syncedFromCloud: false
@@ -284,7 +285,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
           dailyLimit: Number.isFinite(dailyLimit) ? dailyLimit : 0,
           totalSeconds: Number.isFinite(totalSeconds) ? totalSeconds : 0,
           remainingSeconds: Number.isFinite(remainingSeconds) ? remainingSeconds : 0,
-          isVip: Boolean(data.isVip),
+          userType: data.userType || 'common',
           expiredAt: data.expiredAt,
           status: statusNum,
           syncedFromCloud
@@ -354,7 +355,7 @@ export const useRealtimeStore = defineStore('realtime', () => {
       dailyLimit: 0,
       totalSeconds: 0,
       remainingSeconds: 0,
-      isVip: false,
+      userType: 'common',
       expiredAt: undefined,
       status: undefined,
       syncedFromCloud: false

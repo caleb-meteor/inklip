@@ -10,9 +10,16 @@ const VERSION_DOWNLOAD_URL = 'https://inklip.caleb.center'
 const route = useRoute()
 const rtStore = useRealtimeStore()
 
+const isMainWorkspaceRoute = (path: string): boolean =>
+  path === '/home' ||
+  path === '/quick-clip' ||
+  path === '/material-center' ||
+  path === '/cloud-media' ||
+  path === '/douyin'
+
 /** 优先级 4：无 API Key 不可用、未到期时才可能弹本窗。主界面 /home 与 /quick-clip */
 const isHomeRoute = computed(
-  () => route.path === '/home' || route.path === '/quick-clip' || route.path === '/douyin'
+  () => isMainWorkspaceRoute(route.path)
 )
 
 const baseReady = computed(

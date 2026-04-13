@@ -2,7 +2,13 @@
 import { ref, computed, watch, onBeforeUnmount, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NIcon, useMessage } from 'naive-ui'
-import { PlayOutline, PauseOutline, DownloadOutline, CreateOutline } from '@vicons/ionicons5'
+import {
+  PlayOutline,
+  PauseOutline,
+  DownloadOutline,
+  CreateOutline,
+  VideocamOutline
+} from '@vicons/ionicons5'
 import { getVideosApi, type VideoItem } from '../../api/video'
 import { getMediaUrl } from '../../utils/media'
 import { quickClipBridgeKey } from '../../utils/quickClipBridge'
@@ -40,6 +46,9 @@ const videosById = ref<Map<number, VideoItem>>(new Map())
 const lastLoadedMaterialPath = ref('')
 const activeIndex = ref(-1)
 const isChainPlaying = ref(false)
+/** 用户是否已触发过预览（避免暂停后仍盖一层占位） */
+const previewEngaged = ref(false)
+const videoPlaying = ref(false)
 let chainIndex = -1
 let timeUpdateCleanup: (() => void) | null = null
 
@@ -96,10 +105,30 @@ async function loadVideos(): Promise<void> {
 watch(
   () => props.subtitle,
   () => {
+    previewEngaged.value = false
     void loadVideos()
   },
   { immediate: true, deep: true }
 )
+
+/** 有片段且尚未开始预览时：装饰空闲态；已开始过则保留画面（含暂停） */
+const showPreviewIdleDecor = computed(
+  () =>
+    segments.value.length > 0 &&
+    !videoPlaying.value &&
+    !isChainPlaying.value &&
+    !previewEngaged.value
+)
+
+const showPreviewEmpty = computed(() => segments.value.length === 0)
+
+function onVideoPlay() {
+  videoPlaying.value = true
+}
+
+function onVideoPause() {
+  videoPlaying.value = false
+}
 
 function formatSegTime(fromS: number, toS: number): string {
   const fmt = (t: number) => {
@@ -133,6 +162,7 @@ function playSegmentAt(index: number, fromChain: boolean): void {
     chainIndex = -1
   }
 
+  previewEngaged.value = true
   activeIndex.value = index
   const url = getMediaUrl(seg.videoPath)
 
@@ -196,6 +226,7 @@ function toggleChainPreview(): void {
     activeIndex.value = -1
     return
   }
+  previewEngaged.value = true
   isChainPlaying.value = true
   chainIndex = -1
   playNextInChain()
@@ -264,25 +295,39 @@ onBeforeUnmount(() => {
 <template>
   <div class="smartcut-preview">
     <div class="preview-media">
-      <div class="preview-video-wrap">
+      <div
+        class="preview-video-wrap"
+        :class="{ 'preview-video-wrap--idle-decor': showPreviewIdleDecor, 'preview-video-wrap--empty': showPreviewEmpty }"
+      >
         <video
           ref="videoRef"
           class="preview-video"
           controls
           playsinline
           preload="metadata"
+          @play="onVideoPlay"
+          @pause="onVideoPause"
         />
-      </div>
-      <div class="preview-toolbar">
-        <n-button size="small" secondary type="primary" :disabled="segments.length === 0" @click="toggleChainPreview">
-          <template #icon>
-            <n-icon>
-              <PauseOutline v-if="isChainPlaying" />
-              <PlayOutline v-else />
-            </n-icon>
-          </template>
-          {{ isChainPlaying ? '停止连续播放' : '连续播放方案' }}
-        </n-button>
+        <div v-show="showPreviewIdleDecor" class="preview-video-idle" aria-hidden="true">
+          <div class="preview-idle-shimmer" />
+          <div class="preview-idle-corners">
+            <span class="preview-idle-corner preview-idle-corner--tl" />
+            <span class="preview-idle-corner preview-idle-corner--tr" />
+            <span class="preview-idle-corner preview-idle-corner--bl" />
+            <span class="preview-idle-corner preview-idle-corner--br" />
+          </div>
+          <div class="preview-idle-center">
+            <div class="preview-idle-icon-ring">
+              <n-icon :size="28" class="preview-idle-icon"><VideocamOutline /></n-icon>
+            </div>
+            <span class="preview-idle-title">方案预览</span>
+            <span class="preview-idle-hint">点击右侧片段或顶部「播放」</span>
+          </div>
+        </div>
+        <div v-show="showPreviewEmpty" class="preview-video-empty" aria-hidden="true">
+          <n-icon :size="26" class="preview-empty-icon"><VideocamOutline /></n-icon>
+          <span class="preview-empty-text">暂无可用片段</span>
+        </div>
       </div>
     </div>
     <div class="preview-subtitles">
@@ -292,6 +337,21 @@ onBeforeUnmount(() => {
           <span v-if="segments.length" class="count">{{ segments.length }} 条</span>
         </div>
         <div v-if="segments.length" class="subtitle-header-actions">
+          <n-button
+            size="tiny"
+            quaternary
+            type="primary"
+            :disabled="segments.length === 0"
+            @click="toggleChainPreview"
+          >
+            <template #icon>
+              <n-icon>
+                <PauseOutline v-if="isChainPlaying" />
+                <PlayOutline v-else />
+              </n-icon>
+            </template>
+            {{ isChainPlaying ? '停止' : '播放' }}
+          </n-button>
           <n-button
             size="tiny"
             quaternary
@@ -352,6 +412,7 @@ onBeforeUnmount(() => {
 
 /* 竖屏 9:16 区域：固定宽高，与右侧字幕列等高 */
 .preview-video-wrap {
+  position: relative;
   width: 260px;
   max-width: 100%;
   height: var(--sc-preview-h);
@@ -362,6 +423,17 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.preview-video-wrap--idle-decor {
+  background: linear-gradient(150deg, #1c1b22 0%, #121118 45%, #0a0a0e 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.preview-video-wrap--empty {
+  background: linear-gradient(160deg, #1a1920 0%, #101016 100%);
+}
+
 .preview-video {
   width: 100%;
   height: 100%;
@@ -369,14 +441,154 @@ onBeforeUnmount(() => {
   object-fit: contain;
 }
 
-.preview-toolbar {
+.preview-video-idle {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  width: 260px;
-  max-width: 100%;
+  justify-content: center;
+}
+
+.preview-idle-shimmer {
+  position: absolute;
+  inset: -35% -55%;
+  background: linear-gradient(
+    118deg,
+    transparent 36%,
+    rgba(79, 172, 254, 0.05) 48%,
+    rgba(79, 172, 254, 0.1) 50%,
+    rgba(79, 172, 254, 0.05) 52%,
+    transparent 64%
+  );
+  mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 88%);
+  animation: sc-preview-shimmer 5.5s ease-in-out infinite;
+}
+
+@keyframes sc-preview-shimmer {
+  0%,
+  100% {
+    transform: translate(-6%, 0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate(6%, 3%);
+    opacity: 0.7;
+  }
+}
+
+.preview-idle-corners {
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+}
+
+.preview-idle-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: rgba(79, 172, 254, 0.22);
+  opacity: 0.9;
+}
+
+.preview-idle-corner--tl {
+  top: 0;
+  left: 0;
+  border-top: 1px solid;
+  border-left: 1px solid;
+  border-radius: 2px 0 0 0;
+}
+
+.preview-idle-corner--tr {
+  top: 0;
+  right: 0;
+  border-top: 1px solid;
+  border-right: 1px solid;
+  border-radius: 0 2px 0 0;
+}
+
+.preview-idle-corner--bl {
+  bottom: 0;
+  left: 0;
+  border-bottom: 1px solid;
+  border-left: 1px solid;
+  border-radius: 0 0 0 2px;
+}
+
+.preview-idle-corner--br {
+  bottom: 0;
+  right: 0;
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+  border-radius: 0 0 2px 0;
+}
+
+.preview-idle-center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  text-align: center;
+}
+
+.preview-idle-icon-ring {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 35%, rgba(79, 172, 254, 0.18) 0%, transparent 65%),
+    rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(79, 172, 254, 0.2);
+  box-shadow: 0 0 24px rgba(79, 172, 254, 0.12);
+}
+
+.preview-idle-icon {
+  color: rgba(147, 197, 253, 0.85) !important;
+}
+
+.preview-idle-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.preview-idle-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(148, 163, 184, 0.85);
+  max-width: 200px;
+}
+
+.preview-video-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  background: linear-gradient(to top, rgba(10, 10, 14, 0.55) 0%, transparent 45%);
+}
+
+.preview-empty-icon {
+  color: rgba(100, 116, 139, 0.65) !important;
+}
+
+.preview-empty-text {
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.9);
+  line-height: 1.45;
 }
 
 .preview-subtitles {

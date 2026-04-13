@@ -9,9 +9,6 @@ import { BackendService } from './services/backend'
 function getAppIconPath(): string {
   const ext =
     process.platform === 'darwin' ? 'icns' : process.platform === 'win32' ? 'ico' : 'png'
-  if (process.platform === 'darwin') {
-    return path.join(process.resourcesPath, `icon.${ext}`)
-  }
   return path.join(process.resourcesPath, `icon.${ext}`)
 }
 
