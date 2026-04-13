@@ -20,6 +20,19 @@ const routes = [
     component: Home
   },
   {
+    path: '/material-center',
+    name: 'MaterialCenter',
+    component: Home
+  },
+  {
+    path: '/cloud-media',
+    redirect: '/material-center'
+  },
+  {
+    path: '/douyin',
+    redirect: '/material-center'
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: Settings

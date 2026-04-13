@@ -11,13 +11,22 @@ const route = useRoute()
 const rtStore = useRealtimeStore()
 const message = useMessage()
 
+const isMainWorkspaceRoute = (path: string): boolean =>
+  path === '/home' ||
+  path === '/quick-clip' ||
+  path === '/material-center' ||
+  path === '/cloud-media' ||
+  path === '/douyin'
+
 const manualApiKey = ref('')
 const savingKey = ref(false)
 const registering = ref(false)
 const deviceRetrying = ref(false)
 
-/** 等待用量同步，或授权码不可用；主界面 /home 与 /quick-clip */
-const isHomeRoute = computed(() => route.path === '/home' || route.path === '/quick-clip')
+/** 等待用量同步，或 API Key 不可用；主界面 /home 与 /quick-clip */
+const isHomeRoute = computed(
+  () => isMainWorkspaceRoute(route.path)
+)
 const show = computed(
   () =>
     isHomeRoute.value &&

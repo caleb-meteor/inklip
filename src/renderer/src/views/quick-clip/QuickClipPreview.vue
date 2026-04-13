@@ -10,16 +10,6 @@ const showPreviewIdle = computed(
   () => !qc.isPreviewPlaying && !qc.playingSourceSegment
 )
 
-const idleTitle = computed(() =>
-  qc.selectedSegments.length === 0 ? '暂无预览内容' : '准备预览'
-)
-
-const idleDesc = computed(() =>
-  qc.selectedSegments.length === 0
-    ? '从左侧将字幕拖入或加入「已选」后，即可在此播放与导出'
-    : '点击下方「按选择顺序播放」预览所选片段，或在已选列表中单击单条播放'
-)
-
 function startExport() {
   if (qc.selectedSegments.length === 0) return
   void qc.handleExportSegments()
@@ -30,7 +20,7 @@ function startExport() {
   <div class="panel panel-preview">
     <div class="panel-header">
       <n-icon size="18"><PlayOutline /></n-icon>
-      <span>视频播放区</span>
+      <span>预览</span>
     </div>
     <div class="panel-body preview-body">
       <div
@@ -56,42 +46,42 @@ function startExport() {
         />
         <div v-show="showPreviewIdle" class="preview-idle-state" aria-hidden="true">
           <div class="preview-idle-icon-wrap">
-            <n-icon :size="36" class="preview-idle-icon">
+            <n-icon :size="32" class="preview-idle-icon">
               <VideocamOutline />
             </n-icon>
           </div>
-          <p class="preview-idle-title">{{ idleTitle }}</p>
-          <p class="preview-idle-desc">{{ idleDesc }}</p>
         </div>
         <div
           v-show="qc.isPreviewPlaying && !qc.playingSourceSegment"
           class="preview-overlay"
         />
       </div>
-      <n-button
-        type="primary"
-        block
-        :disabled="qc.selectedSegments.length === 0"
-        @click="qc.startPreview"
-      >
-        <template #icon>
-          <n-icon><PlayOutline /></n-icon>
-        </template>
-        {{ qc.isPreviewPlaying ? '停止播放' : '按选择顺序播放' }}
-      </n-button>
-      <n-button
-        type="info"
-        block
-        :disabled="qc.selectedSegments.length === 0"
-        :loading="qc.isExporting"
-        @click="startExport"
-      >
-        <template #icon>
-          <n-icon><DownloadOutline /></n-icon>
-        </template>
-        导出所选片段
-      </n-button>
-      <div class="preview-spacer"></div>
+      <div class="preview-actions">
+        <n-button
+          class="preview-action-btn"
+          :type="qc.isPreviewPlaying ? 'warning' : 'primary'"
+          size="small"
+          :disabled="qc.selectedSegments.length === 0"
+          @click="qc.startPreview"
+        >
+          <template #icon>
+            <n-icon size="14"><PlayOutline /></n-icon>
+          </template>
+          {{ qc.isPreviewPlaying ? '停止' : '播放' }}
+        </n-button>
+        <n-button
+          class="preview-action-btn preview-action-export"
+          size="small"
+          :disabled="qc.selectedSegments.length === 0"
+          :loading="qc.isExporting"
+          @click="startExport"
+        >
+          <template #icon>
+            <n-icon size="14"><DownloadOutline /></n-icon>
+          </template>
+          导出
+        </n-button>
+      </div>
     </div>
 
     <n-modal
@@ -128,6 +118,7 @@ function startExport() {
   min-height: 0;
   height: 100%;
 }
+
 .panel-header {
   flex-shrink: 0;
   display: flex;
@@ -139,53 +130,52 @@ function startExport() {
   color: #f5f5f7;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
+
 .panel-body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
   height: 100%;
 }
+
 .preview-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 10px;
   min-height: 0;
 }
+
 .preview-video-wrap {
   flex-shrink: 0;
   width: 100%;
   aspect-ratio: 9 / 16;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
   background: #000;
   position: relative;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .preview-video-wrap.is-idle {
   background:
-    radial-gradient(ellipse 85% 55% at 50% 36%, rgba(99, 226, 183, 0.07) 0%, transparent 52%),
+    radial-gradient(ellipse 80% 50% at 50% 35%, rgba(79, 172, 254, 0.06) 0%, transparent 55%),
     linear-gradient(168deg, #141416 0%, #0b0b0d 48%, #0e0e12 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
 .preview-video-wrap.is-playing {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(79, 172, 254, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(79, 172, 254, 0.1);
 }
-.preview-body .n-button {
-  flex-shrink: 0;
-}
-.preview-spacer {
-  flex: 1;
-  min-height: 0;
-}
+
 .preview-video {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
+
 .preview-idle-state {
   position: absolute;
   inset: 0;
@@ -201,10 +191,10 @@ function startExport() {
 }
 
 .preview-idle-icon-wrap {
-  width: 68px;
-  height: 68px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.035);
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
@@ -213,36 +203,39 @@ function startExport() {
 }
 
 .preview-idle-icon {
-  color: rgba(99, 226, 183, 0.72);
-  opacity: 0.95;
-}
-
-.preview-idle-title {
-  margin: 0 0 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(245, 245, 247, 0.94);
-  letter-spacing: 0.02em;
-}
-
-.preview-idle-desc {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.55;
-  color: rgba(154, 154, 166, 0.95);
-  max-width: 228px;
+  color: rgba(79, 172, 254, 0.65);
 }
 
 .preview-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   z-index: 10;
   background: transparent;
-  display: block;
 }
+
+/* ===== 操作栏 ===== */
+.preview-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+}
+
+.preview-action-btn {
+  flex: 1;
+  border-radius: 8px;
+}
+
+.preview-action-export {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e4e4e7;
+}
+.preview-action-export:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 导出弹窗 */
 .export-progress-body {
   padding: 8px 0 4px;
 }

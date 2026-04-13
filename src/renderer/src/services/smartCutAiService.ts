@@ -440,7 +440,7 @@ export class SmartCutAiService {
       // 非会员或额度不足，显示临时提示消息（不创建对话，不保存数据库）
       const info = rtStore.usageInfo
       const isQuotaExhausted =
-        info?.isVip && (info?.dailyLimit ?? 0) > 0 && (info?.remainingSeconds ?? 0) <= 0
+        info?.userType !== 'common' && (info?.dailyLimit ?? 0) > 0 && (info?.remainingSeconds ?? 0) <= 0
       const tipContent = isQuotaExhausted
         ? '今日额度已用完，请明日再试'
         : '非会员暂不支持剪辑服务，请升级会员后再试'

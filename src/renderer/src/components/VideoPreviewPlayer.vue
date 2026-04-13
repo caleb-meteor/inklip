@@ -23,6 +23,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'dblclick'): void
+  /** 当前是否为无封面占位（与封面图/加载失败状态一致，供外层装饰层使用） */
+  (e: 'thumbnail-placeholder', value: boolean): void
 }>()
 
 /** useTemplateRef 保证与 targetContainer 比较时响应式更新正确（Vue 3.5） */
@@ -65,6 +67,16 @@ const displayDuration = computed(() =>
 const onCoverError = (): void => {
   coverLoadError.value = true
 }
+
+const isThumbnailPlaceholder = computed(
+  () => !coverUrl.value || coverLoadError.value
+)
+
+watch(
+  isThumbnailPlaceholder,
+  (v) => emit('thumbnail-placeholder', v),
+  { immediate: true }
+)
 
 // 被删除：路径为空、封面加载失败或视频加载失败
 const isDeleted = computed(

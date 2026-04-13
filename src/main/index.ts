@@ -9,9 +9,6 @@ import { BackendService } from './services/backend'
 function getAppIconPath(): string {
   const ext =
     process.platform === 'darwin' ? 'icns' : process.platform === 'win32' ? 'ico' : 'png'
-  if (process.platform === 'darwin') {
-    return path.join(process.resourcesPath, `icon.${ext}`)
-  }
   return path.join(process.resourcesPath, `icon.${ext}`)
 }
 
@@ -151,7 +148,8 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
-      backgroundThrottling: false // 切到别的 app 时保持页面存活，不节流
+      backgroundThrottling: false, // 切到别的 app 时保持页面存活，不节流
+      webviewTag: true // 抖音页等使用 <webview> 内嵌第三方站点
     }
   })
 

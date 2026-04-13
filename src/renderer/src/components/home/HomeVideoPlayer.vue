@@ -18,12 +18,6 @@ const emit = defineEmits<{
 
 <template>
   <div v-if="payload" class="video-player-container">
-    <div class="player-header">
-      <h2 class="video-title">{{ payload.video.name }}</h2>
-      <n-button quaternary circle class="close-btn" @click="emit('close')">
-        <n-icon size="24"><CloseOutline /></n-icon>
-      </n-button>
-    </div>
     <div class="player-content">
       <VideoPlayer
         :path="payload.video.path"
@@ -32,6 +26,12 @@ const emit = defineEmits<{
         :video-type="payload.videoType"
         autoplay
       />
+      <div class="player-topbar">
+        <span class="video-title" :title="payload.video.name">{{ payload.video.name }}</span>
+        <n-button quaternary circle size="small" class="close-btn" @click="emit('close')">
+          <n-icon size="18"><CloseOutline /></n-icon>
+        </n-button>
+      </div>
     </div>
   </div>
 </template>
@@ -41,22 +41,6 @@ const emit = defineEmits<{
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 16px;
-  box-sizing: border-box;
-}
-
-.player-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.video-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  color: #e4e4e7;
 }
 
 .player-content {
@@ -64,7 +48,42 @@ const emit = defineEmits<{
   min-height: 0;
   overflow: hidden;
   position: relative;
-  background: black;
-  border-radius: 8px;
+  background: #000;
+}
+
+.player-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.65) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+.video-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.close-btn {
+  pointer-events: auto;
+  color: rgba(255, 255, 255, 0.85);
+  flex-shrink: 0;
+}
+.close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
 }
 </style>

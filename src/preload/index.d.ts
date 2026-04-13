@@ -53,6 +53,34 @@ declare global {
       showExportSaveDialog: (suggestedName: string) => Promise<{ canceled: boolean; filePath?: string }>
       /** 在默认浏览器中打开链接（如更新下载页） */
       openExternal: (url: string) => Promise<void>
+      /** 与内置 Chromium 版本对齐的桌面 Chrome User-Agent */
+      getBrowserLikeUserAgent: () => string
+      /** 抖音 webview guest preload 的绝对路径，供 webpreferences 使用 */
+      getDouyinWebviewPreloadPath: () => string
+      /** 打开无影氪 preload、UA 对齐 Chrome 的独立窗口（站内新窗口） */
+      openBrowserLikeWindow: (url: string) => Promise<void>
+      downloadDouyinOffscreen: (opts: {
+        awemeId: string
+        suggestedName: string
+        savePath?: string
+      }) => Promise<
+        | { success: true; path: string }
+        | { success: false; error?: string; canceled?: boolean }
+      >
+      cancelDouyinDownload: () => Promise<{ success: boolean }>
+      onDouyinDownloadProgress: (
+        callback: (
+          payload:
+            | {
+                phase: 'update'
+                received: number
+                total: number
+                percent: number | null
+                fileLabel: string
+              }
+            | { phase: 'done' }
+        ) => void
+      ) => () => void
     }
   }
 }

@@ -35,7 +35,8 @@ export interface MessageHandlers {
     dailyLimit: number
     totalSeconds: number
     remainingSeconds: number
-    isVip: boolean
+    /** 会员类型：common / vip / svip */
+    userType?: string
     /** 过期日期 */
     expiredAt?: string
     /** 云端对当前授权码：1=可用，非1=不可用 */
@@ -173,7 +174,7 @@ export class RealtimeMessageHandler {
       dailyLimit: data.dailyLimit,
       totalSeconds: data.totalSeconds,
       remainingSeconds: data.remainingSeconds,
-      isVip: data.isVip,
+      userType: data.userType,
       expiredAt: data.expiredAt,
       status: data.status,
       syncedFromCloud: data.syncedFromCloud

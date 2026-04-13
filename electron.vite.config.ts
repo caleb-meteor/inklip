@@ -11,7 +11,13 @@ export default defineConfig({
   },
   preload: {
     build: {
-      externalizeDeps: false
+      externalizeDeps: false,
+      rollupOptions: {
+        input: {
+          index: resolve('src/preload/index.ts'),
+          'douyin-webview': resolve('src/preload/douyin-webview.ts')
+        }
+      }
     }
   },
   renderer: {
@@ -20,7 +26,16 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [vue()],
+    plugins: [
+      vue({
+        template: {
+          compilerOptions: {
+            // Electron <webview> 为原生标签，勿当 Vue 组件解析
+            isCustomElement: (tag) => tag === 'webview'
+          }
+        }
+      })
+    ],
     // 开发模式预构建依赖，加快首屏加载
     optimizeDeps: {
       include: ['vue', 'vue-router', 'pinia', 'naive-ui', 'axios']
