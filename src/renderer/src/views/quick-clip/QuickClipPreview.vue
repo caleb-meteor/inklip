@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { inject, computed } from 'vue'
-import { NIcon, NButton, NModal, NProgress } from 'naive-ui'
+import { NIcon, NButton } from 'naive-ui'
 import { PlayOutline, DownloadOutline, VideocamOutline } from '@vicons/ionicons5'
 
 const qc = inject('quickClip') as any
@@ -84,27 +84,6 @@ function startExport() {
       </div>
     </div>
 
-    <n-modal
-      :show="qc.isExporting"
-      preset="dialog"
-      title="正在导出视频"
-      :closable="false"
-      :mask-closable="false"
-      :auto-focus="false"
-      style="width: 420px; border-radius: 12px;"
-    >
-      <div class="export-progress-body">
-        <p class="export-progress-desc">正在导出，请稍候…</p>
-        <n-progress
-          type="line"
-          :percentage="Math.round(qc.exportProgress)"
-          :height="10"
-          :border-radius="5"
-          indicator-placement="inside"
-          processing
-        />
-      </div>
-    </n-modal>
   </div>
 </template>
 
@@ -235,14 +214,4 @@ function startExport() {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-/* 导出弹窗 */
-.export-progress-body {
-  padding: 8px 0 4px;
-}
-.export-progress-desc {
-  margin: 0 0 16px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.72);
-}
 </style>

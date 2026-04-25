@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick, shallowRef, provide } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { NLayout, NLayoutSider, NLayoutContent, NIcon, NPopover, NButton, NSpin, NEmpty, NTooltip } from 'naive-ui'
+import { NLayout, NLayoutSider, NLayoutContent, NIcon, NPopover, NButton, NSpin, NEmpty, NTooltip, NBadge } from 'naive-ui'
 import { FolderOpenOutline, ChevronDownOutline, TrashOutline, ImagesOutline, MenuOutline, ChevronBackOutline, TimeOutline, CloseOutline, ArrowUpCircleOutline } from '@vicons/ionicons5'
 import appIcon from '../../../../resources/icon.png'
 import type { WorkspaceItem } from '../api/workspace'
@@ -44,6 +44,8 @@ import { quickClipBridgeKey, type QuickClipBridge } from '../utils/quickClipBrid
 const router = useRouter()
 const route = useRoute()
 const rtStore = useRealtimeStore()
+const activeExportJob = computed(() => rtStore.activeExportJob)
+const isExportingGlobal = computed(() => rtStore.isExporting)
 const isSvip = computed(() => rtStore.usageInfo.userType === 'svip')
 const appVersion = ref<string>('0.0.1')
 const leftSidebarCollapsed = ref(false)
@@ -240,6 +242,14 @@ const showExportHistoryPanel = ref(false)
 const exportHistoryList = ref<ExportHistoryItem[]>([])
 const loadingExportHistory = ref(false)
 const exportHistoryTab = ref<ExportVideoType>('subtitle_clip')
+const exportHistoryBadge = computed(() => (isExportingGlobal.value ? 1 : 0))
+
+const exportJobMatchesTab = computed(() => {
+  const job = activeExportJob.value
+  if (!job) return false
+  const t = (job.exportType || 'subtitle_clip') as ExportVideoType
+  return t === exportHistoryTab.value
+})
 
 const EXPORT_HISTORY_TABS: { value: ExportVideoType; label: string }[] = [
   { value: 'subtitle_clip', label: '字幕剪辑' },
@@ -283,6 +293,12 @@ function toggleExportHistoryPanel() {
   showExportHistoryPanel.value = !showExportHistoryPanel.value
   if (showExportHistoryPanel.value) loadExportHistory()
 }
+
+watch(isExportingGlobal, (v, oldV) => {
+  if (oldV === true && v === false && showExportHistoryPanel.value) {
+    void loadExportHistory()
+  }
+})
 
 async function deleteExportHistoryItem(id: number) {
   await deleteExportHistoryApi(id)
@@ -532,15 +548,17 @@ const handleNewChat = (): void => {
         </div>
 
         <div class="global-topbar-right-group">
-          <button
-            class="topbar-action-btn"
-            :class="{ active: showExportHistoryPanel }"
-            type="button"
-            @click="toggleExportHistoryPanel"
-          >
-            <n-icon size="14"><TimeOutline /></n-icon>
-            <span>导出历史</span>
-          </button>
+          <n-badge :value="exportHistoryBadge" :max="9" :show-zero="false" :offset="[-6, 6]">
+            <button
+              class="topbar-action-btn"
+              :class="{ active: showExportHistoryPanel }"
+              type="button"
+              @click="toggleExportHistoryPanel"
+            >
+              <n-icon size="14"><TimeOutline /></n-icon>
+              <span>导出历史</span>
+            </button>
+          </n-badge>
           <button
             v-if="isSvip"
             class="topbar-action-btn"
@@ -660,6 +678,58 @@ const handleNewChat = (): void => {
                   <n-empty :description="exportHistoryEmptyDesc" size="small" />
                 </div>
                 <div v-else-if="!loadingExportHistory" class="eh-list">
+                  <div
+                    v-if="exportJobMatchesTab"
+                    class="eh-item eh-item--exporting"
+                  >
+                    <div class="eh-item-content">
+                      <span class="eh-item-name" :title="activeExportJob?.suggestedName || '正在导出…'">
+                        {{ activeExportJob?.suggestedName || '正在导出…' }}
+                      </span>
+                      <span class="eh-item-meta">
+                        <span
+                          class="eh-type-tag"
+                          :class="
+                            activeExportJob?.exportType === 'ai'
+                              ? 'eh-type-tag--ai'
+                              : activeExportJob?.exportType === 'douyin'
+                                ? 'eh-type-tag--douyin'
+                                : 'eh-type-tag--subtitle'
+                          "
+                        >{{ labelForExportVideoType(activeExportJob?.exportType) }}</span>
+                        <span class="eh-meta-sep">·</span>
+                        <span class="eh-export-pct">{{ Math.round(activeExportJob?.progress ?? 0) }}%</span>
+                      </span>
+                      <div class="eh-export-progress">
+                        <n-progress
+                          type="line"
+                          :percentage="Math.round(activeExportJob?.progress ?? 0)"
+                          :height="10"
+                          :border-radius="6"
+                          indicator-placement="inside"
+                          processing
+                        />
+                      </div>
+                    </div>
+                    <div class="eh-item-actions">
+                      <n-tooltip placement="top" trigger="hover">
+                        <template #trigger>
+                          <n-button quaternary size="tiny" disabled>
+                            <n-icon size="14"><FolderOpenOutline /></n-icon>
+                          </n-button>
+                        </template>
+                        导出中…
+                      </n-tooltip>
+                      <n-tooltip placement="top" trigger="hover">
+                        <template #trigger>
+                          <n-button quaternary size="tiny" type="error" disabled>
+                            <n-icon size="14"><TrashOutline /></n-icon>
+                          </n-button>
+                        </template>
+                        导出中不可删除
+                      </n-tooltip>
+                    </div>
+                  </div>
                   <div
                     v-for="item in filteredExportHistoryList"
                     :key="item.id"
@@ -976,6 +1046,24 @@ const handleNewChat = (): void => {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: background 0.15s, border-color 0.15s;
+}
+
+.eh-item--exporting {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  border-color: rgba(79, 172, 254, 0.45);
+  background: rgba(79, 172, 254, 0.14);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+}
+.eh-export-progress {
+  margin-top: 10px;
+}
+.eh-export-pct {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.88);
 }
 .eh-item:hover {
   background: rgba(255, 255, 255, 0.07);

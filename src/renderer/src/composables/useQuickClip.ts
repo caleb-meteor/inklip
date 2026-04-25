@@ -12,7 +12,8 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   const videosProvidedByParent = options?.videosProvidedByParent ?? false
   const message = useMessage()
   const rtStore = useRealtimeStore()
-  const { workspaceSelecting, exportSegmentsProgress } = storeToRefs(rtStore)
+  const { workspaceSelecting, exportSegmentsProgress, activeExportJob, isExporting: isExportingGlobal } =
+    storeToRefs(rtStore)
 
   const sourceVideos = shallowRef<VideoItem[]>([])
   const loadingVideos = ref(false)
@@ -184,16 +185,14 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
   })
 
   const subtitleScrollbarRef = ref<any>(null)
-  const isExporting = ref(false)
+  /** 全局导出锁（同一时间只允许一个导出） */
+  const isExporting = computed(() => isExportingGlobal.value)
   /** 导出拼接进度 0–100（由 SSE export_segments_progress + FFmpeg -progress 驱动） */
-  const exportProgress = ref(0)
-  const activeExportRequestId = ref<string | null>(null)
+  const exportProgress = computed(() => activeExportJob.value?.progress ?? 0)
 
-  watch(exportSegmentsProgress, (ev) => {
-    if (!ev || !activeExportRequestId.value) return
-    if (ev.export_request_id !== activeExportRequestId.value) return
-    exportProgress.value = Math.max(exportProgress.value, ev.percentage)
-  })
+  // 进度同步由 realtime store 按 export_request_id 绑定 activeExportJob 统一处理
+  // 这里保留 exportSegmentsProgress 的订阅，避免未来需要做额外 UI，但不再做 QuickClip 内部比对
+  watch(exportSegmentsProgress, () => {})
 
   const exportHistoryList = ref<ExportHistoryItem[]>([])
   const showExportHistoryModal = ref(false)
@@ -1168,6 +1167,10 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     segments: SegmentWithVideo[],
     options?: { workspaceId?: number | null; suggestedName?: string; exportType?: 'subtitle_clip' | 'ai' }
   ) {
+    if (isExportingGlobal.value) {
+      message.warning('已有导出任务进行中，请等待完成后再导出')
+      return
+    }
     if (segments.length === 0) {
       message.warning('没有可导出的字幕片段')
       return
@@ -1189,9 +1192,13 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     const suggestedNameForDb = pickedBase || defaultSaveName
     rtStore.clearExportSegmentsProgress()
     const exportRequestId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
-    activeExportRequestId.value = exportRequestId
-    exportProgress.value = 2
-    isExporting.value = true
+    rtStore.beginExportJob({
+      exportRequestId,
+      workspaceId: ws,
+      exportType: options?.exportType ?? 'subtitle_clip',
+      suggestedName: suggestedNameForDb,
+      outputPath: userChosenPath
+    })
     await (async () => {
       const requestSegments = segments.map((seg) => ({
         video_id: seg.videoId,
@@ -1206,16 +1213,15 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
         userChosenPath,
         exportRequestId
       )
-      exportProgress.value = 100
+      // SSE 最后会推到 100；这里主动兜底为 100
+      if (activeExportJob.value) activeExportJob.value.progress = 100
       await new Promise((r) => setTimeout(r, 280))
       if (res?.path && res?.suggested_name && showExportHistoryModal.value) {
         void loadExportHistory()
       }
     })().finally(() => {
-      activeExportRequestId.value = null
       rtStore.clearExportSegmentsProgress()
-      isExporting.value = false
-      exportProgress.value = 0
+      rtStore.finishExportJob()
     })
   }
 

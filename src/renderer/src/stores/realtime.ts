@@ -40,6 +40,16 @@ export interface ExportSegmentsProgressEvent {
   percentage: number
 }
 
+export type ActiveExportJob = {
+  exportRequestId: string
+  workspaceId?: number | null
+  exportType?: 'subtitle_clip' | 'ai' | 'douyin'
+  suggestedName?: string
+  outputPath?: string
+  progress: number
+  startedAt: number
+}
+
 /** 工作空间目录扫描入库进度（SSE type=workspace_ingest_progress） */
 export interface WorkspaceIngestProgressEvent {
   workspace_id: number
@@ -72,6 +82,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
 
   /** 最近一次导出进度（按 export_request_id 由 QuickClip 自行比对） */
   const exportSegmentsProgress = ref<ExportSegmentsProgressEvent | null>(null)
+
+  /** 当前进行中的导出任务（全局仅允许一个） */
+  const activeExportJob = ref<ActiveExportJob | null>(null)
+  const isExporting = computed(() => !!activeExportJob.value)
 
   /** 工作空间 ingest 进度（选择/切换工作空间扫描时由后端 SSE 推送） */
   const workspaceIngestProgress = ref<WorkspaceIngestProgressEvent | null>(null)
@@ -302,6 +316,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
           export_request_id: data.export_request_id,
           percentage: data.percentage
         }
+        const job = activeExportJob.value
+        if (job && job.exportRequestId === data.export_request_id) {
+          job.progress = Math.max(job.progress, data.percentage)
+        }
       },
       onWorkspaceIngestProgress: (data) => {
         if (!workspaceIngestSseEnabled.value && !workspaceSelecting.value) return
@@ -378,6 +396,20 @@ export const useRealtimeStore = defineStore('realtime', () => {
     exportSegmentsProgress.value = null
   }
 
+  const beginExportJob = (
+    job: Omit<ActiveExportJob, 'progress' | 'startedAt'>
+  ): void => {
+    activeExportJob.value = {
+      ...job,
+      progress: 0,
+      startedAt: Date.now()
+    }
+  }
+
+  const finishExportJob = (): void => {
+    activeExportJob.value = null
+  }
+
   /** 开始展示工作空间扫描进度（启用 SSE 更新 + 占位状态） */
   const beginWorkspaceIngestProgress = (): void => {
     workspaceIngestSseEnabled.value = true
@@ -403,6 +435,10 @@ export const useRealtimeStore = defineStore('realtime', () => {
     workspaceSelecting,
     exportSegmentsProgress,
     clearExportSegmentsProgress,
+    activeExportJob,
+    isExporting,
+    beginExportJob,
+    finishExportJob,
     workspaceIngestProgress,
     beginWorkspaceIngestProgress,
     clearWorkspaceIngestProgress,
