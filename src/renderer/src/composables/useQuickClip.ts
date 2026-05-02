@@ -890,6 +890,14 @@ export function useQuickClip(selectedWorkspaceId: Ref<number | null>, options?: 
     ;(video as any)._segmentTimeUpdate = onTimeUpdate
     video.addEventListener('timeupdate', onTimeUpdate)
     playingSourceSegment.value = true
+
+    const currentSrc = video.getAttribute('src')
+    const isSameSource = !!seg.videoPath && currentSrc === seg.videoPath
+    if (isSameSource) {
+      doPlay()
+      return
+    }
+
     video.src = seg.videoPath
     const onCanPlay = () => {
       video.removeEventListener('canplay', onCanPlay)
